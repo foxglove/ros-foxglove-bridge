@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="3">
+    <name>foxglove-bridge</name>
+    <version>0.0.1</version>
+    <description>Foxglove Bridge</description>
+
+    <maintainer email="contact@foxglove.dev">Foxglove</maintainer>
+    <license>MIT</license>
+
+    <url type="website">https://github.com/foxglove/ros-foxglove-bridge</url>
+
+    <author email="contact@foxglove.dev">Foxglove</author>
+
+    <buildtool_depend condition="$ROS_VERSION == 1">catkin</buildtool_depend>
+    <buildtool_depend condition="$ROS_VERSION == 2">ament_cmake</buildtool_depend>
+
+    <depend condition="$ROS_VERSION == 1">roslib</depend>
+    <depend condition="$ROS_VERSION == 1">roscpp</depend>
+
+    <depend condition="$ROS_VERSION == 2">ament_index_cpp</depend>
+    <depend condition="$ROS_VERSION == 2">rclcpp</depend>
+    <depend condition="$ROS_VERSION == 2">fastcdr</depend>
+
+    <!-- common dependancies -->
+    <depend>libwebsocketpp-dev</depend>
+
+    <!-- The export tag contains other, unspecified, tags -->
+    <export>
+        <build_type condition="$ROS_VERSION == 1">catkin</build_type>
+        <build_type condition="$ROS_VERSION == 2">ament_cmake</build_type>
+    </export>
+</package>
