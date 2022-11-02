@@ -1,11 +1,11 @@
 #define ASIO_STANDALONE
 
-#include <chrono>
-#include <memory>
-
 #include <rclcpp/rclcpp.hpp>
 #include <websocketpp/config/asio.hpp>
 #include <websocketpp/server.hpp>
+
+#include <chrono>
+#include <memory>
 
 using Server = websocketpp::server<websocketpp::config::asio_tls>;
 using ConnectionHdl = websocketpp::connection_hdl;
@@ -17,14 +17,15 @@ using namespace std::chrono_literals;
 
 class FoxgloveBridge : public rclcpp::Node {
 public:
-  FoxgloveBridge() : Node("foxglove_bridge") {
+  FoxgloveBridge()
+      : Node("foxglove_bridge") {
     RCLCPP_INFO(this->get_logger(), "Starting %s", this->get_name());
   }
 
 private:
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<FoxgloveBridge>());
   rclcpp::shutdown();

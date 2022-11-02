@@ -12,15 +12,15 @@ using websocketpp::lib::placeholders::_2;
 
 class FoxgloveBridge {
 public:
-  explicit FoxgloveBridge(ros::NodeHandle &node) {
+  explicit FoxgloveBridge(ros::NodeHandle& node) {
     (void)node;
-    ROS_INFO("Starting FoxgloveBridge");
+    ROS_INFO("Starting %s", ros::this_node::getName().c_str());
   }
 
 private:
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   ros::init(argc, argv, "foxglove_bridge");
 
   ros::NodeHandle node;

@@ -1,0 +1,17 @@
+FROM ros:humble-ros-core
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  build-essential \
+  python3-colcon-common-extensions \
+  libasio-dev \
+  libssl-dev \
+  libwebsocketpp-dev \
+  clang-format \
+  git \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /ros2_ws/src/ros-foxglove-bridge
+
+# Source the ROS environment in .bashrc
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
