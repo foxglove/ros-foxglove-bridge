@@ -22,7 +22,7 @@ COPY ros1_foxglove_bridge /ros1_ws/src/ros-foxglove-bridge/ros1_foxglove_bridge
 # Use the bash shell so we can use the source command
 SHELL [ "/bin/bash" , "-c" ]
 
-# Create a Catkin workspace and clone TurtleBot3 repos
+# Create a Catkin workspace
 RUN source /opt/ros/noetic/setup.bash \
   && mkdir -p /ros1_ws/src \
   && cd /ros1_ws/src \

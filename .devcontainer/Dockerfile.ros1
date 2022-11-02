@@ -1,0 +1,25 @@
+FROM ros:noetic-ros-core
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  python3-pip \
+  python3-rosdep \
+  python3-rosinstall \
+  python3-rosinstall-generator \
+  python3-wstool \
+  build-essential \
+  libasio-dev \
+  libssl-dev \
+  libwebsocketpp-dev \
+  clang-format \
+  git \
+  && rm -rf /var/lib/apt/lists/*
+
+# Create a Catkin workspace
+RUN source /opt/ros/noetic/setup.bash \
+  && mkdir -p /ros_ws/src \
+  && cd /ros_ws/src \
+  && catkin_init_workspace
+
+# Source the ROS environment in .bashrc
+RUN echo "source /opt/ros/noetic/setup.bash" >> /root/.bashrc

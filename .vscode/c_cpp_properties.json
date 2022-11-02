@@ -1,0 +1,22 @@
+{
+  "configurations": [
+    {
+      "name": "Linux",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "/opt/ros/${env:ROS_DISTRO}/include/**",
+        "/usr/include/**"
+      ],
+      "browse": {
+        "path": [
+          "${workspaceFolder}",
+          "/opt/ros/${env:ROS_DISTRO}/include",
+          "/usr/include"
+        ]
+      },
+      "defines": [],
+      "cppStandard": "c++17"
+    }
+  ],
+  "version": 4
+}

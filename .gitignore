@@ -30,3 +30,8 @@
 *.exe
 *.out
 *.app
+
+# ROS
+build/
+install/
+log/
