@@ -32,6 +32,10 @@ humble:
 rolling:
 	docker build -t foxglove_bridge_rolling -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=rolling .
 
+.PHONY: ros2dev
+ros2dev:
+	docker build -t foxglove_bridge_ros2dev -f .devcontainer/Dockerfile.ros2 .
+
 clean:
 	docker rmi -f foxglove_bridge_ros1
 	docker rmi -f foxglove_bridge_ros2
@@ -41,9 +45,8 @@ clean:
 	docker rmi -f foxglove_bridge_galactic
 	docker rmi -f foxglove_bridge_humble
 	docker rmi -f foxglove_bridge_rolling
-	docker rmi -f foxglove_bridge_lint
+	docker rmi -f foxglove_bridge_ros2dev
 
-.PHONY: format-check
-format-check: ros2-dev
-  docker build -t foxglove_bridge_lint -f .devcontainer/Dockerfile.ros2 .
-	docker run -t --rm -v $(CURDIR):/src foxglove_bridge_lint python3 /src/scripts/format.py /src
+.PHONY: lint
+lint: ros2dev
+	docker run -t --rm -v $(CURDIR):/src foxglove_bridge_ros2dev python3 /src/scripts/format.py /src
