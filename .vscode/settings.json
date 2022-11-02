@@ -1,4 +1,5 @@
 {
+  "C_Cpp.autoAddFileAssociations": false,
   "editor.defaultFormatter": "xaver.clang-format",
   "editor.formatOnSave": true,
   "files.eol": "\n",

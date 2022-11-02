@@ -4,6 +4,8 @@
 #include <websocketpp/config/asio.hpp>
 #include <websocketpp/server.hpp>
 
+#include <foxglove_bridge/foxglove_bridge.hpp>
+
 using Server = websocketpp::server<websocketpp::config::asio_tls>;
 using ConnectionHdl = websocketpp::connection_hdl;
 using SslContext = websocketpp::lib::asio::ssl::context;
@@ -14,7 +16,8 @@ class FoxgloveBridge {
 public:
   explicit FoxgloveBridge(ros::NodeHandle& node) {
     (void)node;
-    ROS_INFO("Starting %s", ros::this_node::getName().c_str());
+    ROS_INFO("Starting %s with %s", ros::this_node::getName().c_str(),
+             foxglove::WebSocketUserAgent());
   }
 
 private:

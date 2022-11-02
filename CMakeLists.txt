@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
 
+find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(websocketpp REQUIRED)
 
@@ -43,8 +44,18 @@ IF(NOT WIN32 AND ENABLE_ASAN)
   set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
 endif()
 
-include_directories(foxglove_bridge_base/include)
+# Build the foxglove_bridge_base library
+add_library(foxglove_bridge_base STATIC
+  foxglove_bridge_base/src/foxglove_bridge.cpp
+)
+target_include_directories(foxglove_bridge_base
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(foxglove_bridge_base OpenSSL::Crypto OpenSSL::SSL ${CMAKE_THREAD_LIBS_INIT})
 
+# Compile the ROS 1 or ROS 2 node
 # http://answers.ros.org/question/230877/optionally-build-a-package-with-catkin/
 if(CATKIN_DEVEL_PREFIX OR catkin_FOUND OR CATKIN_BUILD_BINARY_PACKAGE)
   set(COMPILING_ROS1 1)
@@ -59,15 +70,13 @@ if(CATKIN_DEVEL_PREFIX OR catkin_FOUND OR CATKIN_BUILD_BINARY_PACKAGE)
     INCLUDE_DIRS foxglove_bridge_base/include
     LIBRARIES foxglove_bridge_base
     CATKIN_DEPENDS roslib roscpp
-    DEPENDS OpenSSL websocketpp
   )
 
-  message(STATUS ${catkin_INCLUDE_DIRS})
   add_definitions(-DIS_ROS1)
 
   add_executable(foxglove_bridge ros1_foxglove_bridge/ros1_foxglove_bridge.cpp)
   target_include_directories(foxglove_bridge SYSTEM PRIVATE ${catkin_INCLUDE_DIRS})
-  target_link_libraries(foxglove_bridge OpenSSL::Crypto OpenSSL::SSL ${catkin_LIBRARIES})
+  target_link_libraries(foxglove_bridge foxglove_bridge_base ${catkin_LIBRARIES})
 elseif(DEFINED ENV{AMENT_PREFIX_PATH})
   set(COMPILING_ROS2 1)
 
@@ -79,14 +88,12 @@ elseif(DEFINED ENV{AMENT_PREFIX_PATH})
   message(STATUS "foxglove_bridge is being built for ROS 2.")
   message(STATUS "--------------------------------------------------")
 
-  message(STATUS ${catkin_INCLUDE_DIRS})
-  
   add_definitions(-DIS_ROS2)
 
   add_executable(foxglove_bridge ros2_foxglove_bridge/ros2_foxglove_bridge.cpp)
   target_include_directories(foxglove_bridge SYSTEM PRIVATE ${ament_index_cpp_INCLUDE_DIRS})
-  ament_target_dependencies(foxglove_bridge rclcpp OpenSSL websocketpp)
-  target_link_libraries(foxglove_bridge OpenSSL::Crypto OpenSSL::SSL)
+  ament_target_dependencies(foxglove_bridge rclcpp)
+  target_link_libraries(foxglove_bridge foxglove_bridge_base)
 else()
   message(FATAL_ERROR "No ROS 1 or ROS 2 build environment detected.")
 endif()
