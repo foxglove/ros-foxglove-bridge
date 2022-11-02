@@ -1,4 +1,6 @@
-FROM ros:noetic-ros-core
+ARG ROS_DISTRIBUTION=noetic
+FROM ros:$ROS_DISTRIBUTION-ros-core
+ARG ROS_DISTRIBUTION=noetic
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,11 +25,10 @@ COPY ros1_foxglove_bridge /ros1_ws/src/ros-foxglove-bridge/ros1_foxglove_bridge
 SHELL [ "/bin/bash" , "-c" ]
 
 # Create a Catkin workspace
-RUN source /opt/ros/noetic/setup.bash \
-  && mkdir -p /ros1_ws/src
+RUN mkdir -p /ros1_ws/src
 
 # Build the Catkin workspace and ensure it's sourced when a container is run
-RUN source /opt/ros/noetic/setup.bash \
+RUN source /opt/ros/$ROS_DISTRIBUTION/setup.bash \
   && cd /ros1_ws \
   && catkin_make
 RUN echo "source /ros1_ws/devel/setup.bash" >> ~/.bashrc

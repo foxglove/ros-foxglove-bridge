@@ -1,22 +1,49 @@
-default: ros2-image
+default: ros2
 
-.PHONY: ros1-image
-ros1-image:
+.PHONY: ros1
+ros1:
 	docker build -t foxglove_bridge_ros1 -f Dockerfile.ros1 .
 
-.PHONY: ros2-image
-ros2-image:
+.PHONY: ros2
+ros2:
 	docker build -t foxglove_bridge_ros2 -f Dockerfile.ros2 .
 
-.PHONY: ros2-dev-image
-ros2-dev-image:
-	docker build -t foxglove_bridge_ros2dev -f .devcontainer/Dockerfile.ros2 .
+.PHONY: melodic
+melodic:
+	docker build -t foxglove_bridge_melodic -f Dockerfile.ros1 --build-arg ROS_DISTRIBUTION=melodic .
+
+.PHONY: noetic
+noetic:
+	docker build -t foxglove_bridge_noetic -f Dockerfile.ros1 --build-arg ROS_DISTRIBUTION=noetic .
+
+.PHONY: foxy
+foxy:
+	docker build -t foxglove_bridge_foxy -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=foxy .
+
+.PHONY: galactic
+galactic:
+	docker build -t foxglove_bridge_galactic -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=galactic .
+
+.PHONY: humble
+humble:
+	docker build -t foxglove_bridge_humble -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=humble .
+
+.PHONY: rolling
+rolling:
+	docker build -t foxglove_bridge_rolling -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=rolling .
 
 clean:
 	docker rmi -f foxglove_bridge_ros1
 	docker rmi -f foxglove_bridge_ros2
-	docker rmi -f foxglove_bridge_ros2dev
+	docker rmi -f foxglove_bridge_melodic
+	docker rmi -f foxglove_bridge_noetic
+	docker rmi -f foxglove_bridge_foxy
+	docker rmi -f foxglove_bridge_galactic
+	docker rmi -f foxglove_bridge_humble
+	docker rmi -f foxglove_bridge_rolling
+	docker rmi -f foxglove_bridge_lint
 
 .PHONY: format-check
-format-check: ros2-dev-image
-	docker run -t --rm -v $(CURDIR):/src foxglove_bridge_ros2dev python3 /src/scripts/format.py /src
+format-check: ros2-dev
+  docker build -t foxglove_bridge_lint -f .devcontainer/Dockerfile.ros2 .
+	docker run -t --rm -v $(CURDIR):/src foxglove_bridge_lint python3 /src/scripts/format.py /src

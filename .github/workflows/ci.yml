@@ -11,7 +11,7 @@ jobs:
       fail-fast: false
 
     name: Lint
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -25,30 +25,17 @@ jobs:
       matrix:
         include:
           - ros_distribution: melodic
-            os: ubuntu-18.04
           - ros_distribution: noetic
-            os: ubuntu-20.04
           - ros_distribution: foxy
-            os: ubuntu-20.04
           - ros_distribution: galactic
-            os: ubuntu-20.04
           - ros_distribution: humble
-            os: ubuntu-22.04
           - ros_distribution: rolling
-            os: ubuntu-22.04
 
-    name: ROS 1 ${{ matrix.ros_distribution }} (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: ROS ${{ matrix.ros_distribution }} (${{ matrix.os }})
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
-        with:
-          path: ros_ws/src
-      - uses: ros-tooling/setup-ros@0.4.1
-        with:
-          required-ros-distributions: ${{ matrix.ros_distribution }}
-      - uses: ros-tooling/action-ros-ci@v0.2
-        env:
-          SETUPTOOLS_USE_DISTUTILS: stdlib
-        with:
-          target-ros1-distro: ${{ matrix.ros_distribution }}
+      - uses: satackey/action-docker-layer-caching@v0.0.11
+        continue-on-error: true
+      - run: make ${{ matrix.ros_distribution }}
