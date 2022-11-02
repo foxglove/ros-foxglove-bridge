@@ -19,12 +19,15 @@ ReflowComments: true
 SortIncludes: true
 
 IncludeCategories:
-  - Regex: "^<foxglove"
-    Priority: 1
+  - Regex: "^\".*"
+    Priority: 4
+    SortPriority: 0
+  - Regex: "^<foxglove.*"
+    Priority: 3
     SortPriority: 0
   - Regex: "^<.*/"
     Priority: 2
     SortPriority: 0
   - Regex: "^<.*"
-    Priority: 3
+    Priority: 1
     SortPriority: 0

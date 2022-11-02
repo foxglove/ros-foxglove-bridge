@@ -1,25 +1,16 @@
-#define ASIO_STANDALONE
-
-#include <rclcpp/rclcpp.hpp>
-#include <websocketpp/config/asio.hpp>
-#include <websocketpp/server.hpp>
-
 #include <chrono>
 #include <memory>
 
-using Server = websocketpp::server<websocketpp::config::asio_tls>;
-using ConnectionHdl = websocketpp::connection_hdl;
-using SslContext = websocketpp::lib::asio::ssl::context;
-using websocketpp::lib::placeholders::_1;
-using websocketpp::lib::placeholders::_2;
+#include <rclcpp/rclcpp.hpp>
 
-using namespace std::chrono_literals;
+#include <foxglove_bridge/foxglove_bridge.hpp>
 
 class FoxgloveBridge : public rclcpp::Node {
 public:
   FoxgloveBridge()
       : Node("foxglove_bridge") {
-    RCLCPP_INFO(this->get_logger(), "Starting %s", this->get_name());
+    RCLCPP_INFO(this->get_logger(), "Starting %s with %s", this->get_name(),
+                foxglove::WebSocketUserAgent());
   }
 
 private:
