@@ -24,13 +24,11 @@ SHELL [ "/bin/bash" , "-c" ]
 
 # Create a Catkin workspace
 RUN source /opt/ros/noetic/setup.bash \
-  && mkdir -p /ros1_ws/src \
-  && cd /ros1_ws/src \
-  && catkin_init_workspace
+  && mkdir -p /ros1_ws/src
 
 # Build the Catkin workspace and ensure it's sourced when a container is run
 RUN source /opt/ros/noetic/setup.bash \
-  && cd ros1_ws \
+  && cd /ros1_ws \
   && catkin_make
 RUN echo "source /ros1_ws/devel/setup.bash" >> ~/.bashrc
 
