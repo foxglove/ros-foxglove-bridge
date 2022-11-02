@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="3">
-    <name>foxglove-bridge</name>
+    <name>foxglove_bridge</name>
     <version>0.0.1</version>
-    <description>Foxglove Bridge</description>
+    <description>ROS Foxglove Bridge</description>
 
     <maintainer email="contact@foxglove.dev">Foxglove</maintainer>
     <license>MIT</license>
@@ -22,7 +22,11 @@
     <depend condition="$ROS_VERSION == 2">fastcdr</depend>
 
     <!-- common dependancies -->
-    <depend>libwebsocketpp-dev</depend>
+    <build_depend>libssl-dev</build_depend>
+    <build_depend>libwebsocketpp-dev</build_depend>
+
+    <exec_depend>openssl</exec_depend>
+    <exec_depend>websocketpp</exec_depend>
 
     <!-- The export tag contains other, unspecified, tags -->
     <export>
