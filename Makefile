@@ -49,11 +49,11 @@ clean:
 
 .PHONY: melodic-test
 melodic-test: melodic
-	docker run -it --rm foxglove_bridge_melodic catkin_make run_tests
+	docker run -t --rm foxglove_bridge_melodic catkin_make run_tests
 
 .PHONY: noetic-test
 noetic-test: noetic
-	docker run -it --rm foxglove_bridge_noetic catkin_make run_tests
+	docker run -t --rm foxglove_bridge_noetic catkin_make run_tests
 
 .PHONY: foxy-test
 foxy-test: foxy
