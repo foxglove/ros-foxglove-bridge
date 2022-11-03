@@ -1,17 +1,24 @@
-ARG ROS_DISTRIBUTION=noetic
+ARG ROS_DISTRIBUTION=melodic
 FROM ros:$ROS_DISTRIBUTION-ros-core
-ARG ROS_DISTRIBUTION=noetic
+ARG ROS_DISTRIBUTION=melodic
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  python3-pip \
-  python3-rosdep \
-  python3-wstool \
+  python-pip \
+  python-rosdep \
+  python-wstool \
   build-essential \
   libasio-dev \
   libssl-dev \
   libwebsocketpp-dev \
+  libgtest-dev \
   && rm -rf /var/lib/apt/lists/*
+
+# Build and install gtest
+RUN cd /usr/src/gtest \
+  && cmake CMakeLists.txt \
+  && make \
+  && cp ./*.a /usr/lib
 
 # Add common files and ROS 1 source code
 COPY CMakeLists.txt /ros1_ws/src/ros-foxglove-bridge/CMakeLists.txt
