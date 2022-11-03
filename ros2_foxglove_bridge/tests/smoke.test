@@ -1,0 +1,5 @@
+<launch>
+  <node name="foxglove_bridge" pkg="foxglove_bridge" type="foxglove_bridge">
+    <param name="port" value="0" />
+  </node>
+</launch>

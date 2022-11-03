@@ -31,11 +31,11 @@ jobs:
           - ros_distribution: humble
           - ros_distribution: rolling
 
-    name: ROS ${{ matrix.ros_distribution }} (${{ matrix.os }})
+    name: Test (ROS ${{ matrix.ros_distribution }})
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
       - uses: satackey/action-docker-layer-caching@v0.0.11
         continue-on-error: true
-      - run: make ${{ matrix.ros_distribution }}
+      - run: make ${{ matrix.ros_distribution }}-test

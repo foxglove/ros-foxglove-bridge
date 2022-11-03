@@ -10,7 +10,7 @@ ros2:
 
 .PHONY: melodic
 melodic:
-	docker build -t foxglove_bridge_melodic -f Dockerfile.ros1 --build-arg ROS_DISTRIBUTION=melodic .
+	docker build -t foxglove_bridge_melodic -f Dockerfile.ros1bionic --build-arg ROS_DISTRIBUTION=melodic .
 
 .PHONY: noetic
 noetic:
@@ -46,6 +46,30 @@ clean:
 	docker rmi -f foxglove_bridge_humble
 	docker rmi -f foxglove_bridge_rolling
 	docker rmi -f foxglove_bridge_ros2dev
+
+.PHONY: melodic-test
+melodic-test: melodic
+	docker run -it --rm foxglove_bridge_melodic catkin_make run_tests
+
+.PHONY: noetic-test
+noetic-test: noetic
+	docker run -it --rm foxglove_bridge_noetic catkin_make run_tests
+
+.PHONY: foxy-test
+foxy-test: foxy
+	docker run -t --rm foxglove_bridge_foxy colcon test --event-handlers console_cohesion+
+
+.PHONY: galactic-test
+galactic-test: galactic
+	docker run -t --rm foxglove_bridge_galactic colcon test --event-handlers console_cohesion+
+
+.PHONY: humble-test
+humble-test: humble
+	docker run -t --rm foxglove_bridge_humble colcon test --event-handlers console_cohesion+
+
+.PHONY: rolling-test
+rolling-test: rolling
+	docker run -t --rm foxglove_bridge_rolling colcon test --event-handlers console_cohesion+
 
 .PHONY: lint
 lint: ros2dev

@@ -20,6 +20,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   if(NOT MSVC)
     set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -O0")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -fno-omit-frame-pointer")
+
+    ## Set gcov flags
+    set(CMAKE_CXX_FLAGS "-fprofile-arcs -ftest-coverage")
+    set(CMAKE_EXE_LINKER_FLAGS "-lgcov")
   endif()
   message("-- Configuring debug build")
 else()
@@ -70,7 +74,7 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
       CATKIN_DEPENDS roslib roscpp
     )
 
-    add_executable(foxglove_bridge ros1_foxglove_bridge/ros1_foxglove_bridge.cpp)
+    add_executable(foxglove_bridge ros1_foxglove_bridge/src/ros1_foxglove_bridge.cpp)
     target_include_directories(foxglove_bridge SYSTEM PRIVATE ${catkin_INCLUDE_DIRS})
     target_link_libraries(foxglove_bridge foxglove_bridge_base ${catkin_LIBRARIES})
   else()
@@ -80,11 +84,12 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
   # ROS 2
   if(DEFINED ENV{AMENT_PREFIX_PATH})
     message(STATUS "Building with ament_cmake")
+    set(ROS_BUILD_TYPE "ament_cmake")
 
     find_package(ament_cmake REQUIRED)
     find_package(rclcpp REQUIRED)
 
-    add_executable(foxglove_bridge ros2_foxglove_bridge/ros2_foxglove_bridge.cpp)
+    add_executable(foxglove_bridge ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp)
     target_include_directories(foxglove_bridge SYSTEM PRIVATE ${rclcpp_INCLUDE_DIRS})
     target_link_libraries(foxglove_bridge foxglove_bridge_base ${rclcpp_LIBRARIES})
   else()
@@ -92,22 +97,42 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
   endif()
 endif()
 
+#### TESTS #####################################################################
+
+if(ROS_BUILD_TYPE STREQUAL "catkin")
+  if (CATKIN_ENABLE_TESTING)
+    message(STATUS "Building tests with catkin")
+
+    find_package(catkin REQUIRED COMPONENTS rostest)
+    find_package(GTest REQUIRED)
+
+    catkin_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
+    target_link_libraries(version_test foxglove_bridge_base GTest::GTest GTest::Main)
+
+    add_rostest(ros1_foxglove_bridge/tests/smoke.test)
+  endif()
+elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
+  if(BUILD_TESTING)
+    message(STATUS "Building tests with ament_cmake")
+
+    find_package(ament_lint_auto REQUIRED)
+    find_package(GTest REQUIRED)
+    ament_lint_auto_find_test_dependencies()
+
+    ament_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
+    target_link_libraries(version_test foxglove_bridge_base GTest::GTest GTest::Main)
+  endif()
+endif()
+
 #### INSTALL ###################################################################
 
 if(ROS_BUILD_TYPE STREQUAL "catkin")
     install(TARGETS foxglove_bridge
-      ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-      LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
       RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
     )
 elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
     install(TARGETS foxglove_bridge
-      DESTINATION lib/${PROJECT_NAME})
-
-    if(BUILD_TESTING)
-      find_package(ament_lint_auto REQUIRED)
-      ament_lint_auto_find_test_dependencies()
-    endif()
-
+      DESTINATION lib/${PROJECT_NAME}
+    )
     ament_package()
 endif()
