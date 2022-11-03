@@ -95,6 +95,8 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
   else()
     message(FATAL_ERROR "Could not find ament_cmake")
   endif()
+else()
+  message(FATAL_ERROR "ROS_VERSION environment variable must be 1 or 2")
 endif()
 
 #### TESTS #####################################################################
