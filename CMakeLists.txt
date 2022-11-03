@@ -20,6 +20,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   if(NOT MSVC)
     set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -O0")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -fno-omit-frame-pointer")
+
+    ## Set gcov flags
+    set(CMAKE_CXX_FLAGS "-fprofile-arcs -ftest-coverage")
+    set(CMAKE_EXE_LINKER_FLAGS "-lgcov")
   endif()
   message("-- Configuring debug build")
 else()
@@ -55,65 +59,82 @@ target_include_directories(foxglove_bridge_base
 )
 target_link_libraries(foxglove_bridge_base OpenSSL::Crypto OpenSSL::SSL ${CMAKE_THREAD_LIBS_INIT})
 
-# Compile the ROS 1 or ROS 2 node
-# http://answers.ros.org/question/230877/optionally-build-a-package-with-catkin/
-if(CATKIN_DEVEL_PREFIX OR catkin_FOUND OR CATKIN_BUILD_BINARY_PACKAGE)
-  set(COMPILING_ROS1 1)
+message(STATUS "ROS_VERSION: " $ENV{ROS_VERSION})
+if("$ENV{ROS_VERSION}" STREQUAL "1")
+  # ROS 1
+  if(CATKIN_DEVEL_PREFIX OR catkin_FOUND OR CATKIN_BUILD_BINARY_PACKAGE)
+    message(STATUS "Building with catkin")
+    set(ROS_BUILD_TYPE "catkin")
 
-  message(STATUS "--------------------------------------------------")
-  message(STATUS "foxglove_bridge is being built for ROS 1.")
-  message(STATUS "--------------------------------------------------")
+    find_package(catkin REQUIRED COMPONENTS roslib roscpp)
 
-  find_package(catkin REQUIRED COMPONENTS roslib roscpp)
+    catkin_package(
+      INCLUDE_DIRS foxglove_bridge_base/include
+      LIBRARIES foxglove_bridge_base
+      CATKIN_DEPENDS roslib roscpp
+    )
 
-  catkin_package(
-    INCLUDE_DIRS foxglove_bridge_base/include
-    LIBRARIES foxglove_bridge_base
-    CATKIN_DEPENDS roslib roscpp
-  )
+    add_executable(foxglove_bridge ros1_foxglove_bridge/src/ros1_foxglove_bridge.cpp)
+    target_include_directories(foxglove_bridge SYSTEM PRIVATE ${catkin_INCLUDE_DIRS})
+    target_link_libraries(foxglove_bridge foxglove_bridge_base ${catkin_LIBRARIES})
+  else()
+    message(FATAL_ERROR "Could not find catkin")
+  endif()
+elseif("$ENV{ROS_VERSION}" STREQUAL "2")
+  # ROS 2
+  if(DEFINED ENV{AMENT_PREFIX_PATH})
+    message(STATUS "Building with ament_cmake")
+    set(ROS_BUILD_TYPE "ament_cmake")
 
-  add_definitions(-DIS_ROS1)
+    find_package(ament_cmake REQUIRED)
+    find_package(rclcpp REQUIRED)
 
-  add_executable(foxglove_bridge ros1_foxglove_bridge/ros1_foxglove_bridge.cpp)
-  target_include_directories(foxglove_bridge SYSTEM PRIVATE ${catkin_INCLUDE_DIRS})
-  target_link_libraries(foxglove_bridge foxglove_bridge_base ${catkin_LIBRARIES})
-elseif(DEFINED ENV{AMENT_PREFIX_PATH})
-  set(COMPILING_ROS2 1)
-
-  find_package(ament_cmake REQUIRED)
-  find_package(ament_index_cpp REQUIRED)
-  find_package(rclcpp REQUIRED)
-
-  message(STATUS "--------------------------------------------------")
-  message(STATUS "foxglove_bridge is being built for ROS 2.")
-  message(STATUS "--------------------------------------------------")
-
-  add_definitions(-DIS_ROS2)
-
-  add_executable(foxglove_bridge ros2_foxglove_bridge/ros2_foxglove_bridge.cpp)
-  target_include_directories(foxglove_bridge SYSTEM PRIVATE ${ament_index_cpp_INCLUDE_DIRS})
-  ament_target_dependencies(foxglove_bridge rclcpp)
-  target_link_libraries(foxglove_bridge foxglove_bridge_base)
+    add_executable(foxglove_bridge ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp)
+    target_include_directories(foxglove_bridge SYSTEM PRIVATE ${rclcpp_INCLUDE_DIRS})
+    target_link_libraries(foxglove_bridge foxglove_bridge_base ${rclcpp_LIBRARIES})
+  else()
+    message(FATAL_ERROR "Could not find ament_cmake")
+  endif()
 else()
-  message(FATAL_ERROR "No ROS 1 or ROS 2 build environment detected.")
+  message(FATAL_ERROR "ROS_VERSION environment variable must be 1 or 2")
+endif()
+
+#### TESTS #####################################################################
+
+if(ROS_BUILD_TYPE STREQUAL "catkin")
+  if (CATKIN_ENABLE_TESTING)
+    message(STATUS "Building tests with catkin")
+
+    find_package(catkin REQUIRED COMPONENTS rostest)
+    find_package(GTest REQUIRED)
+
+    catkin_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
+    target_link_libraries(version_test foxglove_bridge_base GTest::GTest GTest::Main)
+
+    add_rostest(ros1_foxglove_bridge/tests/smoke.test)
+  endif()
+elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
+  if(BUILD_TESTING)
+    message(STATUS "Building tests with ament_cmake")
+
+    find_package(ament_lint_auto REQUIRED)
+    find_package(GTest REQUIRED)
+    ament_lint_auto_find_test_dependencies()
+
+    ament_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
+    target_link_libraries(version_test foxglove_bridge_base GTest::GTest GTest::Main)
+  endif()
 endif()
 
 #### INSTALL ###################################################################
 
-if(COMPILING_ROS1)
+if(ROS_BUILD_TYPE STREQUAL "catkin")
     install(TARGETS foxglove_bridge
-      ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-      LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
       RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
     )
-elseif(COMPILING_ROS2)
+elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
     install(TARGETS foxglove_bridge
-      DESTINATION lib/${PROJECT_NAME})
-
-    if(BUILD_TESTING)
-      find_package(ament_lint_auto REQUIRED)
-      ament_lint_auto_find_test_dependencies()
-    endif()
-
+      DESTINATION lib/${PROJECT_NAME}
+    )
     ament_package()
 endif()

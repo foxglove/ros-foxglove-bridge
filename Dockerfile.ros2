@@ -1,4 +1,6 @@
-FROM ros:humble-ros-core
+ARG ROS_DISTRIBUTION=humble
+FROM ros:$ROS_DISTRIBUTION-ros-core
+ARG ROS_DISTRIBUTION=humble
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -19,8 +21,8 @@ COPY ros2_foxglove_bridge /ros2_ws/src/ros-foxglove-bridge/ros2_foxglove_bridge
 SHELL [ "/bin/bash" , "-c" ]
 
 # Build the ROS 2 workspace and ensure it's sourced when a container is run
-RUN source /opt/ros/humble/setup.bash \
-  && cd ros2_ws \
+RUN source /opt/ros/$ROS_DISTRIBUTION/setup.bash \
+  && cd /ros2_ws \
   && colcon build
 RUN echo "source /ros2_ws/install/setup.bash" >> ~/.bashrc
 
