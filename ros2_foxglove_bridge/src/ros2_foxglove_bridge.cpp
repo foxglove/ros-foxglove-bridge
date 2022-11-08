@@ -8,10 +8,12 @@
 
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/message_definition_cache.hpp>
+#include <foxglove_bridge/websocket_notls.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
 
 constexpr uint16_t DEFAULT_PORT = 8765;
-constexpr size_t DEFAULT_MAX_UPDATE_MS = 5000;
+constexpr int DEFAULT_MAX_UPDATE_MS = 5000;
+constexpr int DEFAULT_NUM_THREADS = 0;
 
 using namespace std::chrono_literals;
 using namespace std::placeholders;
@@ -52,7 +54,20 @@ public:
     maxUpdateDescription.integer_range[0].from_value = 1;
     maxUpdateDescription.integer_range[0].to_value = INT32_MAX;
     maxUpdateDescription.integer_range[0].step = 1;
-    this->declare_parameter("max_update_ms", int(DEFAULT_MAX_UPDATE_MS), maxUpdateDescription);
+    this->declare_parameter("max_update_ms", DEFAULT_MAX_UPDATE_MS, maxUpdateDescription);
+
+    auto numThreadsDescription = rcl_interfaces::msg::ParameterDescriptor{};
+    numThreadsDescription.name = "num_threads";
+    numThreadsDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+    numThreadsDescription.description =
+      "The number of threads to use for the ROS node executor. 0 means one thread per CPU core.";
+    numThreadsDescription.read_only = true;
+    numThreadsDescription.additional_constraints = "Must be a non-negative integer";
+    numThreadsDescription.integer_range.resize(1);
+    numThreadsDescription.integer_range[0].from_value = 0;
+    numThreadsDescription.integer_range[0].to_value = INT32_MAX;
+    numThreadsDescription.integer_range[0].step = 1;
+    this->declare_parameter("num_threads", DEFAULT_NUM_THREADS, numThreadsDescription);
 
     _server.setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this, _1));
     _server.setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1));
@@ -85,6 +100,13 @@ public:
     }
     _server.stop();
     RCLCPP_INFO(this->get_logger(), "Shutdown complete");
+  }
+
+  size_t numThreads() {
+    int numThreads;
+    rclcpp::spin_some(this->get_node_base_interface());
+    this->get_parameter_or("num_threads", numThreads, DEFAULT_NUM_THREADS);
+    return size_t(numThreads);
   }
 
   void updateAdvertisedTopics() {
@@ -203,7 +225,7 @@ private:
     }
   };
 
-  foxglove::Server _server;
+  foxglove::Server<foxglove::WebSocketNoTls> _server;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
@@ -212,7 +234,7 @@ private:
   std::mutex _subscriptionsMutex;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr _parametersUpdateHandle;
   rclcpp::TimerBase::SharedPtr _updateTimer;
-  size_t _maxUpdateMs = DEFAULT_MAX_UPDATE_MS;
+  size_t _maxUpdateMs = size_t(DEFAULT_MAX_UPDATE_MS);
   size_t _updateCount = 0;
 
   rcl_interfaces::msg::SetParametersResult parametersHandler(
@@ -336,8 +358,10 @@ private:
 int main(int argc, char* argv[]) {
   rclcpp::init(argc, argv);
   auto bridgeNode = std::make_shared<FoxgloveBridge>();
-  rclcpp::spin(bridgeNode);
-  bridgeNode.reset();
+  rclcpp::executors::MultiThreadedExecutor executor{rclcpp::ExecutorOptions{},
+                                                    bridgeNode->numThreads()};
+  executor.add_node(bridgeNode);
+  executor.spin();
   rclcpp::shutdown();
   return 0;
 }
