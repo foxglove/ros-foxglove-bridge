@@ -14,6 +14,4 @@ public:
   typedef CallbackLogger<concurrency_type, websocketpp::log::alevel> alog_type;
 };
 
-using WebSocketNoTlsServer = websocketpp::server<WebSocketNoTls>;
-
 }  // namespace foxglove

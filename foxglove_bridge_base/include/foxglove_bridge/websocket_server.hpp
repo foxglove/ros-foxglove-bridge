@@ -24,7 +24,6 @@ using json = nlohmann::json;
 using namespace std::placeholders;
 
 using ConnHandle = websocketpp::connection_hdl;
-using MessagePtr = WebSocketNoTlsServer::message_ptr;
 using OpCode = websocketpp::frame::opcode::value;
 
 using ChannelId = uint32_t;
@@ -77,8 +76,13 @@ enum class StatusLevel : uint8_t {
   ERROR = 2,
 };
 
+template <typename ServerConfiguration>
 class Server final {
 public:
+  using ServerType = websocketpp::server<ServerConfiguration>;
+  using ConnectionType = websocketpp::connection<ServerConfiguration>;
+  using MessagePtr = typename ServerType::message_ptr;
+
   static const std::string SUPPORTED_SUBPROTOCOL;
 
   explicit Server(std::string name, LogCallback logger);
@@ -118,7 +122,7 @@ private:
 
   std::string _name;
   LogCallback _logger;
-  WebSocketNoTlsServer _server;
+  ServerType _server;
   std::unique_ptr<std::thread> _serverThread;
 
   uint32_t _nextChannelId = 0;
@@ -140,9 +144,12 @@ private:
   bool anySubscribed(ChannelId chanId) const;
 };
 
-inline const std::string Server::SUPPORTED_SUBPROTOCOL = "foxglove.websocket.v1";
+template <typename ServerConfiguration>
+inline const std::string Server<ServerConfiguration>::SUPPORTED_SUBPROTOCOL =
+  "foxglove.websocket.v1";
 
-inline Server::Server(std::string name, LogCallback logger)
+template <typename ServerConfiguration>
+inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger)
     : _name(std::move(name))
     , _logger(logger) {
   // Redirect logging
@@ -165,9 +172,11 @@ inline Server::Server(std::string name, LogCallback logger)
   _server.set_listen_backlog(128);
 }
 
-inline Server::~Server() {}
+template <typename ServerConfiguration>
+inline Server<ServerConfiguration>::~Server() {}
 
-inline bool Server::validateConnection(ConnHandle hdl) {
+template <typename ServerConfiguration>
+inline bool Server<ServerConfiguration>::validateConnection(ConnHandle hdl) {
   auto con = _server.get_con_from_hdl(hdl);
 
   const auto& subprotocols = con->get_requested_subprotocols();
@@ -182,7 +191,8 @@ inline bool Server::validateConnection(ConnHandle hdl) {
   return false;
 }
 
-inline void Server::handleConnectionOpened(ConnHandle hdl) {
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) {
   std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
   auto con = _server.get_con_from_hdl(hdl);
   _server.get_alog().write(
@@ -206,7 +216,8 @@ inline void Server::handleConnectionOpened(ConnHandle hdl) {
                 });
 }
 
-inline void Server::handleConnectionClosed(ConnHandle hdl) {
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) {
   std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
   const auto& client = _clients.find(hdl);
   if (client == _clients.end()) {
@@ -227,14 +238,20 @@ inline void Server::handleConnectionClosed(ConnHandle hdl) {
   }
 }
 
-inline void Server::setSubscribeHandler(std::function<void(ChannelId)> handler) {
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::setSubscribeHandler(
+  std::function<void(ChannelId)> handler) {
   _subscribeHandler = std::move(handler);
 }
-inline void Server::setUnsubscribeHandler(std::function<void(ChannelId)> handler) {
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::setUnsubscribeHandler(
+  std::function<void(ChannelId)> handler) {
   _unsubscribeHandler = std::move(handler);
 }
 
-inline void Server::stop() {
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::stop() {
   if (_server.stopped()) {
     return;
   }
@@ -251,12 +268,14 @@ inline void Server::stop() {
     }
   }
 
-  std::vector<websocketpp::connection_hdl> connections;
+  std::vector<std::shared_ptr<ConnectionType>> connections;
   {
     std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
     connections.reserve(_clients.size());
     for (const auto& [hdl, client] : _clients) {
-      connections.push_back(hdl);
+      if (auto connection = _server.get_con_from_hdl(hdl, ec)) {
+        connections.push_back(connection);
+      }
     }
   }
 
@@ -265,12 +284,10 @@ inline void Server::stop() {
       APP, "Closing " + std::to_string(connections.size()) + " client connection(s)");
 
     // Iterate over all client connections and start the close connection handshake
-    for (const auto& hdl : connections) {
-      if (auto con = _server.get_con_from_hdl(hdl, ec)) {
-        con->close(websocketpp::close::status::going_away, "server shutdown", ec);
-        if (ec) {
-          _server.get_elog().write(RECOVERABLE, "Failed to close connection: " + ec.message());
-        }
+    for (const auto& connection : connections) {
+      connection->close(websocketpp::close::status::going_away, "server shutdown", ec);
+      if (ec) {
+        _server.get_elog().write(RECOVERABLE, "Failed to close connection: " + ec.message());
       }
     }
 
@@ -310,7 +327,8 @@ inline void Server::stop() {
   _clients.clear();
 }
 
-inline void Server::start(uint16_t port) {
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::start(uint16_t port) {
   if (_serverThread) {
     throw std::runtime_error("Server already started");
   }
@@ -348,7 +366,8 @@ inline void Server::start(uint16_t port) {
                                   ":" + std::to_string(endpoint.port()));
 }
 
-inline void Server::sendJson(ConnHandle hdl, json&& payload) {
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::sendJson(ConnHandle hdl, json&& payload) {
   try {
     _server.send(hdl, std::move(payload).dump(), OpCode::TEXT);
   } catch (std::exception const& e) {
@@ -356,7 +375,8 @@ inline void Server::sendJson(ConnHandle hdl, json&& payload) {
   }
 }
 
-inline void Server::sendJsonRaw(ConnHandle hdl, const std::string& payload) {
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::sendJsonRaw(ConnHandle hdl, const std::string& payload) {
   try {
     _server.send(hdl, payload, OpCode::TEXT);
   } catch (std::exception const& e) {
@@ -364,7 +384,9 @@ inline void Server::sendJsonRaw(ConnHandle hdl, const std::string& payload) {
   }
 }
 
-inline void Server::sendBinary(ConnHandle hdl, const std::vector<uint8_t>& payload) {
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::sendBinary(ConnHandle hdl,
+                                                    const std::vector<uint8_t>& payload) {
   try {
     _server.send(hdl, payload.data(), payload.size(), OpCode::BINARY);
   } catch (std::exception const& e) {
@@ -372,7 +394,8 @@ inline void Server::sendBinary(ConnHandle hdl, const std::vector<uint8_t>& paylo
   }
 }
 
-inline void Server::handleMessage(ConnHandle hdl, MessagePtr msg) {
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePtr msg) {
   std::error_code ec;
   auto con = _server.get_con_from_hdl(hdl, ec);
   if (!con) {
@@ -461,7 +484,8 @@ inline void Server::handleMessage(ConnHandle hdl, MessagePtr msg) {
   }
 }
 
-inline ChannelId Server::addChannel(ChannelWithoutId channel) {
+template <typename ServerConfiguration>
+inline ChannelId Server<ServerConfiguration>::addChannel(ChannelWithoutId channel) {
   std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
   const auto newId = ++_nextChannelId;
   Channel newChannel{newId, std::move(channel)};
@@ -469,7 +493,8 @@ inline ChannelId Server::addChannel(ChannelWithoutId channel) {
   return newId;
 }
 
-inline void Server::removeChannel(ChannelId chanId) {
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::removeChannel(ChannelId chanId) {
   std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
   _channels.erase(chanId);
   for (auto& [hdl, clientInfo] : _clients) {
@@ -481,7 +506,8 @@ inline void Server::removeChannel(ChannelId chanId) {
   }
 }
 
-inline void Server::broadcastChannels() {
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::broadcastChannels() {
   std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
 
   if (_clients.empty()) {
@@ -499,7 +525,9 @@ inline void Server::broadcastChannels() {
   }
 }
 
-inline void Server::sendMessage(ChannelId chanId, uint64_t timestamp, std::string_view data) {
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::sendMessage(ChannelId chanId, uint64_t timestamp,
+                                                     std::string_view data) {
   std::shared_lock<std::shared_mutex> lock(_clientsChannelMutex);
   std::vector<uint8_t> message;
   for (const auto& [hdl, client] : _clients) {
@@ -520,7 +548,8 @@ inline void Server::sendMessage(ChannelId chanId, uint64_t timestamp, std::strin
   }
 }
 
-inline std::optional<asio::ip::tcp::endpoint> Server::localEndpoint() {
+template <typename ServerConfiguration>
+inline std::optional<asio::ip::tcp::endpoint> Server<ServerConfiguration>::localEndpoint() {
   std::error_code ec;
   auto endpoint = _server.get_local_endpoint(ec);
   if (ec) {
@@ -529,7 +558,8 @@ inline std::optional<asio::ip::tcp::endpoint> Server::localEndpoint() {
   return endpoint;
 }
 
-inline bool Server::anySubscribed(ChannelId chanId) const {
+template <typename ServerConfiguration>
+inline bool Server<ServerConfiguration>::anySubscribed(ChannelId chanId) const {
   for (const auto& [hdl, client] : _clients) {
     if (client.subscriptionsByChannel.find(chanId) != client.subscriptionsByChannel.end()) {
       return true;
