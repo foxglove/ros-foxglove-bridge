@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
 
-find_package(nlohmann_json REQUIRED)
+find_package(nlohmann_json REQUIRED CONFIG PATHS "/usr/lib/cmake/")
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 find_package(websocketpp REQUIRED)
@@ -62,10 +62,9 @@ target_include_directories(foxglove_bridge_base
     $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(foxglove_bridge_base
-  nlohmann_json::nlohmann_json
+  nlohmann_json
   OpenSSL::Crypto
   OpenSSL::SSL
-  websocketpp::websocketpp
   ${CMAKE_THREAD_LIBS_INIT}
 )
 
