@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python-rosdep \
   python-wstool \
   build-essential \
+  nlohmann-json-dev \
   libasio-dev \
   libssl-dev \
   libwebsocketpp-dev \

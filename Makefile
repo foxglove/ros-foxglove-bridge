@@ -16,10 +16,6 @@ melodic:
 noetic:
 	docker build -t foxglove_bridge_noetic -f Dockerfile.ros1 --build-arg ROS_DISTRIBUTION=noetic .
 
-.PHONY: foxy
-foxy:
-	docker build -t foxglove_bridge_foxy -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=foxy .
-
 .PHONY: galactic
 galactic:
 	docker build -t foxglove_bridge_galactic -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=galactic .
@@ -41,7 +37,6 @@ clean:
 	docker rmi -f foxglove_bridge_ros2
 	docker rmi -f foxglove_bridge_melodic
 	docker rmi -f foxglove_bridge_noetic
-	docker rmi -f foxglove_bridge_foxy
 	docker rmi -f foxglove_bridge_galactic
 	docker rmi -f foxglove_bridge_humble
 	docker rmi -f foxglove_bridge_rolling
@@ -54,10 +49,6 @@ melodic-test: melodic
 .PHONY: noetic-test
 noetic-test: noetic
 	docker run -t --rm foxglove_bridge_noetic catkin_make run_tests
-
-.PHONY: foxy-test
-foxy-test: foxy
-	docker run -t --rm foxglove_bridge_foxy colcon test --event-handlers console_cohesion+
 
 .PHONY: galactic-test
 galactic-test: galactic
