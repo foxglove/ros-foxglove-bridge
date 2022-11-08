@@ -26,7 +26,6 @@ jobs:
         include:
           - ros_distribution: melodic
           - ros_distribution: noetic
-          - ros_distribution: foxy
           - ros_distribution: galactic
           - ros_distribution: humble
           - ros_distribution: rolling
