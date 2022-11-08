@@ -193,7 +193,7 @@ public:
           // topic+datatype tuple
           _advertisedTopics.emplace(topicAndDatatype, std::move(channel));
           _channelToTopicAndDatatype.emplace(channel.id, topicAndDatatype);
-        } catch (foxglove::DefinitionNotFoundError& err) {
+        } catch (const foxglove::DefinitionNotFoundError& err) {
           RCLCPP_WARN(this->get_logger(), "Could not find definition for topic \"%s\" (%s)",
                       topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
 
