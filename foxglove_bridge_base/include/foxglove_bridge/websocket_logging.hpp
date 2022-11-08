@@ -24,7 +24,7 @@ inline std::string IPAddressToString(const asio::ip::address& addr) {
   return addr.to_string();
 }
 
-inline void NoOpLogCallback(WebSocketLogLevel, char const*){};
+inline void NoOpLogCallback(WebSocketLogLevel, char const*) {}
 
 template <typename concurrency, typename names>
 class CallbackLogger : public websocketpp::log::basic<concurrency, names> {
