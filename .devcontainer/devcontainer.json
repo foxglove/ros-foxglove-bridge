@@ -1,3 +1,4 @@
+// -*- jsonc -*-
 {
   // ROS 2 dev environment
   "name": "ROS 2",
@@ -14,7 +15,7 @@
   // Shared configuration between ROS 1 and ROS 2 environments
   "context": "..",
   "forwardPorts": [
-    8080
+    8765
   ],
   "customizations": {
     "vscode": {
