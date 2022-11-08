@@ -28,9 +28,9 @@ humble:
 rolling:
 	docker build -t foxglove_bridge_rolling -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=rolling .
 
-.PHONY: ros2dev
-ros2dev:
-	docker build -t foxglove_bridge_ros2dev -f .devcontainer/Dockerfile.ros2 .
+.PHONY: rosdev
+rosdev:
+	docker build -t foxglove_bridge_rosdev -f .devcontainer/Dockerfile .
 
 clean:
 	docker rmi -f foxglove_bridge_ros1
@@ -40,7 +40,7 @@ clean:
 	docker rmi -f foxglove_bridge_galactic
 	docker rmi -f foxglove_bridge_humble
 	docker rmi -f foxglove_bridge_rolling
-	docker rmi -f foxglove_bridge_ros2dev
+	docker rmi -f foxglove_bridge_rosdev
 
 .PHONY: melodic-test
 melodic-test: melodic
@@ -63,5 +63,5 @@ rolling-test: rolling
 	docker run -t --rm foxglove_bridge_rolling colcon test --event-handlers console_cohesion+
 
 .PHONY: lint
-lint: ros2dev
-	docker run -t --rm -v $(CURDIR):/src foxglove_bridge_ros2dev python3 /src/scripts/format.py /src
+lint: rosdev
+	docker run -t --rm -v $(CURDIR):/src foxglove_bridge_rosdev python3 /src/scripts/format.py /src
