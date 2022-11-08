@@ -14,7 +14,7 @@
           "/usr/include"
         ]
       },
-      "defines": [],
+      "defines": ["ASIO_STANDALONE"],
       "cppStandard": "c++17"
     }
   ],

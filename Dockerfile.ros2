@@ -6,6 +6,7 @@ ARG ROS_DISTRIBUTION=humble
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
   python3-colcon-common-extensions \
+  nlohmann-json3-dev \
   libasio-dev \
   libssl-dev \
   libwebsocketpp-dev \

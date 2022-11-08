@@ -1,14 +1,15 @@
 cmake_minimum_required(VERSION 3.10.2)
 
-PROJECT(foxglove_bridge LANGUAGES CXX VERSION 0.0.1)
+project(foxglove_bridge LANGUAGES CXX VERSION 0.0.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
 
-find_package(Threads REQUIRED)
+find_package(nlohmann_json REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(Threads REQUIRED)
 find_package(websocketpp REQUIRED)
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -20,10 +21,6 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   if(NOT MSVC)
     set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -O0")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -fno-omit-frame-pointer")
-
-    ## Set gcov flags
-    set(CMAKE_CXX_FLAGS "-fprofile-arcs -ftest-coverage")
-    set(CMAKE_EXE_LINKER_FLAGS "-lgcov")
   endif()
   message("-- Configuring debug build")
 else()
@@ -34,7 +31,7 @@ endif()
 if(MSVC)
   set(DESIRED_WARNINGS "-WX")
 else()
-  set(DESIRED_WARNINGS "-Wall -Wextra -Wconversion -Wunreachable-code -Wuninitialized -pedantic-errors -Wold-style-cast -Wno-error=unused-variable -Wshadow -Wfloat-equal")
+  set(DESIRED_WARNINGS "-Wall -Wextra -Wconversion -Wunreachable-code -Wuninitialized -pedantic-errors -Wold-style-cast -Wno-error=unused-variable -Wfloat-equal")
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(DESIRED_WARNINGS "${DESIRED_WARNINGS} -Wmost")
   endif()
@@ -48,6 +45,13 @@ IF(NOT WIN32 AND ENABLE_ASAN)
   set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
 endif()
 
+# Detect big-endian architectures
+include(TestBigEndian)
+TEST_BIG_ENDIAN(ENDIAN)
+if (ENDIAN)
+  add_compile_definitions(ARCH_IS_BIG_ENDIAN=1)
+endif()
+
 # Build the foxglove_bridge_base library
 add_library(foxglove_bridge_base STATIC
   foxglove_bridge_base/src/foxglove_bridge.cpp
@@ -57,7 +61,13 @@ target_include_directories(foxglove_bridge_base
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
     $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(foxglove_bridge_base OpenSSL::Crypto OpenSSL::SSL ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(foxglove_bridge_base
+  nlohmann_json::nlohmann_json
+  OpenSSL::Crypto
+  OpenSSL::SSL
+  websocketpp::websocketpp
+  ${CMAKE_THREAD_LIBS_INIT}
+)
 
 message(STATUS "ROS_VERSION: " $ENV{ROS_VERSION})
 if("$ENV{ROS_VERSION}" STREQUAL "1")
@@ -89,7 +99,10 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     find_package(ament_cmake REQUIRED)
     find_package(rclcpp REQUIRED)
 
-    add_executable(foxglove_bridge ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp)
+    add_executable(foxglove_bridge
+      ros2_foxglove_bridge/src/message_definition_cache.cpp
+      ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp
+    )
     target_include_directories(foxglove_bridge SYSTEM PRIVATE ${rclcpp_INCLUDE_DIRS})
     target_link_libraries(foxglove_bridge foxglove_bridge_base ${rclcpp_LIBRARIES})
   else()
