@@ -209,7 +209,7 @@ public:
       _server.broadcastChannels();
     }
 
-    // Schedule the next update
+    // Schedule the next update using truncated exponential backoff, up to `_maxUpdateMs`
     _updateCount++;
     auto nextUpdateMs =
       std::chrono::milliseconds(std::min(size_t(1) << _updateCount, _maxUpdateMs));
