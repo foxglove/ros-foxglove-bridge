@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   clang-format \
   curl \
   git \
+  git-lfs \
   gnupg \
   libasio-dev \
   libssl-dev \
@@ -28,7 +29,11 @@ RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/r
 
 # Install ROS 2
 RUN apt-get update && apt-get install -y --no-install-recommends \
+  ros-galactic-foxglove-msgs \
   ros-galactic-ros-core \
+  ros-galactic-rosbag2 \
+  ros-galactic-rosbag2-storage-mcap \
+  ros-galactic-tf2-msgs \
   && rm -rf /var/lib/apt/lists/*
 
 SHELL ["/bin/bash", "-c"]
