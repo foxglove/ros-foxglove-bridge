@@ -151,15 +151,15 @@ public:
         // Stop tracking this channel in the WebSocket server
         _server.removeChannel(channel.id);
 
-        // Remove this topic+datatype tuple
-        _advertisedTopics.erase(topicAndDatatype);
-        _channelToTopicAndDatatype.erase(channel.id);
-
         // Remove the subscription for this topic, if any
         _subscriptions.erase(channel.id);
 
+        // Remove this topic+datatype tuple
+        _channelToTopicAndDatatype.erase(channel.id);
+        _advertisedTopics.erase(topicAndDatatype);
+
         RCLCPP_DEBUG(this->get_logger(), "Removed channel %d for topic \"%s\" (%s)", channel.id,
-                     channel.topic.c_str(), channel.schemaName.c_str());
+                     topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
       }
 
       // Advertise new topics
@@ -320,8 +320,8 @@ private:
       return;
     }
 
-    RCLCPP_INFO(this->get_logger(), "Unsubscribing from topic \"%s\" (%s)",
-                topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
+    RCLCPP_INFO(this->get_logger(), "Unsubscribing from topic \"%s\" (%s) on channel %d",
+                topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str(), channelId);
     _subscriptions.erase(it2);
   }
 
