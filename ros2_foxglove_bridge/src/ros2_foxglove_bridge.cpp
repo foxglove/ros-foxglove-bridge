@@ -284,6 +284,8 @@ private:
 
     rclcpp::SubscriptionOptions subscriptionOptions;
     subscriptionOptions.event_callbacks = eventCallbacks;
+    subscriptionOptions.callback_group =
+      this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
     constexpr size_t QUEUE_LENGTH = 10;
     try {
