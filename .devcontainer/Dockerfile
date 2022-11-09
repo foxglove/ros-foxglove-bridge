@@ -6,10 +6,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   clang-format \
   curl \
   git \
+  git-lfs \
   gnupg \
   libasio-dev \
   libssl-dev \
   libwebsocketpp-dev \
+  lldb \
   lsb-release \
   nlohmann-json3-dev \
   python3-colcon-common-extensions \
@@ -18,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3-rosinstall \
   python3-rosinstall-generator \
   python3-wstool \
+  strace \
   && rm -rf /var/lib/apt/lists/*
 
 # Authorize the ROS 2 GPG key and add the ROS 2 apt repository
@@ -26,7 +29,11 @@ RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/r
 
 # Install ROS 2
 RUN apt-get update && apt-get install -y --no-install-recommends \
+  ros-galactic-foxglove-msgs \
   ros-galactic-ros-core \
+  ros-galactic-rosbag2 \
+  ros-galactic-rosbag2-storage-mcap \
+  ros-galactic-tf2-msgs \
   && rm -rf /var/lib/apt/lists/*
 
 SHELL ["/bin/bash", "-c"]
@@ -38,6 +45,6 @@ RUN mkdir -p /ros_ws/src/ros-foxglove-bridge
 RUN echo $'\
 unset ROS_DISTRO\n\
 alias ros2_build_debug="colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Debug"\n\
-alias ros2_build_release="colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"\n\
-alias ros2_foxglove_bridge="source /ros_ws/install/setup.bash && ros2 run foxglove_bridge foxglove_bridge --ros-args --log-level debug"\n\
+alias ros2_build_release="colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo"\n\
+alias ros2_foxglove_bridge="source /ros_ws/install/setup.bash && ros2 run foxglove_bridge foxglove_bridge --ros-args --log-level debug --log-level rcl:=INFO"\n\
 ' >> ~/.bashrc

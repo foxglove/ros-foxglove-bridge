@@ -9,11 +9,11 @@
     "type": "cppdbg",
     "request": "launch",
     "program": "${workspaceFolder}/build/foxglove_bridge/foxglove_bridge",
-    "args": [],
+    "args": ["--ros-args", "--log-level", "debug"],
     "stopAtEntry": false,
     "cwd": "${workspaceFolder}",
     "environment": [],
     "externalConsole": false,
-    "MIMode": "gdb",
+    "MIMode": "lldb",
   }]
 }
