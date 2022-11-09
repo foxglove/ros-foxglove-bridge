@@ -18,6 +18,7 @@ constexpr int DEFAULT_NUM_THREADS = 0;
 using namespace std::chrono_literals;
 using namespace std::placeholders;
 using LogLevel = foxglove::WebSocketLogLevel;
+using Subscription = std::pair<rclcpp::GenericSubscription::SharedPtr, rclcpp::SubscriptionOptions>;
 
 class FoxgloveBridge : public rclcpp::Node {
 public:
@@ -229,8 +230,7 @@ private:
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
-  std::unordered_map<foxglove::ChannelId, std::shared_ptr<rclcpp::GenericSubscription>>
-    _subscriptions;
+  std::unordered_map<foxglove::ChannelId, Subscription> _subscriptions;
   std::mutex _subscriptionsMutex;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr _parametersUpdateHandle;
   rclcpp::TimerBase::SharedPtr _updateTimer;
@@ -295,9 +295,9 @@ private:
           rosMessageHandler(channel, msg);
         },
         subscriptionOptions);
-      _subscriptions.emplace(channelId, std::move(subscriber));
-      RCLCPP_INFO(this->get_logger(), "Subscribed to topic \"%s\" (%s)", topic.c_str(),
-                  datatype.c_str());
+      _subscriptions.emplace(channelId, std::make_pair(std::move(subscriber), subscriptionOptions));
+      RCLCPP_INFO(this->get_logger(), "Subscribed to topic \"%s\" (%s) on channel %d",
+                  topic.c_str(), datatype.c_str(), channelId);
     } catch (const std::exception& ex) {
       RCLCPP_ERROR(this->get_logger(), "Failed to subscribe to topic \"%s\" (%s): %s",
                    topic.c_str(), datatype.c_str(), ex.what());
