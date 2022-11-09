@@ -231,9 +231,11 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
 
   const auto oldSubscriptionsByChannel = std::move(client->second.subscriptionsByChannel);
   _clients.erase(client);
-  for (const auto& [chanId, subs] : oldSubscriptionsByChannel) {
-    if (!anySubscribed(chanId) && _unsubscribeHandler) {
-      _unsubscribeHandler(chanId);
+  if (_unsubscribeHandler) {
+    for (const auto& [chanId, subs] : oldSubscriptionsByChannel) {
+      if (!anySubscribed(chanId)) {
+        _unsubscribeHandler(chanId);
+      }
     }
   }
 }
@@ -462,7 +464,7 @@ inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePt
                         });
           continue;
         }
-        ChannelId chanId = sub->second;
+        ChannelId chanId = sub->first;
         clientInfo.subscriptionsByChannel.erase(sub);
         if (!anySubscribed(chanId) && _unsubscribeHandler) {
           _unsubscribeHandler(chanId);
