@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libasio-dev \
   libssl-dev \
   libwebsocketpp-dev \
+  lldb \
   lsb-release \
   nlohmann-json3-dev \
   python3-colcon-common-extensions \
@@ -18,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3-rosinstall \
   python3-rosinstall-generator \
   python3-wstool \
+  strace \
   && rm -rf /var/lib/apt/lists/*
 
 # Authorize the ROS 2 GPG key and add the ROS 2 apt repository
@@ -38,6 +40,6 @@ RUN mkdir -p /ros_ws/src/ros-foxglove-bridge
 RUN echo $'\
 unset ROS_DISTRO\n\
 alias ros2_build_debug="colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Debug"\n\
-alias ros2_build_release="colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"\n\
+alias ros2_build_release="colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo"\n\
 alias ros2_foxglove_bridge="source /ros_ws/install/setup.bash && ros2 run foxglove_bridge foxglove_bridge --ros-args --log-level debug"\n\
 ' >> ~/.bashrc
