@@ -462,7 +462,7 @@ inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePt
                         });
           continue;
         }
-        ChannelId chanId = sub->second;
+        ChannelId chanId = sub->first;
         clientInfo.subscriptionsByChannel.erase(sub);
         if (!anySubscribed(chanId) && _unsubscribeHandler) {
           _unsubscribeHandler(chanId);
