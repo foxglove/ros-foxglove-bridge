@@ -108,7 +108,7 @@ MsgSpec MsgParser::parse_msg_file(const std::string& package_name, const std::st
         // Message type specifier without package_name. References messages in same package.
         spec.types.push_back(package_name + "/" + field_type);
       } else {
-        // Explicity type specifier: <package_name>/<message_name>.
+        // Explicit type specifier: <package_name>/<message_name>.
         spec.types.push_back(field_type);
       }
     }

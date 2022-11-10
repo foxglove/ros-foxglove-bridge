@@ -1,9 +1,9 @@
 #pragma once
 
-#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace rospack {
@@ -43,7 +43,7 @@ private:
   std::string get_msg_file_path(const std::string& package_name, const std::string& message_name);
   MsgSpec parse_msg_file(const std::string& package_name, const std::string& file_path);
   std::shared_ptr<rospack::Rosstackage> rospack_;
-  std::map<std::string, MsgSpec> msg_spec_cache_;
+  std::unordered_map<std::string, MsgSpec> msg_spec_cache_;
 };
 
 }  // namespace foxglove_bridge
