@@ -1,7 +1,7 @@
-#include <filesystem>
 #include <fstream>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/filesystem.hpp>
 #include <rospack/rospack.h>
 
 #include <foxglove_bridge/msg_parser.hpp>
@@ -63,8 +63,8 @@ std::string MsgParser::get_msg_file_path(const std::string& package_name,
                                          const std::string& message_name) {
   std::string package_path;
   if (rospack_->find(package_name, package_path)) {
-    const auto msg_path = std::filesystem::path(package_path) / SUB_PATH / (message_name + EXT);
-    if (std::filesystem::exists(msg_path)) {
+    const auto msg_path = boost::filesystem::path(package_path) / SUB_PATH / (message_name + EXT);
+    if (boost::filesystem::exists(msg_path)) {
       return msg_path.string();
     }
   }
