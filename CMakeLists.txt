@@ -155,8 +155,16 @@ endif()
 #### INSTALL ###################################################################
 
 if(ROS_BUILD_TYPE STREQUAL "catkin")
-    install(TARGETS foxglove_bridge
+    install(TARGETS foxglove_bridge get_full_message_definition
       RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+    )
+    install(TARGETS message_parser
+      ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+      LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+      RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
+    )
+    install(DIRECTORY ros1_foxglove_bridge/include/foxglove_bridge
+      DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
     )
 elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
     install(TARGETS foxglove_bridge
