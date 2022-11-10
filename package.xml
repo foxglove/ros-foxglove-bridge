@@ -17,6 +17,7 @@
     <depend condition="$ROS_VERSION == 1">roslib</depend>
     <depend condition="$ROS_VERSION == 1">roscpp</depend>
     <depend condition="$ROS_VERSION == 1">rospack</depend>
+    <depend condition="$ROS_VERSION == 1">nodelet</depend>
     <depend condition="$ROS_VERSION == 2">ament_index_cpp</depend>
     <depend condition="$ROS_VERSION == 2">rclcpp</depend>
     <depend>libwebsocketpp-dev</depend>
@@ -37,5 +38,6 @@
     <export>
         <build_type condition="$ROS_VERSION == 1">catkin</build_type>
         <build_type condition="$ROS_VERSION == 2">ament_cmake</build_type>
+        <nodelet condition="$ROS_VERSION == 1" plugin="${prefix}/nodelets.xml" />
     </export>
 </package>
