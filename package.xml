@@ -3,33 +3,33 @@
     <name>foxglove_bridge</name>
     <version>0.0.1</version>
     <description>ROS Foxglove Bridge</description>
-
     <maintainer email="contact@foxglove.dev">Foxglove</maintainer>
     <license>MIT</license>
-
     <url type="website">https://github.com/foxglove/ros-foxglove-bridge</url>
-
     <author email="contact@foxglove.dev">Foxglove</author>
 
     <buildtool_depend condition="$ROS_VERSION == 1">catkin</buildtool_depend>
     <buildtool_depend condition="$ROS_VERSION == 2">ament_cmake</buildtool_depend>
 
-    <depend condition="$ROS_VERSION == 1">roslib</depend>
-    <depend condition="$ROS_VERSION == 1">roscpp</depend>
-    <depend condition="$ROS_VERSION == 1">rospack</depend>
+    <!-- ROS 1 runtime dependencies -->
     <depend condition="$ROS_VERSION == 1">nodelet</depend>
+    <depend condition="$ROS_VERSION == 1">roscpp</depend>
+    <depend condition="$ROS_VERSION == 1">roslib</depend>
+    <depend condition="$ROS_VERSION == 1">rospack</depend>
+
+    <!-- ROS 2 runtime dependencies -->
     <depend condition="$ROS_VERSION == 2">ament_index_cpp</depend>
     <depend condition="$ROS_VERSION == 2">rclcpp</depend>
-    <depend>libwebsocketpp-dev</depend>
 
-    <!-- test dependencies -->
+    <!-- Test dependencies -->
     <build_depend condition="$ROS_VERSION == 1">rostest</build_depend>
     <test_depend condition="$ROS_VERSION == 1">rosunit</test_depend>
     <test_depend condition="$ROS_VERSION == 1">geometry_msgs</test_depend>
     <test_depend condition="$ROS_VERSION == 2">ament_cmake_gtest</test_depend>
 
-    <!-- common dependencies -->
+    <!-- Common dependencies -->
     <build_depend>libssl-dev</build_depend>
+    <build_depend>libwebsocketpp-dev</build_depend>
     <build_depend>nlohmann-json-dev</build_depend>
 
     <exec_depend>openssl</exec_depend>
