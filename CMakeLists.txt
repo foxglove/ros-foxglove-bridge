@@ -53,7 +53,7 @@ if (ENDIAN)
 endif()
 
 # Build the foxglove_bridge_base library
-add_library(foxglove_bridge_base SHARED
+add_library(foxglove_bridge_base STATIC
   foxglove_bridge_base/src/foxglove_bridge.cpp
 )
 target_include_directories(foxglove_bridge_base
