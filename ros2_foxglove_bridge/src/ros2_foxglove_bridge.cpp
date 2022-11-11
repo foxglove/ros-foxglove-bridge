@@ -287,10 +287,29 @@ private:
     subscriptionOptions.callback_group =
       this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
-    constexpr size_t QUEUE_LENGTH = 10;
+    bool reliable = true;
+    size_t depth = 1;
+    for (const auto& publisher : this->get_publishers_info_by_topic(topic)) {
+      // Check if we can use a reliable subscription (requires all publishers to be reliable)
+      if (publisher.qos_profile().reliability() == rclcpp::ReliabilityPolicy::BestEffort) {
+        reliable = false;
+      } else {
+        // Find the maximum publisher queue depth for reliable publishers
+        depth = std::max(depth, publisher.qos_profile().depth());
+      }
+    }
+
+    constexpr size_t MAX_DEPTH = 100;
+    depth = reliable ? std::min(depth, MAX_DEPTH) : 1;
+
+    rclcpp::QoS qos{rclcpp::KeepLast(depth), rmw_qos_profile_default};
+    if (!reliable) {
+      qos.best_effort();
+    }
+
     try {
       auto subscriber = this->create_generic_subscription(
-        topic, datatype, QUEUE_LENGTH,
+        topic, datatype, qos,
         [&](std::shared_ptr<rclcpp::SerializedMessage> msg) {
           rosMessageHandler(channel, msg);
         },
@@ -349,7 +368,7 @@ private:
                          std::shared_ptr<rclcpp::SerializedMessage> msg) {
     // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
     // to `/rosout` will cause a feedback loop
-    auto timestamp = this->now().nanoseconds();
+    auto timestamp = uint64_t(this->now().nanoseconds());
     auto payload =
       std::string_view{reinterpret_cast<const char*>(msg->get_rcl_serialized_message().buffer),
                        msg->get_rcl_serialized_message().buffer_length};
