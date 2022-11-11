@@ -6,17 +6,29 @@ ARG ROS_DISTRIBUTION=humble
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
   python3-colcon-common-extensions \
+  python3-rosdep \
   nlohmann-json3-dev \
   libasio-dev \
   libssl-dev \
   libwebsocketpp-dev \
   && rm -rf /var/lib/apt/lists/*
 
+# Initialize rosdep
+RUN rosdep init && rosdep update
+
 # Add common files and ROS 2 source code
 COPY CMakeLists.txt /ros2_ws/src/ros-foxglove-bridge/CMakeLists.txt
 COPY package.xml /ros2_ws/src/ros-foxglove-bridge/package.xml
 COPY foxglove_bridge_base /ros2_ws/src/ros-foxglove-bridge/foxglove_bridge_base
 COPY ros2_foxglove_bridge /ros2_ws/src/ros-foxglove-bridge/ros2_foxglove_bridge
+
+# Install rosdep dependencies
+RUN . /opt/ros/$ROS_DISTRIBUTION/setup.sh && \
+    apt-get update && rosdep install -y \
+      --from-paths \
+        /ros2_ws/src \
+      --ignore-src \
+    && rm -rf /var/lib/apt/lists/*
 
 # Use the bash shell so we can use the source command
 SHELL [ "/bin/bash" , "-c" ]
