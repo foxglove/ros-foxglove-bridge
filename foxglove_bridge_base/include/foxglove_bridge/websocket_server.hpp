@@ -82,6 +82,7 @@ public:
   using ServerType = websocketpp::server<ServerConfiguration>;
   using ConnectionType = websocketpp::connection<ServerConfiguration>;
   using MessagePtr = typename ServerType::message_ptr;
+  using Tcp = websocketpp::lib::asio::ip::tcp;
 
   static const std::string SUPPORTED_SUBPROTOCOL;
 
@@ -105,7 +106,7 @@ public:
 
   void sendMessage(ChannelId chanId, uint64_t timestamp, std::string_view data);
 
-  std::optional<asio::ip::tcp::endpoint> localEndpoint();
+  std::optional<Tcp::endpoint> localEndpoint();
 
 private:
   struct ClientInfo {
@@ -132,6 +133,7 @@ private:
   std::function<void(ChannelId)> _unsubscribeHandler;
   std::shared_mutex _clientsChannelMutex;
 
+  void socketInit(ConnHandle hdl);
   bool validateConnection(ConnHandle hdl);
   void handleConnectionOpened(ConnHandle hdl);
   void handleConnectionClosed(ConnHandle hdl);
@@ -164,6 +166,7 @@ inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger)
 
   _server.clear_access_channels(websocketpp::log::alevel::all);
   _server.set_access_channels(APP);
+  _server.set_tcp_pre_init_handler(std::bind(&Server::socketInit, this, _1));
   _server.set_validate_handler(std::bind(&Server::validateConnection, this, _1));
   _server.set_open_handler(std::bind(&Server::handleConnectionOpened, this, _1));
   _server.set_close_handler(std::bind(&Server::handleConnectionClosed, this, _1));
@@ -174,6 +177,15 @@ inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger)
 
 template <typename ServerConfiguration>
 inline Server<ServerConfiguration>::~Server() {}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::socketInit(ConnHandle hdl) {
+  std::error_code ec;
+  _server.get_con_from_hdl(hdl)->get_raw_socket().set_option(Tcp::no_delay(true), ec);
+  if (ec) {
+    _server.get_elog().write(RECOVERABLE, "Failed to set TCP_NODELAY: " + ec.message());
+  }
+}
 
 template <typename ServerConfiguration>
 inline bool Server<ServerConfiguration>::validateConnection(ConnHandle hdl) {
