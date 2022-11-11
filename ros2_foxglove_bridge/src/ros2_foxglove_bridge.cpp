@@ -287,22 +287,17 @@ private:
     subscriptionOptions.callback_group =
       this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
+    // Create a QoS profile that only keeps the last message since we don't need to keep a history,
+    // and use reliable delivery if all publishers are reliable otherwise best-effort
     bool reliable = true;
-    size_t depth = 1;
     for (const auto& publisher : this->get_publishers_info_by_topic(topic)) {
-      // Check if we can use a reliable subscription (requires all publishers to be reliable)
       if (publisher.qos_profile().reliability() == rclcpp::ReliabilityPolicy::BestEffort) {
         reliable = false;
-      } else {
-        // Find the maximum publisher queue depth for reliable publishers
-        depth = std::max(depth, publisher.qos_profile().depth());
+        break;
       }
     }
 
-    constexpr size_t MAX_DEPTH = 100;
-    depth = reliable ? std::min(depth, MAX_DEPTH) : 1;
-
-    rclcpp::QoS qos{rclcpp::KeepLast(depth), rmw_qos_profile_default};
+    rclcpp::QoS qos{rclcpp::KeepLast(1)};
     if (!reliable) {
       qos.best_effort();
     }
