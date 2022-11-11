@@ -177,5 +177,11 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
     install(TARGETS foxglove_bridge
       DESTINATION lib/${PROJECT_NAME}
     )
+    install(TARGETS foxglove_bridge_base
+      ARCHIVE DESTINATION lib
+      LIBRARY DESTINATION lib
+      RUNTIME DESTINATION bin
+    )
+    ament_export_libraries(foxglove_bridge_base)
     ament_package()
 endif()
