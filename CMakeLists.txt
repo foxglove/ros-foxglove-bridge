@@ -53,7 +53,7 @@ if (ENDIAN)
 endif()
 
 # Build the foxglove_bridge_base library
-add_library(foxglove_bridge_base STATIC
+add_library(foxglove_bridge_base SHARED
   foxglove_bridge_base/src/foxglove_bridge.cpp
 )
 target_include_directories(foxglove_bridge_base
@@ -75,13 +75,13 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
     message(STATUS "Building with catkin")
     set(ROS_BUILD_TYPE "catkin")
 
-    find_package(catkin REQUIRED COMPONENTS roslib roscpp rospack)
+    find_package(catkin REQUIRED COMPONENTS nodelet roslib roscpp rospack)
     find_package(Boost REQUIRED)
 
     catkin_package(
       INCLUDE_DIRS foxglove_bridge_base/include ros1_foxglove_bridge/include
-      LIBRARIES foxglove_bridge_base message_parser
-      CATKIN_DEPENDS roslib roscpp rospack
+      LIBRARIES foxglove_bridge_base foxglove_bridge_nodelet message_parser
+      CATKIN_DEPENDS nodelet roslib roscpp rospack
       DEPENDS Boost
     )
 
@@ -93,9 +93,13 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
     target_include_directories(get_full_message_definition SYSTEM PRIVATE ros1_foxglove_bridge/include)
     target_link_libraries(get_full_message_definition message_parser)
 
-    add_executable(foxglove_bridge ros1_foxglove_bridge/src/ros1_foxglove_bridge.cpp)
+    add_library(foxglove_bridge_nodelet ros1_foxglove_bridge/src/ros1_foxglove_bridge_nodelet.cpp)
+    target_include_directories(foxglove_bridge_nodelet SYSTEM PRIVATE ${catkin_INCLUDE_DIRS})
+    target_link_libraries(foxglove_bridge_nodelet foxglove_bridge_base ${catkin_LIBRARIES})
+
+    add_executable(foxglove_bridge ros1_foxglove_bridge/src/ros1_foxglove_bridge_node.cpp)
     target_include_directories(foxglove_bridge SYSTEM PRIVATE ${catkin_INCLUDE_DIRS})
-    target_link_libraries(foxglove_bridge foxglove_bridge_base ${catkin_LIBRARIES})
+    target_link_libraries(foxglove_bridge ${catkin_LIBRARIES})
   else()
     message(FATAL_ERROR "Could not find catkin")
   endif()
@@ -158,13 +162,16 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
     install(TARGETS foxglove_bridge get_full_message_definition
       RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
     )
-    install(TARGETS message_parser
+    install(TARGETS foxglove_bridge_base foxglove_bridge_nodelet message_parser
       ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
       LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
       RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
     )
     install(DIRECTORY ros1_foxglove_bridge/include/foxglove_bridge
       DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+    )
+    install(FILES nodelets.xml
+      DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
     )
 elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
     install(TARGETS foxglove_bridge
