@@ -1,8 +1,10 @@
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <unordered_set>
 
 #include <rclcpp/rclcpp.hpp>
+#include <rosgraph_msgs/msg/clock.hpp>
 
 #define ASIO_STANDALONE
 
@@ -121,10 +123,30 @@ public:
     auto topicNamesAndTypes = this->get_node_graph_interface()->get_topic_names_and_types();
     std::unordered_set<TopicAndDatatype, PairHash> latestTopics;
     latestTopics.reserve(topicNamesAndTypes.size());
-    for (const auto& topicNameAndType : topicNamesAndTypes) {
-      for (const auto& datatype : topicNameAndType.second) {
-        latestTopics.emplace(topicNameAndType.first, datatype);
+    bool hasClockTopic = false;
+    for (const auto& [topicName, datatypes] : topicNamesAndTypes) {
+      for (const auto& datatype : datatypes) {
+        // Check if a /clock topic is published
+        if (topicName == "/clock" && datatype == "rosgraph_msgs/msg/Clock") {
+          hasClockTopic = true;
+        }
+        latestTopics.emplace(topicName, datatype);
       }
+    }
+
+    // Enable or disable simulated time based on the presence of a /clock topic
+    if (!_useSimTime && hasClockTopic) {
+      RCLCPP_INFO(this->get_logger(), "/clock topic found, using simulated time");
+      _useSimTime = true;
+      _clockSubscription = this->create_subscription<rosgraph_msgs::msg::Clock>(
+        "/clock", rclcpp::QoS{rclcpp::KeepLast(1)}.best_effort(),
+        [&](std::shared_ptr<rosgraph_msgs::msg::Clock> msg) {
+          _simTimeNs = uint64_t(rclcpp::Time{msg->clock}.nanoseconds());
+        });
+    } else if (_useSimTime && !hasClockTopic) {
+      RCLCPP_WARN(this->get_logger(), "/clock topic disappeared");
+      _useSimTime = false;
+      _clockSubscription.reset();
     }
 
     // Create a list of topics that are new to us
@@ -236,6 +258,9 @@ private:
   rclcpp::TimerBase::SharedPtr _updateTimer;
   size_t _maxUpdateMs = size_t(DEFAULT_MAX_UPDATE_MS);
   size_t _updateCount = 0;
+  std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
+  std::atomic<uint64_t> _simTimeNs = 0;
+  std::atomic<bool> _useSimTime = false;
 
   rcl_interfaces::msg::SetParametersResult parametersHandler(
     const std::vector<rclcpp::Parameter>& parameters) {
@@ -363,11 +388,15 @@ private:
                          std::shared_ptr<rclcpp::SerializedMessage> msg) {
     // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
     // to `/rosout` will cause a feedback loop
-    auto timestamp = uint64_t(this->now().nanoseconds());
-    auto payload =
+    const auto timestamp = currentTimeNs();
+    const auto payload =
       std::string_view{reinterpret_cast<const char*>(msg->get_rcl_serialized_message().buffer),
                        msg->get_rcl_serialized_message().buffer_length};
     _server.sendMessage(channel.id, timestamp, payload);
+  }
+
+  uint64_t currentTimeNs() {
+    return _useSimTime ? _simTimeNs.load() : uint64_t(this->now().nanoseconds());
   }
 };
 
