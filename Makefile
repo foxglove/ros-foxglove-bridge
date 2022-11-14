@@ -10,7 +10,7 @@ ros2:
 
 .PHONY: melodic
 melodic:
-	docker build -t foxglove_bridge_melodic -f Dockerfile.ros1bionic --build-arg ROS_DISTRIBUTION=melodic .
+	docker build -t foxglove_bridge_melodic -f Dockerfile.ros1 --build-arg ROS_DISTRIBUTION=melodic .
 
 .PHONY: noetic
 noetic:
