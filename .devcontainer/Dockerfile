@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   lldb \
   lsb-release \
   nlohmann-json3-dev \
+  openssh-client \
   python3-colcon-common-extensions \
   python3-pip \
   python3-rosdep \
