@@ -7,6 +7,7 @@ on:
 jobs:
   docker-ros1:
     strategy:
+      fail-fast: false
       matrix:
         ros: ["melodic", "noetic"]
 
@@ -48,14 +49,15 @@ jobs:
           build-args: |
             ROS_DISTRIBUTION=${{ matrix.ros }}
           push: true
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
   docker-ros2:
     strategy:
+      fail-fast: false
       matrix:
-        ros: ["foxy", "galactic", "humble", "rolling"]
+        ros: ["galactic", "humble", "rolling"]
 
     name: Publish ROS 2 ${{ matrix.ros }} container to GHCR
     runs-on: ubuntu-latest
