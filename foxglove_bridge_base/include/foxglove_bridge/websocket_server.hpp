@@ -21,7 +21,6 @@
 namespace foxglove {
 
 using json = nlohmann::json;
-using namespace std::placeholders;
 
 using ConnHandle = websocketpp::connection_hdl;
 using OpCode = websocketpp::frame::opcode::value;
@@ -166,11 +165,13 @@ inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger)
 
   _server.clear_access_channels(websocketpp::log::alevel::all);
   _server.set_access_channels(APP);
-  _server.set_tcp_pre_init_handler(std::bind(&Server::socketInit, this, _1));
-  _server.set_validate_handler(std::bind(&Server::validateConnection, this, _1));
-  _server.set_open_handler(std::bind(&Server::handleConnectionOpened, this, _1));
-  _server.set_close_handler(std::bind(&Server::handleConnectionClosed, this, _1));
-  _server.set_message_handler(std::bind(&Server::handleMessage, this, _1, _2));
+  _server.set_tcp_pre_init_handler(std::bind(&Server::socketInit, this, std::placeholders::_1));
+  _server.set_validate_handler(std::bind(&Server::validateConnection, this, std::placeholders::_1));
+  _server.set_open_handler(std::bind(&Server::handleConnectionOpened, this, std::placeholders::_1));
+  _server.set_close_handler(
+    std::bind(&Server::handleConnectionClosed, this, std::placeholders::_1));
+  _server.set_message_handler(
+    std::bind(&Server::handleMessage, this, std::placeholders::_1, std::placeholders::_2));
   _server.set_reuse_addr(true);
   _server.set_listen_backlog(128);
 }
