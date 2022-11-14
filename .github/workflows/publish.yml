@@ -30,7 +30,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v4
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/foxglove/foxglove_bridge-${{ matrix.ros }}
           tags: |
             latest
 
