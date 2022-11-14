@@ -75,13 +75,13 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
     message(STATUS "Building with catkin")
     set(ROS_BUILD_TYPE "catkin")
 
-    find_package(catkin REQUIRED COMPONENTS nodelet roslib roscpp rospack)
+    find_package(catkin REQUIRED COMPONENTS nodelet ros_type_introspection roslib roscpp rospack)
     find_package(Boost REQUIRED)
 
     catkin_package(
       INCLUDE_DIRS foxglove_bridge_base/include ros1_foxglove_bridge/include
       LIBRARIES foxglove_bridge_base foxglove_bridge_nodelet message_parser
-      CATKIN_DEPENDS nodelet roslib roscpp rospack
+      CATKIN_DEPENDS nodelet ros_type_introspection roslib roscpp rospack
       DEPENDS Boost
     )
 
@@ -94,8 +94,8 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
     target_link_libraries(get_full_message_definition message_parser)
 
     add_library(foxglove_bridge_nodelet ros1_foxglove_bridge/src/ros1_foxglove_bridge_nodelet.cpp)
-    target_include_directories(foxglove_bridge_nodelet SYSTEM PRIVATE ${catkin_INCLUDE_DIRS})
-    target_link_libraries(foxglove_bridge_nodelet foxglove_bridge_base ${catkin_LIBRARIES})
+    target_include_directories(foxglove_bridge_nodelet SYSTEM PRIVATE ${catkin_INCLUDE_DIRS} ros1_foxglove_bridge/include)
+    target_link_libraries(foxglove_bridge_nodelet foxglove_bridge_base message_parser ${catkin_LIBRARIES})
 
     add_executable(foxglove_bridge ros1_foxglove_bridge/src/ros1_foxglove_bridge_node.cpp)
     target_include_directories(foxglove_bridge SYSTEM PRIVATE ${catkin_INCLUDE_DIRS})
