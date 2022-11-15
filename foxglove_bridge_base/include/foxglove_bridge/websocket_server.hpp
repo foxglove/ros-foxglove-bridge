@@ -231,19 +231,23 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) {
-  std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
-  const auto& client = _clients.find(hdl);
-  if (client == _clients.end()) {
-    _server.get_elog().write(RECOVERABLE, "Client " +
-                                            _server.get_con_from_hdl(hdl)->get_remote_endpoint() +
-                                            " disconnected but not found in _clients");
-    return;
+  std::unordered_map<ChannelId, SubscriptionId> oldSubscriptionsByChannel;
+  {
+    std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
+    const auto& client = _clients.find(hdl);
+    if (client == _clients.end()) {
+      _server.get_elog().write(RECOVERABLE, "Client " +
+                                              _server.get_con_from_hdl(hdl)->get_remote_endpoint() +
+                                              " disconnected but not found in _clients");
+      return;
+    }
+
+    _server.get_alog().write(APP, "Client " + client->second.name + " disconnected");
+
+    oldSubscriptionsByChannel = std::move(client->second.subscriptionsByChannel);
+    _clients.erase(client);
   }
 
-  _server.get_alog().write(APP, "Client " + client->second.name + " disconnected");
-
-  const auto oldSubscriptionsByChannel = std::move(client->second.subscriptionsByChannel);
-  _clients.erase(client);
   if (_unsubscribeHandler) {
     for (const auto& [chanId, subs] : oldSubscriptionsByChannel) {
       if (!anySubscribed(chanId)) {
