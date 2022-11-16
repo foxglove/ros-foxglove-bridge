@@ -93,7 +93,7 @@ public:
   Server& operator=(const Server&) = delete;
   Server& operator=(Server&&) = delete;
 
-  void start(uint16_t port);
+  void start(const std::string& host, uint16_t port);
   void stop();
 
   ChannelId addChannel(ChannelWithoutId channel);
@@ -347,14 +347,14 @@ inline void Server<ServerConfiguration>::stop() {
 }
 
 template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::start(uint16_t port) {
+inline void Server<ServerConfiguration>::start(const std::string& host, uint16_t port) {
   if (_serverThread) {
     throw std::runtime_error("Server already started");
   }
 
   std::error_code ec;
 
-  _server.listen(port, ec);
+  _server.listen(host, std::to_string(port), ec);
   if (ec) {
     throw std::runtime_error("Failed to listen on port " + std::to_string(port) + ": " +
                              ec.message());
