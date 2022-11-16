@@ -55,6 +55,8 @@ public:
                                                    &FoxgloveBridge::updateAdvertisedTopics, this);
     } catch (const std::exception& err) {
       ROS_ERROR("Failed to start websocket server: %s", err.what());
+      // Rethrow exception such that the nodelet is unloaded.
+      throw err;
     }
   };
   virtual ~FoxgloveBridge() {
