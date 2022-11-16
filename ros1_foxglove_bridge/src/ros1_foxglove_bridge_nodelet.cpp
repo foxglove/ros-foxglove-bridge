@@ -19,7 +19,7 @@
 namespace foxglove_bridge {
 
 constexpr int DEFAULT_PORT = 8765;
-constexpr char DEFAULT_HOST[] = "0.0.0.0";
+constexpr char DEFAULT_ADDRESS[] = "0.0.0.0";
 constexpr int DEFAULT_MAX_UPDATE_MS = 5000;
 constexpr char ROS1_CHANNEL_ENCODING[] = "ros1";
 constexpr uint32_t SUBSCRIPTION_QUEUE_LENGTH = 10;
@@ -33,7 +33,7 @@ public:
   FoxgloveBridge() = default;
   virtual void onInit() {
     auto& nhp = getPrivateNodeHandle();
-    const auto host = nhp.param<std::string>("host", DEFAULT_HOST);
+    const auto address = nhp.param<std::string>("address", DEFAULT_ADDRESS);
     const int port = nhp.param<int>("port", DEFAULT_PORT);
     const int max_update_ms = nhp.param<int>("max_update_ms", DEFAULT_MAX_UPDATE_MS);
 
@@ -48,7 +48,7 @@ public:
         std::bind(&FoxgloveBridge::subscribeHandler, this, std::placeholders::_1));
       _server->setUnsubscribeHandler(
         std::bind(&FoxgloveBridge::unsubscribeHandler, this, std::placeholders::_1));
-      _server->start(host, static_cast<uint16_t>(port));
+      _server->start(address, static_cast<uint16_t>(port));
 
       _msgParser = std::make_unique<foxglove_bridge::MsgParser>();
       _updateTimer = getMTNodeHandle().createTimer(ros::Duration(max_update_ms / 1e3),
