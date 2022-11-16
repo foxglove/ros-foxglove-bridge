@@ -14,6 +14,7 @@
 #include <foxglove_bridge/websocket_server.hpp>
 
 constexpr uint16_t DEFAULT_PORT = 8765;
+constexpr char DEFAULT_ADDRESS[] = "0.0.0.0";
 constexpr int DEFAULT_MAX_UPDATE_MS = 5000;
 constexpr int DEFAULT_NUM_THREADS = 0;
 
@@ -45,6 +46,13 @@ public:
     portDescription.integer_range[0].step = 1;
     this->declare_parameter("port", DEFAULT_PORT, portDescription);
 
+    auto addressDescription = rcl_interfaces::msg::ParameterDescriptor{};
+    addressDescription.name = "address";
+    addressDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
+    addressDescription.description = "The host address to bind the WebSocket server to";
+    addressDescription.read_only = true;
+    this->declare_parameter("address", DEFAULT_ADDRESS, addressDescription);
+
     auto maxUpdateDescription = rcl_interfaces::msg::ParameterDescriptor{};
     maxUpdateDescription.name = "max_update_ms";
     maxUpdateDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
@@ -75,8 +83,9 @@ public:
     _server.setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this, _1));
     _server.setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1));
 
+    auto address = this->get_parameter("address").as_string();
     uint16_t port = uint16_t(this->get_parameter("port").as_int());
-    _server.start(port);
+    _server.start(address, port);
 
     // Get the actual port we bound to
     uint16_t listeningPort = _server.localEndpoint()->port();

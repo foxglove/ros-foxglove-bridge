@@ -7,7 +7,10 @@ int main(int argc, char** argv) {
   nodelet::M_string remap(ros::names::getRemappings());
   nodelet::V_string nargv;
   std::string nodelet_name = ros::this_node::getName();
-  nodelet.load(nodelet_name, "foxglove_bridge/foxglove_bridge_nodelet", remap, nargv);
-  ros::spin();
-  return 0;
+  if (nodelet.load(nodelet_name, "foxglove_bridge/foxglove_bridge_nodelet", remap, nargv)) {
+    ros::spin();
+    return EXIT_SUCCESS;
+  } else {
+    return EXIT_FAILURE;
+  }
 }
