@@ -1,6 +1,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <thread>
 #include <unordered_set>
 
 #include <rclcpp/rclcpp.hpp>
@@ -15,7 +16,6 @@
 
 constexpr uint16_t DEFAULT_PORT = 8765;
 constexpr char DEFAULT_ADDRESS[] = "0.0.0.0";
-constexpr int DEFAULT_MAX_UPDATE_MS = 5000;
 constexpr int DEFAULT_NUM_THREADS = 0;
 
 using namespace std::chrono_literals;
@@ -53,20 +53,6 @@ public:
     addressDescription.read_only = true;
     this->declare_parameter("address", DEFAULT_ADDRESS, addressDescription);
 
-    auto maxUpdateDescription = rcl_interfaces::msg::ParameterDescriptor{};
-    maxUpdateDescription.name = "max_update_ms";
-    maxUpdateDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
-    maxUpdateDescription.description =
-      "The maximum time in milliseconds between refreshing the list of known topics, services, "
-      "actions, and parameters";
-    maxUpdateDescription.read_only = false;
-    maxUpdateDescription.additional_constraints = "Must be a positive integer";
-    maxUpdateDescription.integer_range.resize(1);
-    maxUpdateDescription.integer_range[0].from_value = 1;
-    maxUpdateDescription.integer_range[0].to_value = INT32_MAX;
-    maxUpdateDescription.integer_range[0].step = 1;
-    this->declare_parameter("max_update_ms", DEFAULT_MAX_UPDATE_MS, maxUpdateDescription);
-
     auto numThreadsDescription = rcl_interfaces::msg::ParameterDescriptor{};
     numThreadsDescription.name = "num_threads";
     numThreadsDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
@@ -95,20 +81,15 @@ public:
       this->set_parameter(rclcpp::Parameter{"port", listeningPort});
     }
 
-    _maxUpdateMs = size_t(this->get_parameter("max_update_ms").as_int());
-
-    // Listen for parameter updates
-    _parametersUpdateHandle = this->add_on_set_parameters_callback(
-      std::bind(&FoxgloveBridge::parametersHandler, this, std::placeholders::_1));
-
-    _updateTimer =
-      this->create_wall_timer(1ms, std::bind(&FoxgloveBridge::updateAdvertisedTopics, this));
+    // Start the thread polling for rosgraph changes
+    _rosgraphPollThread =
+      std::make_unique<std::thread>(std::bind(&FoxgloveBridge::rosgraphPollThread, this));
   }
 
   ~FoxgloveBridge() {
     RCLCPP_INFO(this->get_logger(), "Shutting down %s", this->get_name());
-    if (_updateTimer) {
-      _updateTimer.reset();
+    if (_rosgraphPollThread) {
+      _rosgraphPollThread->join();
     }
     _server.stop();
     RCLCPP_INFO(this->get_logger(), "Shutdown complete");
@@ -121,14 +102,30 @@ public:
     return size_t(numThreads);
   }
 
+  void rosgraphPollThread() {
+    updateAdvertisedTopics();
+
+    auto graphEvent = this->get_graph_event();
+    while (rclcpp::ok()) {
+      this->wait_for_graph_change(graphEvent, 200ms);
+      bool triggered = graphEvent->check_and_clear();
+      if (triggered) {
+        RCLCPP_DEBUG(this->get_logger(), "rosgraph change detected");
+        updateAdvertisedTopics();
+        // Graph changes tend to come in batches, so wait a bit before checking again
+        std::this_thread::sleep_for(500ms);
+      }
+    }
+
+    RCLCPP_DEBUG(this->get_logger(), "rosgraph polling thread exiting");
+  }
+
   void updateAdvertisedTopics() {
-    _updateTimer.reset();
     if (!rclcpp::ok()) {
       return;
     }
 
     // Get the current list of visible topics and datatypes from the ROS graph
-    // rclcpp::spin_some(this->get_node_base_interface());
     auto topicNamesAndTypes = this->get_node_graph_interface()->get_topic_names_and_types();
     std::unordered_set<TopicAndDatatype, PairHash> latestTopics;
     latestTopics.reserve(topicNamesAndTypes.size());
@@ -240,13 +237,6 @@ public:
     if (newTopics.size() > 0) {
       _server.broadcastChannels();
     }
-
-    // Schedule the next update using truncated exponential backoff, up to `_maxUpdateMs`
-    _updateCount++;
-    auto nextUpdateMs =
-      std::chrono::milliseconds(std::min(size_t(1) << _updateCount, _maxUpdateMs));
-    _updateTimer = this->create_wall_timer(
-      nextUpdateMs, std::bind(&FoxgloveBridge::updateAdvertisedTopics, this));
   }
 
 private:
@@ -263,27 +253,10 @@ private:
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, Subscription> _subscriptions;
   std::mutex _subscriptionsMutex;
-  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr _parametersUpdateHandle;
-  rclcpp::TimerBase::SharedPtr _updateTimer;
-  size_t _maxUpdateMs = size_t(DEFAULT_MAX_UPDATE_MS);
-  size_t _updateCount = 0;
+  std::unique_ptr<std::thread> _rosgraphPollThread;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
   std::atomic<uint64_t> _simTimeNs = 0;
   std::atomic<bool> _useSimTime = false;
-
-  rcl_interfaces::msg::SetParametersResult parametersHandler(
-    const std::vector<rclcpp::Parameter>& parameters) {
-    for (const auto& parameter : parameters) {
-      if (parameter.get_name() == "max_update_ms") {
-        _maxUpdateMs = size_t(parameter.as_int());
-      }
-    }
-
-    rcl_interfaces::msg::SetParametersResult result;
-    result.successful = true;
-    result.reason = "success";
-    return result;
-  }
 
   void subscribeHandler(foxglove::ChannelId channelId) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
