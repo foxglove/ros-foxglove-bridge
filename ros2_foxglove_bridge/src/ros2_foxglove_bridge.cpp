@@ -22,6 +22,7 @@ using namespace std::chrono_literals;
 using namespace std::placeholders;
 using LogLevel = foxglove::WebSocketLogLevel;
 using Subscription = std::pair<rclcpp::GenericSubscription::SharedPtr, rclcpp::SubscriptionOptions>;
+using SubscriptionsByClient = std::map<foxglove::ConnHandle, Subscription, std::owner_less<>>;
 
 class FoxgloveBridge : public rclcpp::Node {
 public:
@@ -66,8 +67,8 @@ public:
     numThreadsDescription.integer_range[0].step = 1;
     this->declare_parameter("num_threads", DEFAULT_NUM_THREADS, numThreadsDescription);
 
-    _server.setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this, _1));
-    _server.setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1));
+    _server.setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2));
+    _server.setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2));
 
     auto address = this->get_parameter("address").as_string();
     uint16_t port = uint16_t(this->get_parameter("port").as_int());
@@ -251,21 +252,15 @@ private:
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
-  std::unordered_map<foxglove::ChannelId, Subscription> _subscriptions;
+  std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
   std::mutex _subscriptionsMutex;
   std::unique_ptr<std::thread> _rosgraphPollThread;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
   std::atomic<uint64_t> _simTimeNs = 0;
   std::atomic<bool> _useSimTime = false;
 
-  void subscribeHandler(foxglove::ChannelId channelId) {
+  void subscribeHandler(foxglove::ChannelId channelId, foxglove::ConnHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
-    if (_subscriptions.find(channelId) != _subscriptions.end()) {
-      // Subscription already exists
-      RCLCPP_DEBUG(this->get_logger(), "Subscription already exists for channel %d", channelId);
-      return;
-    }
-
     auto it = _channelToTopicAndDatatype.find(channelId);
     if (it == _channelToTopicAndDatatype.end()) {
       RCLCPP_WARN(this->get_logger(), "Received subscribe request for unknown channel %d",
@@ -281,7 +276,18 @@ private:
                    channelId, topic.c_str(), datatype.c_str());
       return;
     }
-    auto& channel = it2->second;
+    const auto& channel = it2->second;
+
+    // Get client subscriptions for this channel or insert an empty map.
+    auto [subscriptionsIt, firstSubscription] =
+      _subscriptions.emplace(channelId, SubscriptionsByClient());
+    auto& subscriptionsByClient = subscriptionsIt->second;
+
+    if (!firstSubscription &&
+        subscriptionsByClient.find(clientHandle) != subscriptionsByClient.end()) {
+      RCLCPP_WARN(this->get_logger(), "Client is already subscribed to channel %d", channelId);
+      return;
+    }
 
     rclcpp::SubscriptionEventCallbacks eventCallbacks;
     eventCallbacks.incompatible_qos_callback = [&](const rclcpp::QOSRequestedIncompatibleQoSInfo&) {
@@ -297,35 +303,50 @@ private:
     // Create a QoS profile that only keeps the last message since we don't need to keep a history,
     // and use reliable delivery if all publishers are reliable otherwise best-effort
     bool reliable = true;
+    bool durationVolatile = true;
+    size_t depth = 1;
     for (const auto& publisher : this->get_publishers_info_by_topic(topic)) {
-      if (publisher.qos_profile().reliability() == rclcpp::ReliabilityPolicy::BestEffort) {
+      const auto& qos = publisher.qos_profile();
+      if (qos.reliability() == rclcpp::ReliabilityPolicy::BestEffort) {
         reliable = false;
-        break;
       }
+      if (qos.durability() == rclcpp::DurabilityPolicy::TransientLocal) {
+        durationVolatile = false;
+      }
+      depth += qos.depth();
     }
 
-    rclcpp::QoS qos{rclcpp::KeepLast(1)};
+    rclcpp::QoS qos{rclcpp::KeepLast(depth)};
     if (!reliable) {
       qos.best_effort();
+    }
+    if (!durationVolatile) {
+      qos.transient_local();
     }
 
     try {
       auto subscriber = this->create_generic_subscription(
         topic, datatype, qos,
-        [&](std::shared_ptr<rclcpp::SerializedMessage> msg) {
-          rosMessageHandler(channel, msg);
-        },
+        std::bind(&FoxgloveBridge::rosMessageHandler, this, channel, clientHandle, _1),
         subscriptionOptions);
-      _subscriptions.emplace(channelId, std::make_pair(std::move(subscriber), subscriptionOptions));
-      RCLCPP_INFO(this->get_logger(), "Subscribed to topic \"%s\" (%s) on channel %d",
-                  topic.c_str(), datatype.c_str(), channelId);
+      subscriptionsByClient.emplace(clientHandle,
+                                    std::make_pair(std::move(subscriber), subscriptionOptions));
+
+      if (firstSubscription) {
+        RCLCPP_INFO(this->get_logger(), "Subscribed to topic \"%s\" (%s) on channel %d",
+                    topic.c_str(), datatype.c_str(), channelId);
+
+      } else {
+        RCLCPP_INFO(this->get_logger(), "Added subscriber #%ld to topic \"%s\" (%s) on channel %d",
+                    subscriptionsByClient.size(), topic.c_str(), datatype.c_str(), channelId);
+      }
     } catch (const std::exception& ex) {
       RCLCPP_ERROR(this->get_logger(), "Failed to subscribe to topic \"%s\" (%s): %s",
                    topic.c_str(), datatype.c_str(), ex.what());
     }
   }
 
-  void unsubscribeHandler(foxglove::ChannelId channelId) {
+  void unsubscribeHandler(foxglove::ChannelId channelId, foxglove::ConnHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
     auto it = _channelToTopicAndDatatype.find(channelId);
@@ -341,9 +362,35 @@ private:
       return;
     }
 
-    RCLCPP_INFO(this->get_logger(), "Unsubscribing from topic \"%s\" (%s) on channel %d",
-                topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str(), channelId);
-    _subscriptions.erase(it2);
+    auto subscriptionsIt = _subscriptions.find(channelId);
+    if (subscriptionsIt == _subscriptions.end()) {
+      RCLCPP_WARN(this->get_logger(),
+                  "Received unsubscribe request for channel %d that was not subscribed to",
+                  channelId);
+      return;
+    }
+
+    auto& subscriptionsByClient = subscriptionsIt->second;
+    const auto clientSubscription = subscriptionsByClient.find(clientHandle);
+    if (clientSubscription == subscriptionsByClient.end()) {
+      RCLCPP_WARN(
+        this->get_logger(),
+        "Received unsubscribe request for channel %d from a client that was not subscribed to this "
+        "channel",
+        channelId);
+      return;
+    }
+
+    subscriptionsByClient.erase(clientSubscription);
+    if (subscriptionsByClient.empty()) {
+      RCLCPP_INFO(this->get_logger(), "Unsubscribing from topic \"%s\" (%s) on channel %d",
+                  topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str(), channelId);
+      _subscriptions.erase(it2);
+    } else {
+      RCLCPP_INFO(this->get_logger(),
+                  "Removed one subscription from channel %d (%ld subscription(s) left)", channelId,
+                  subscriptionsByClient.size());
+    }
   }
 
   void logHandler(LogLevel level, char const* msg) {
@@ -366,7 +413,7 @@ private:
     }
   }
 
-  void rosMessageHandler(const foxglove::Channel& channel,
+  void rosMessageHandler(const foxglove::Channel& channel, foxglove::ConnHandle clientHandle,
                          std::shared_ptr<rclcpp::SerializedMessage> msg) {
     // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
     // to `/rosout` will cause a feedback loop
@@ -374,7 +421,7 @@ private:
     const auto payload =
       std::string_view{reinterpret_cast<const char*>(msg->get_rcl_serialized_message().buffer),
                        msg->get_rcl_serialized_message().buffer_length};
-    _server.sendMessage(channel.id, timestamp, payload);
+    _server.sendMessage(clientHandle, channel.id, timestamp, payload);
   }
 
   uint64_t currentTimeNs() {
