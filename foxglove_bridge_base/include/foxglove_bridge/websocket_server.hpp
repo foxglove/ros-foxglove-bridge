@@ -567,19 +567,23 @@ inline void Server<ServerConfiguration>::sendMessage(ChannelId chanId, uint64_t 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, ChannelId chanId,
                                                      uint64_t timestamp, std::string_view data) {
-  std::shared_lock<std::shared_mutex> lock(_clientsChannelMutex);
+  SubscriptionId subId = std::numeric_limits<SubscriptionId>::max();
 
-  const auto clientHandleAndInfoIt = _clients.find(clientHandle);
-  if (clientHandleAndInfoIt == _clients.end()) {
-    return;  // Client got removed in the meantime.
+  {
+    std::shared_lock<std::shared_mutex> lock(_clientsChannelMutex);
+    const auto clientHandleAndInfoIt = _clients.find(clientHandle);
+    if (clientHandleAndInfoIt == _clients.end()) {
+      return;  // Client got removed in the meantime.
+    }
+
+    const auto& client = clientHandleAndInfoIt->second;
+    const auto& subs = client.subscriptionsByChannel.find(chanId);
+    if (subs == client.subscriptionsByChannel.end()) {
+      return;  // Client not subscribed to this channel.
+    }
+    subId = subs->second;
   }
 
-  const auto& client = clientHandleAndInfoIt->second;
-  const auto& subs = client.subscriptionsByChannel.find(chanId);
-  if (subs == client.subscriptionsByChannel.end()) {
-    return;  // Client not subscribed to this channel.
-  }
-  const auto subId = subs->second;
   std::vector<uint8_t> message(1 + 4 + 8 + data.size());
   message[0] = uint8_t(BinaryOpcode::MESSAGE_DATA);
   foxglove::WriteUint32LE(message.data() + 1, subId);
