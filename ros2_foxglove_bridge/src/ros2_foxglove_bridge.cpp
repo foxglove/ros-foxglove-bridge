@@ -24,6 +24,17 @@ using LogLevel = foxglove::WebSocketLogLevel;
 using Subscription = std::pair<rclcpp::GenericSubscription::SharedPtr, rclcpp::SubscriptionOptions>;
 using SubscriptionsByClient = std::map<foxglove::ConnHandle, Subscription, std::owner_less<>>;
 
+constexpr char DEFAULT_SUBSCRIPTION_QOS_PRESET[] = "sensor_data";
+static const std::unordered_map<std::string, rmw_qos_profile_t> QOS_PRESETS = {
+  {"sensor_data", rmw_qos_profile_sensor_data},
+  {"parameters", rmw_qos_profile_parameters},
+  {"default", rmw_qos_profile_default},
+  {"services_default", rmw_qos_profile_services_default},
+  {"parameter_events", rmw_qos_profile_parameter_events},
+  {"system_default", rmw_qos_profile_system_default},
+  {"unknown", rmw_qos_profile_unknown},
+};
+
 class FoxgloveBridge : public rclcpp::Node {
 public:
   using TopicAndDatatype = std::pair<std::string, std::string>;
@@ -67,6 +78,20 @@ public:
     numThreadsDescription.integer_range[0].step = 1;
     this->declare_parameter("num_threads", DEFAULT_NUM_THREADS, numThreadsDescription);
 
+    auto subscriptionQosPresetDescription = rcl_interfaces::msg::ParameterDescriptor{};
+    subscriptionQosPresetDescription.name = "subscription_qos_preset";
+    subscriptionQosPresetDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+    subscriptionQosPresetDescription.description = "QOS preset used for subscriptions.";
+    subscriptionQosPresetDescription.read_only = true;
+    subscriptionQosPresetDescription.additional_constraints = "Must be one of [";
+    for (const auto& [name, qosProfile] : QOS_PRESETS) {
+      (void)qosProfile;
+      subscriptionQosPresetDescription.additional_constraints += name + ", ";
+    }
+    subscriptionQosPresetDescription.additional_constraints += "]";
+    this->declare_parameter("subscription_qos_preset", DEFAULT_SUBSCRIPTION_QOS_PRESET,
+                            subscriptionQosPresetDescription);
+
     _server.setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2));
     _server.setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2));
 
@@ -85,6 +110,16 @@ public:
     // Start the thread polling for rosgraph changes
     _rosgraphPollThread =
       std::make_unique<std::thread>(std::bind(&FoxgloveBridge::rosgraphPollThread, this));
+
+    const auto subscriptionQosPresetName =
+      this->get_parameter("subscription_qos_preset").as_string();
+    try {
+      _defaultSubscriptionQos = QOS_PRESETS.at(subscriptionQosPresetName);
+    } catch (const std::out_of_range&) {
+      RCLCPP_ERROR(this->get_logger(), "QOS preset '%s' not found. Using default preset '%s'",
+                   subscriptionQosPresetName.c_str(), DEFAULT_SUBSCRIPTION_QOS_PRESET);
+      _defaultSubscriptionQos = QOS_PRESETS.at(DEFAULT_SUBSCRIPTION_QOS_PRESET);
+    }
   }
 
   ~FoxgloveBridge() {
@@ -255,6 +290,7 @@ private:
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
   std::mutex _subscriptionsMutex;
   std::unique_ptr<std::thread> _rosgraphPollThread;
+  rmw_qos_profile_t _defaultSubscriptionQos;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
   std::atomic<uint64_t> _simTimeNs = 0;
   std::atomic<bool> _useSimTime = false;
@@ -300,28 +336,56 @@ private:
     subscriptionOptions.callback_group =
       this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
-    // Create a QoS profile that only keeps the last message since we don't need to keep a history,
-    // and use reliable delivery if all publishers are reliable otherwise best-effort
-    bool reliable = true;
-    bool durationVolatile = true;
+    // Select an appropriate subscription QOS profile. This is similar to how ros2 topic echo
+    // does it:
+    // https://github.com/ros2/ros2cli/blob/619b3d1c9/ros2topic/ros2topic/verb/echo.py#L137-L194
     size_t depth = 1;
-    for (const auto& publisher : this->get_publishers_info_by_topic(topic)) {
+    size_t reliabilityReliableEndpointsCount = 0;
+    size_t durabilityTransientLocalEndpointsCount = 0;
+
+    const auto publisherInfo = this->get_publishers_info_by_topic(topic);
+    for (const auto& publisher : publisherInfo) {
       const auto& qos = publisher.qos_profile();
-      if (qos.reliability() == rclcpp::ReliabilityPolicy::BestEffort) {
-        reliable = false;
+
+      if (qos.reliability() == rclcpp::ReliabilityPolicy::Reliable) {
+        ++reliabilityReliableEndpointsCount;
       }
       if (qos.durability() == rclcpp::DurabilityPolicy::TransientLocal) {
-        durationVolatile = false;
+        ++durabilityTransientLocalEndpointsCount;
       }
-      depth += qos.depth();
+
+      constexpr size_t MAX_QUEUE_DEPTH = 10;
+      depth = std::min(MAX_QUEUE_DEPTH, depth + qos.depth());
     }
 
-    rclcpp::QoS qos{rclcpp::KeepLast(depth)};
-    if (!reliable) {
+    rclcpp::QoS qos{rclcpp::KeepLast(depth), _defaultSubscriptionQos};
+
+    // If all endpoints are reliable, ask for reliable
+    if (reliabilityReliableEndpointsCount == publisherInfo.size()) {
+      qos.reliable();
+    } else {
+      if (reliabilityReliableEndpointsCount > 0) {
+        RCLCPP_WARN(
+          this->get_logger(),
+          "Some, but not all, publishers on topic '%s' are offering QoSReliabilityPolicy.RELIABLE. "
+          "Falling back to QoSReliabilityPolicy.BEST_EFFORT as it will connect to all publishers",
+          topic.c_str());
+      }
       qos.best_effort();
     }
-    if (!durationVolatile) {
+
+    // If all endpoints are transient_local, ask for transient_local
+    if (durabilityTransientLocalEndpointsCount == publisherInfo.size()) {
       qos.transient_local();
+    } else {
+      if (durabilityTransientLocalEndpointsCount > 0) {
+        RCLCPP_WARN(this->get_logger(),
+                    "Some, but not all, publishers on topic '%s' are offering "
+                    "QoSDurabilityPolicy.TRANSIENT_LOCAL. Falling back to "
+                    "QoSDurabilityPolicy.VOLATILE as it will connect to all publishers",
+                    topic.c_str());
+      }
+      qos.durability_volatile();
     }
 
     try {
