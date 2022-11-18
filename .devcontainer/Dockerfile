@@ -8,12 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   git \
   git-lfs \
   gnupg \
-  libasio-dev \
-  libssl-dev \
-  libwebsocketpp-dev \
   lldb \
   lsb-release \
-  nlohmann-json3-dev \
   openssh-client \
   python3-colcon-common-extensions \
   python3-pip \
@@ -37,10 +33,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   ros-galactic-tf2-msgs \
   && rm -rf /var/lib/apt/lists/*
 
-SHELL ["/bin/bash", "-c"]
-
 # Create a ROS workspace
 RUN mkdir -p /ros_ws/src/ros-foxglove-bridge
+
+COPY package.xml /ros_ws/src/ros-foxglove-bridge/package.xml
+
+# Initialize rosdep
+RUN rosdep init && rosdep update
+
+# Install rosdep dependencies for ROS 1
+RUN . /opt/ros/noetic/setup.sh && \
+    apt-get update && rosdep update && rosdep install -y \
+      --from-paths /ros_ws/src \
+      --ignore-src \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install rosdep dependencies for ROS 2
+RUN . /opt/ros/galactic/setup.sh && \
+    apt-get update && rosdep update && rosdep install -y \
+      --from-paths /ros_ws/src \
+      --ignore-src \
+    && rm -rf /var/lib/apt/lists/*
+
+SHELL ["/bin/bash", "-c"]
 
 # Unset the ROS_DISTRO and add aliases to .bashrc
 RUN echo $'\
