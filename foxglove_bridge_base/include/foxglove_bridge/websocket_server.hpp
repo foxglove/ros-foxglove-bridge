@@ -82,6 +82,7 @@ public:
   using ConnectionType = websocketpp::connection<ServerConfiguration>;
   using MessagePtr = typename ServerType::message_ptr;
   using Tcp = websocketpp::lib::asio::ip::tcp;
+  using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
 
   static const std::string SUPPORTED_SUBPROTOCOL;
 
@@ -100,10 +101,12 @@ public:
   void removeChannel(ChannelId chanId);
   void broadcastChannels();
 
-  void setSubscribeHandler(std::function<void(ChannelId)> handler);
-  void setUnsubscribeHandler(std::function<void(ChannelId)> handler);
+  void setSubscribeHandler(SubscribeUnsubscribeHandler handler);
+  void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler);
 
   void sendMessage(ChannelId chanId, uint64_t timestamp, std::string_view data);
+  void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
+                   std::string_view data);
 
   std::optional<Tcp::endpoint> localEndpoint();
 
@@ -128,8 +131,8 @@ private:
   uint32_t _nextChannelId = 0;
   std::map<ConnHandle, ClientInfo, std::owner_less<>> _clients;
   std::unordered_map<ChannelId, Channel> _channels;
-  std::function<void(ChannelId)> _subscribeHandler;
-  std::function<void(ChannelId)> _unsubscribeHandler;
+  SubscribeUnsubscribeHandler _subscribeHandler;
+  SubscribeUnsubscribeHandler _unsubscribeHandler;
   std::shared_mutex _clientsChannelMutex;
 
   void socketInit(ConnHandle hdl);
@@ -141,8 +144,6 @@ private:
   void sendJson(ConnHandle hdl, json&& payload);
   void sendJsonRaw(ConnHandle hdl, const std::string& payload);
   void sendBinary(ConnHandle hdl, const std::vector<uint8_t>& payload);
-
-  bool anySubscribed(ChannelId chanId) const;
 };
 
 template <typename ServerConfiguration>
@@ -250,22 +251,19 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
 
   if (_unsubscribeHandler) {
     for (const auto& [chanId, subs] : oldSubscriptionsByChannel) {
-      if (!anySubscribed(chanId)) {
-        _unsubscribeHandler(chanId);
-      }
+      _unsubscribeHandler(chanId, hdl);
     }
   }
 }
 
 template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setSubscribeHandler(
-  std::function<void(ChannelId)> handler) {
+inline void Server<ServerConfiguration>::setSubscribeHandler(SubscribeUnsubscribeHandler handler) {
   _subscribeHandler = std::move(handler);
 }
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::setUnsubscribeHandler(
-  std::function<void(ChannelId)> handler) {
+  SubscribeUnsubscribeHandler handler) {
   _unsubscribeHandler = std::move(handler);
 }
 
@@ -462,10 +460,9 @@ inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePt
                         });
           continue;
         }
-        bool firstSubscription = !anySubscribed(channelId);
         clientInfo.subscriptionsByChannel.emplace(channelId, subId);
-        if (firstSubscription && _subscribeHandler) {
-          _subscribeHandler(channelId);
+        if (_subscribeHandler) {
+          _subscribeHandler(channelId, hdl);
         }
       }
     } else if (op == "unsubscribe") {
@@ -483,8 +480,8 @@ inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePt
         }
         ChannelId chanId = sub->first;
         clientInfo.subscriptionsByChannel.erase(sub);
-        if (!anySubscribed(chanId) && _unsubscribeHandler) {
-          _unsubscribeHandler(chanId);
+        if (_unsubscribeHandler) {
+          _unsubscribeHandler(chanId, hdl);
         }
       }
 
@@ -568,6 +565,34 @@ inline void Server<ServerConfiguration>::sendMessage(ChannelId chanId, uint64_t 
 }
 
 template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, ChannelId chanId,
+                                                     uint64_t timestamp, std::string_view data) {
+  SubscriptionId subId = std::numeric_limits<SubscriptionId>::max();
+
+  {
+    std::shared_lock<std::shared_mutex> lock(_clientsChannelMutex);
+    const auto clientHandleAndInfoIt = _clients.find(clientHandle);
+    if (clientHandleAndInfoIt == _clients.end()) {
+      return;  // Client got removed in the meantime.
+    }
+
+    const auto& client = clientHandleAndInfoIt->second;
+    const auto& subs = client.subscriptionsByChannel.find(chanId);
+    if (subs == client.subscriptionsByChannel.end()) {
+      return;  // Client not subscribed to this channel.
+    }
+    subId = subs->second;
+  }
+
+  std::vector<uint8_t> message(1 + 4 + 8 + data.size());
+  message[0] = uint8_t(BinaryOpcode::MESSAGE_DATA);
+  foxglove::WriteUint32LE(message.data() + 1, subId);
+  foxglove::WriteUint64LE(message.data() + 5, timestamp);
+  std::memcpy(message.data() + 1 + 4 + 8, data.data(), data.size());
+  sendBinary(clientHandle, message);
+}
+
+template <typename ServerConfiguration>
 inline std::optional<asio::ip::tcp::endpoint> Server<ServerConfiguration>::localEndpoint() {
   std::error_code ec;
   auto endpoint = _server.get_local_endpoint(ec);
@@ -575,16 +600,6 @@ inline std::optional<asio::ip::tcp::endpoint> Server<ServerConfiguration>::local
     return std::nullopt;
   }
   return endpoint;
-}
-
-template <typename ServerConfiguration>
-inline bool Server<ServerConfiguration>::anySubscribed(ChannelId chanId) const {
-  for (const auto& [hdl, client] : _clients) {
-    if (client.subscriptionsByChannel.find(chanId) != client.subscriptionsByChannel.end()) {
-      return true;
-    }
-  }
-  return false;
 }
 
 }  // namespace foxglove
