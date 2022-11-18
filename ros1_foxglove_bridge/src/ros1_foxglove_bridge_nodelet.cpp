@@ -26,7 +26,7 @@ constexpr uint32_t SUBSCRIPTION_QUEUE_LENGTH = 10;
 
 using ServerType = foxglove::Server<foxglove::WebSocketNoTls>;
 using TopicAndDatatype = std::pair<std::string, std::string>;
-using Subscription = ros::Subscriber;
+using SubscriptionsByClient = std::map<foxglove::ConnHandle, ros::Subscriber, std::owner_less<>>;
 
 class FoxgloveBridge : public nodelet::Nodelet {
 public:
@@ -44,10 +44,10 @@ public:
       _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
         "foxglove_bridge",
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2));
-      _server->setSubscribeHandler(
-        std::bind(&FoxgloveBridge::subscribeHandler, this, std::placeholders::_1));
-      _server->setUnsubscribeHandler(
-        std::bind(&FoxgloveBridge::unsubscribeHandler, this, std::placeholders::_1));
+      _server->setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this,
+                                             std::placeholders::_1, std::placeholders::_2));
+      _server->setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this,
+                                               std::placeholders::_1, std::placeholders::_2));
       _server->start(address, static_cast<uint16_t>(port));
 
       _msgParser = std::make_unique<foxglove_bridge::MsgParser>();
@@ -73,13 +73,8 @@ private:
     }
   };
 
-  void subscribeHandler(foxglove::ChannelId channelId) {
+  void subscribeHandler(foxglove::ChannelId channelId, foxglove::ConnHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
-    if (_subscriptions.find(channelId) != _subscriptions.end()) {
-      // Subscription already exists
-      ROS_WARN("Subscription already exists for channel %d", channelId);
-      return;
-    }
 
     auto it = _channelToTopicAndDatatype.find(channelId);
     if (it == _channelToTopicAndDatatype.end()) {
@@ -95,24 +90,40 @@ private:
                 datatype.c_str());
       return;
     }
-    auto& channel = it2->second;
+    const auto& channel = it2->second;
+
+    // Get client subscriptions for this channel or insert an empty map.
+    auto [subscriptionsIt, firstSubscription] =
+      _subscriptions.emplace(channelId, SubscriptionsByClient());
+    auto& subscriptionsByClient = subscriptionsIt->second;
+
+    if (!firstSubscription &&
+        subscriptionsByClient.find(clientHandle) != subscriptionsByClient.end()) {
+      ROS_WARN("Client is already subscribed to channel %d", channelId);
+      return;
+    }
 
     try {
-      _subscriptions.emplace(channelId, getMTNodeHandle().subscribe<RosIntrospection::ShapeShifter>(
-                                          topic, SUBSCRIPTION_QUEUE_LENGTH,
-                                          std::bind(&FoxgloveBridge::rosMessageHandler, this,
-                                                    channel, std::placeholders::_1))
+      subscriptionsByClient.emplace(
+        clientHandle, getMTNodeHandle().subscribe<RosIntrospection::ShapeShifter>(
+                        topic, SUBSCRIPTION_QUEUE_LENGTH,
+                        std::bind(&FoxgloveBridge::rosMessageHandler, this, channel, clientHandle,
+                                  std::placeholders::_1)));
+      if (firstSubscription) {
+        ROS_INFO("Subscribed to topic \"%s\" (%s) on channel %d", topic.c_str(), datatype.c_str(),
+                 channelId);
 
-      );
-      ROS_INFO("Subscribed to topic \"%s\" (%s) on channel %d", topic.c_str(), datatype.c_str(),
-               channelId);
+      } else {
+        ROS_INFO("Added subscriber #%ld to topic \"%s\" (%s) on channel %d",
+                 subscriptionsByClient.size(), topic.c_str(), datatype.c_str(), channelId);
+      }
     } catch (const std::exception& ex) {
       ROS_ERROR("Failed to subscribe to topic \"%s\" (%s): %s", topic.c_str(), datatype.c_str(),
                 ex.what());
     }
   }
 
-  void unsubscribeHandler(foxglove::ChannelId channelId) {
+  void unsubscribeHandler(foxglove::ChannelId channelId, foxglove::ConnHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
     auto it = _channelToTopicAndDatatype.find(channelId);
@@ -127,9 +138,31 @@ private:
       return;
     }
 
-    ROS_INFO("Unsubscribing from topic \"%s\" (%s) on channel %d", topicAndDatatype.first.c_str(),
-             topicAndDatatype.second.c_str(), channelId);
-    _subscriptions.erase(it2);
+    auto subscriptionsIt = _subscriptions.find(channelId);
+    if (subscriptionsIt == _subscriptions.end()) {
+      ROS_WARN("Received unsubscribe request for channel %d that was not subscribed to", channelId);
+      return;
+    }
+
+    auto& subscriptionsByClient = subscriptionsIt->second;
+    const auto clientSubscription = subscriptionsByClient.find(clientHandle);
+    if (clientSubscription == subscriptionsByClient.end()) {
+      ROS_WARN(
+        "Received unsubscribe request for channel %d from a client that was not subscribed to this "
+        "channel",
+        channelId);
+      return;
+    }
+
+    subscriptionsByClient.erase(clientSubscription);
+    if (subscriptionsByClient.empty()) {
+      ROS_INFO("Unsubscribing from topic \"%s\" (%s) on channel %d", topicAndDatatype.first.c_str(),
+               topicAndDatatype.second.c_str(), channelId);
+      _subscriptions.erase(it2);
+    } else {
+      ROS_INFO("Removed one subscription from channel %d (%ld subscription(s) left)", channelId,
+               subscriptionsByClient.size());
+    }
   }
 
   void updateAdvertisedTopics(const ros::TimerEvent&) {
@@ -250,11 +283,12 @@ private:
     }
   }
 
-  void rosMessageHandler(const foxglove::Channel& channel,
+  void rosMessageHandler(const foxglove::Channel& channel, foxglove::ConnHandle clientHandle,
                          const ros::MessageEvent<RosIntrospection::ShapeShifter const>& msgEvent) {
     const auto& msg = msgEvent.getConstMessage();
+    const auto receiptTimeNs = msgEvent.getReceiptTime().toNSec();
     _server->sendMessage(
-      channel.id, msgEvent.getReceiptTime().toNSec(),
+      clientHandle, channel.id, receiptTimeNs,
       std::string_view(reinterpret_cast<const char*>(msg->raw_data()), msg->size()));
   }
 
@@ -262,7 +296,7 @@ private:
   std::unique_ptr<foxglove_bridge::MsgParser> _msgParser;
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
-  std::unordered_map<foxglove::ChannelId, Subscription> _subscriptions;
+  std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
   std::mutex _subscriptionsMutex;
   ros::Timer _updateTimer;
   size_t _maxUpdateMs = size_t(DEFAULT_MAX_UPDATE_MS);
