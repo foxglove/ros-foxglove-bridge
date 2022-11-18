@@ -231,23 +231,21 @@ public:
               break;
           }
 
-          auto channel = foxglove::Channel{_server.addChannel(newChannel), newChannel};
-          RCLCPP_DEBUG(this->get_logger(), "Advertising channel %d for topic \"%s\" (%s)",
-                       channel.id, channel.topic.c_str(), channel.schemaName.c_str());
-
-          // Add a mapping from the topic+datatype tuple to the channel, and channel ID to the
-          // topic+datatype tuple
-          _advertisedTopics.emplace(topicAndDatatype, std::move(channel));
-          _channelToTopicAndDatatype.emplace(channel.id, topicAndDatatype);
         } catch (const foxglove::DefinitionNotFoundError& err) {
-          RCLCPP_WARN(this->get_logger(), "Could not find definition for topic \"%s\" (%s)",
-                      topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
-
-          // Add a mapping from the topic+datatype tuple to a dummy channel so we don't repeatedly
-          // try to load the message definition
-          auto channel = foxglove::Channel{0, newChannel};
-          _advertisedTopics.emplace(topicAndDatatype, std::move(channel));
+          RCLCPP_WARN(this->get_logger(), "Could not find definition for type %s: %s",
+                      topicAndDatatype.second.c_str(), err.what());
+          // We still advertise the channel, but with an emtpy schema
+          newChannel.schema = "";
         }
+
+        auto channel = foxglove::Channel{_server.addChannel(newChannel), newChannel};
+        RCLCPP_DEBUG(this->get_logger(), "Advertising channel %d for topic \"%s\" (%s)", channel.id,
+                     channel.topic.c_str(), channel.schemaName.c_str());
+
+        // Add a mapping from the topic+datatype tuple to the channel, and channel ID to the
+        // topic+datatype tuple
+        _advertisedTopics.emplace(topicAndDatatype, std::move(channel));
+        _channelToTopicAndDatatype.emplace(channel.id, topicAndDatatype);
       }
     }
 
