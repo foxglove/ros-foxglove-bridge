@@ -17,6 +17,7 @@
 #include "serialization.hpp"
 #include "websocket_logging.hpp"
 #include "websocket_notls.hpp"
+#include "websocket_tls.hpp"
 
 namespace foxglove {
 
@@ -75,8 +76,33 @@ enum class StatusLevel : uint8_t {
   ERROR = 2,
 };
 
+class ServerInterface {
+  using Tcp = websocketpp::lib::asio::ip::tcp;
+  using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
+
+public:
+  virtual void start(const std::string& host, uint16_t port) = 0;
+  virtual void stop() = 0;
+
+  virtual ChannelId addChannel(ChannelWithoutId channel) = 0;
+  virtual void removeChannel(ChannelId chanId) = 0;
+  virtual void broadcastChannels() = 0;
+
+  virtual void setSubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
+  virtual void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
+
+  virtual void sendMessage(ChannelId chanId, uint64_t timestamp, std::string_view data) = 0;
+  virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
+                           std::string_view data) = 0;
+
+  virtual std::optional<Tcp::endpoint> localEndpoint() = 0;
+
+private:
+  virtual void setupTlsHandler() = 0;
+};
+
 template <typename ServerConfiguration>
-class Server final {
+class Server final : public ServerInterface {
 public:
   using ServerType = websocketpp::server<ServerConfiguration>;
   using ConnectionType = websocketpp::connection<ServerConfiguration>;
@@ -85,30 +111,32 @@ public:
   using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
 
   static const std::string SUPPORTED_SUBPROTOCOL;
+  static bool USES_TLS;
 
-  explicit Server(std::string name, LogCallback logger);
-  ~Server();
+  explicit Server(std::string name, LogCallback logger, const std::string& certfile = "",
+                  const std::string& keyfile = "");
+  virtual ~Server();
 
   Server(const Server&) = delete;
   Server(Server&&) = delete;
   Server& operator=(const Server&) = delete;
   Server& operator=(Server&&) = delete;
 
-  void start(const std::string& host, uint16_t port);
-  void stop();
+  void start(const std::string& host, uint16_t port) override;
+  void stop() override;
 
-  ChannelId addChannel(ChannelWithoutId channel);
-  void removeChannel(ChannelId chanId);
-  void broadcastChannels();
+  ChannelId addChannel(ChannelWithoutId channel) override;
+  void removeChannel(ChannelId chanId) override;
+  void broadcastChannels() override;
 
-  void setSubscribeHandler(SubscribeUnsubscribeHandler handler);
-  void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler);
+  void setSubscribeHandler(SubscribeUnsubscribeHandler handler) override;
+  void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) override;
 
-  void sendMessage(ChannelId chanId, uint64_t timestamp, std::string_view data);
+  void sendMessage(ChannelId chanId, uint64_t timestamp, std::string_view data) override;
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
-                   std::string_view data);
+                   std::string_view data) override;
 
-  std::optional<Tcp::endpoint> localEndpoint();
+  std::optional<Tcp::endpoint> localEndpoint() override;
 
 private:
   struct ClientInfo {
@@ -125,6 +153,8 @@ private:
 
   std::string _name;
   LogCallback _logger;
+  std::string _certfile;
+  std::string _keyfile;
   ServerType _server;
   std::unique_ptr<std::thread> _serverThread;
 
@@ -135,6 +165,7 @@ private:
   SubscribeUnsubscribeHandler _unsubscribeHandler;
   std::shared_mutex _clientsChannelMutex;
 
+  void setupTlsHandler() override;
   void socketInit(ConnHandle hdl);
   bool validateConnection(ConnHandle hdl);
   void handleConnectionOpened(ConnHandle hdl);
@@ -151,9 +182,12 @@ inline const std::string Server<ServerConfiguration>::SUPPORTED_SUBPROTOCOL =
   "foxglove.websocket.v1";
 
 template <typename ServerConfiguration>
-inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger)
+inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger,
+                                           const std::string& certfile, const std::string& keyfile)
     : _name(std::move(name))
-    , _logger(logger) {
+    , _logger(logger)
+    , _certfile(certfile)
+    , _keyfile(keyfile) {
   // Redirect logging
   _server.get_alog().set_callback(_logger);
   _server.get_elog().set_callback(_logger);
@@ -167,6 +201,7 @@ inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger)
   _server.clear_access_channels(websocketpp::log::alevel::all);
   _server.set_access_channels(APP);
   _server.set_tcp_pre_init_handler(std::bind(&Server::socketInit, this, std::placeholders::_1));
+  this->setupTlsHandler();
   _server.set_validate_handler(std::bind(&Server::validateConnection, this, std::placeholders::_1));
   _server.set_open_handler(std::bind(&Server::handleConnectionOpened, this, std::placeholders::_1));
   _server.set_close_handler(
@@ -378,9 +413,11 @@ inline void Server<ServerConfiguration>::start(const std::string& host, uint16_t
     throw std::runtime_error("Failed to resolve the local endpoint: " + ec.message());
   }
 
+  const std::string protocol = USES_TLS ? "wss" : "ws";
   auto address = endpoint.address();
-  _server.get_alog().write(APP, "WebSocket server listening at ws://" + IPAddressToString(address) +
-                                  ":" + std::to_string(endpoint.port()));
+  _server.get_alog().write(APP, "WebSocket server listening at " + protocol + "://" +
+                                  IPAddressToString(address) + ":" +
+                                  std::to_string(endpoint.port()));
 }
 
 template <typename ServerConfiguration>
@@ -600,6 +637,53 @@ inline std::optional<asio::ip::tcp::endpoint> Server<ServerConfiguration>::local
     return std::nullopt;
   }
   return endpoint;
+}
+
+template <>
+bool Server<WebSocketNoTls>::USES_TLS = false;
+
+template <>
+bool Server<WebSocketTls>::USES_TLS = true;
+
+template <>
+inline void Server<WebSocketNoTls>::setupTlsHandler() {
+  _server.get_alog().write(APP, "Server running without TLS");
+}
+
+template <>
+inline void Server<WebSocketTls>::setupTlsHandler() {
+  _server.set_tls_init_handler([this](ConnHandle hdl) {
+    (void)hdl;
+
+    namespace asio = websocketpp::lib::asio;
+    auto ctx = websocketpp::lib::make_shared<asio::ssl::context>(asio::ssl::context::sslv23);
+
+    try {
+      ctx->set_options(asio::ssl::context::default_workarounds | asio::ssl::context::no_tlsv1 |
+                       asio::ssl::context::no_sslv2 | asio::ssl::context::no_sslv3);
+      ctx->use_certificate_chain_file(_certfile);
+      ctx->use_private_key_file(_keyfile, asio::ssl::context::pem);
+
+      constexpr char ciphers[] =
+        "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:"
+        "ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+"
+        "AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-"
+        "AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-"
+        "ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-"
+        "AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:"
+        "AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:AES:CAMELLIA:DES-CBC3-SHA:!aNULL:!eNULL:"
+        "!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-"
+        "CBC3-SHA";
+
+      if (SSL_CTX_set_cipher_list(ctx->native_handle(), ciphers) != 1) {
+        _server.get_elog().write(RECOVERABLE, "Error setting cipher list");
+      }
+    } catch (const std::exception& ex) {
+      _server.get_elog().write(RECOVERABLE,
+                               std::string("Exception in TLS handshake: ") + ex.what());
+    }
+    return ctx;
+  });
 }
 
 }  // namespace foxglove

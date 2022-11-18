@@ -11,7 +11,6 @@
 
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/message_definition_cache.hpp>
-#include <foxglove_bridge/websocket_notls.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
 
 constexpr uint16_t DEFAULT_PORT = 8765;
@@ -30,8 +29,7 @@ public:
   using TopicAndDatatype = std::pair<std::string, std::string>;
 
   FoxgloveBridge(const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
-      : Node("foxglove_bridge", options)
-      , _server("foxglove_bridge", std::bind(&FoxgloveBridge::logHandler, this, _1, _2)) {
+      : Node("foxglove_bridge", options) {
     RCLCPP_INFO(this->get_logger(), "Starting %s with %s", this->get_name(),
                 foxglove::WebSocketUserAgent());
 
@@ -54,6 +52,27 @@ public:
     addressDescription.description = "The host address to bind the WebSocket server to";
     addressDescription.read_only = true;
     this->declare_parameter("address", DEFAULT_ADDRESS, addressDescription);
+
+    auto useTlsDescription = rcl_interfaces::msg::ParameterDescriptor{};
+    useTlsDescription.name = "tls";
+    useTlsDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_BOOL;
+    useTlsDescription.description = "Use Transport Layer Security for encrypted communication";
+    useTlsDescription.read_only = true;
+    this->declare_parameter("tls", false, useTlsDescription);
+
+    auto certfileDescription = rcl_interfaces::msg::ParameterDescriptor{};
+    certfileDescription.name = "certfile";
+    certfileDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
+    certfileDescription.description = "Path to the certificate to use for TLS";
+    certfileDescription.read_only = true;
+    this->declare_parameter("certfile", "", certfileDescription);
+
+    auto keyfileDescription = rcl_interfaces::msg::ParameterDescriptor{};
+    keyfileDescription.name = "keyfile";
+    keyfileDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
+    keyfileDescription.description = "Path to the private key to use for TLS";
+    keyfileDescription.read_only = true;
+    this->declare_parameter("keyfile", "", keyfileDescription);
 
     auto numThreadsDescription = rcl_interfaces::msg::ParameterDescriptor{};
     numThreadsDescription.name = "num_threads";
@@ -81,15 +100,27 @@ public:
     this->declare_parameter("max_qos_depth", static_cast<int>(DEFAULT_MAX_QOS_DEPTH),
                             maxQosDepthDescription);
 
-    _server.setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2));
-    _server.setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2));
+    const auto useTLS = this->get_parameter("tls").as_bool();
+    const auto certfile = this->get_parameter("certfile").as_string();
+    const auto keyfile = this->get_parameter("keyfile").as_string();
+    const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
+
+    if (useTLS) {
+      _server = std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(
+        "foxglove_bridge", std::move(logHandler), certfile, keyfile);
+    } else {
+      _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>("foxglove_bridge",
+                                                                             std::move(logHandler));
+    }
+    _server->setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2));
+    _server->setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2));
 
     auto address = this->get_parameter("address").as_string();
     uint16_t port = uint16_t(this->get_parameter("port").as_int());
-    _server.start(address, port);
+    _server->start(address, port);
 
     // Get the actual port we bound to
-    uint16_t listeningPort = _server.localEndpoint()->port();
+    uint16_t listeningPort = _server->localEndpoint()->port();
     if (port != listeningPort) {
       RCLCPP_DEBUG(this->get_logger(), "Reassigning \"port\" parameter from %d to %d", port,
                    listeningPort);
@@ -108,7 +139,7 @@ public:
     if (_rosgraphPollThread) {
       _rosgraphPollThread->join();
     }
-    _server.stop();
+    _server->stop();
     RCLCPP_INFO(this->get_logger(), "Shutdown complete");
   }
 
@@ -195,7 +226,7 @@ public:
         auto& channel = _advertisedTopics.at(topicAndDatatype);
 
         // Stop tracking this channel in the WebSocket server
-        _server.removeChannel(channel.id);
+        _server->removeChannel(channel.id);
 
         // Remove the subscription for this topic, if any
         _subscriptions.erase(channel.id);
@@ -238,7 +269,7 @@ public:
           newChannel.schema = "";
         }
 
-        auto channel = foxglove::Channel{_server.addChannel(newChannel), newChannel};
+        auto channel = foxglove::Channel{_server->addChannel(newChannel), newChannel};
         RCLCPP_DEBUG(this->get_logger(), "Advertising channel %d for topic \"%s\" (%s)", channel.id,
                      channel.topic.c_str(), channel.schemaName.c_str());
 
@@ -250,7 +281,7 @@ public:
     }
 
     if (newTopics.size() > 0) {
-      _server.broadcastChannels();
+      _server->broadcastChannels();
     }
   }
 
@@ -262,7 +293,7 @@ private:
     }
   };
 
-  foxglove::Server<foxglove::WebSocketNoTls> _server;
+  std::unique_ptr<foxglove::ServerInterface> _server;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
@@ -461,7 +492,7 @@ private:
     const auto payload =
       std::string_view{reinterpret_cast<const char*>(msg->get_rcl_serialized_message().buffer),
                        msg->get_rcl_serialized_message().buffer_length};
-    _server.sendMessage(clientHandle, channel.id, timestamp, payload);
+    _server->sendMessage(clientHandle, channel.id, timestamp, payload);
   }
 
   uint64_t currentTimeNs() {
