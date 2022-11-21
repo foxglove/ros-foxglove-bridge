@@ -59,6 +59,9 @@ Parameters are provided to configure the behavior of the bridge. These parameter
 
  * __port__: The TCP port to bind the WebSocket server to. Must be a valid TCP port number, or 0 to use a random port. Defaults to `8765`.
  * __address__: The host address to bind the WebSocket server to. Defaults to `0.0.0.0`, listening on all interfaces by default. Change this to `127.0.0.1` to only accept connections from the local machine.
+ * __tls__: If `true`, use Transport Layer Security (TLS) for encrypted communication. Defaults to `false`.
+ * __certfile__: Path to the certificate to use for TLS. Required when __tls__ is set to `true`. Defaults to `""`.
+ * __keyfile__: Path to the private key to use for TLS. Required when __tls__ is set to `true`. Defaults to `""`.
  * (ROS 1) __max_update_ms__: The maximum number of milliseconds to wait in between polling `roscore` for new topics, services, or parameters. Defaults to `5000`.
  * (ROS 2) __num_threads__: The number of threads to use for the ROS node executor. This controls the number of subscriptions that can be processed in parallel. 0 means one thread per CPU core. Defaults to `0`.
  * (ROS 2) __max_qos_depth__: Maximum depth used for the QoS profile of subscriptions. Defaults to `10`.
