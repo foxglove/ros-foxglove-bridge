@@ -236,6 +236,10 @@ public:
                       topicAndDatatype.second.c_str(), err.what());
           // We still advertise the channel, but with an emtpy schema
           newChannel.schema = "";
+        } catch (const std::exception& err) {
+          RCLCPP_WARN(this->get_logger(), "Failed to add channel for topic \"%s\" (%s): %s",
+                      topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str(), err.what());
+          continue;
         }
 
         auto channel = foxglove::Channel{_server.addChannel(newChannel), newChannel};
