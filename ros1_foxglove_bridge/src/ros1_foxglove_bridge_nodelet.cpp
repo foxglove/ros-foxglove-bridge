@@ -13,7 +13,6 @@
 
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/msg_parser.hpp>
-#include <foxglove_bridge/websocket_notls.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
 
 namespace foxglove_bridge {
@@ -24,7 +23,6 @@ constexpr int DEFAULT_MAX_UPDATE_MS = 5000;
 constexpr char ROS1_CHANNEL_ENCODING[] = "ros1";
 constexpr uint32_t SUBSCRIPTION_QUEUE_LENGTH = 10;
 
-using ServerType = foxglove::Server<foxglove::WebSocketNoTls>;
 using TopicAndDatatype = std::pair<std::string, std::string>;
 using SubscriptionsByClient = std::map<foxglove::ConnHandle, ros::Subscriber, std::owner_less<>>;
 
@@ -36,14 +34,24 @@ public:
     const auto address = nhp.param<std::string>("address", DEFAULT_ADDRESS);
     const int port = nhp.param<int>("port", DEFAULT_PORT);
     const int max_update_ms = nhp.param<int>("max_update_ms", DEFAULT_MAX_UPDATE_MS);
+    const auto useTLS = nhp.param<bool>("tls", false);
+    const auto certfile = nhp.param<std::string>("certfile", "");
+    const auto keyfile = nhp.param<std::string>("keyfile", "");
 
     ROS_INFO("Starting %s with %s", ros::this_node::getName().c_str(),
              foxglove::WebSocketUserAgent());
 
     try {
-      _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
-        "foxglove_bridge",
-        std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2));
+      const auto logHandler =
+        std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);
+      if (useTLS) {
+        _server = std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(
+          "foxglove_bridge", std::move(logHandler), certfile, keyfile);
+      } else {
+        _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
+          "foxglove_bridge", std::move(logHandler));
+      }
+
       _server->setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this,
                                              std::placeholders::_1, std::placeholders::_2));
       _server->setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this,
@@ -292,7 +300,7 @@ private:
       std::string_view(reinterpret_cast<const char*>(msg->raw_data()), msg->size()));
   }
 
-  std::unique_ptr<ServerType> _server;
+  std::unique_ptr<foxglove::ServerInterface> _server;
   std::unique_ptr<foxglove_bridge::MsgParser> _msgParser;
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
