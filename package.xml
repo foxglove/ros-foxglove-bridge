@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
     <name>foxglove_bridge</name>
-    <version>0.0.1</version>
+    <version>0.1.0</version>
     <description>ROS Foxglove Bridge</description>
     <maintainer email="contact@foxglove.dev">Foxglove</maintainer>
     <license>MIT</license>
