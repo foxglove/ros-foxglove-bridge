@@ -21,6 +21,7 @@
     <!-- ROS 2 runtime dependencies -->
     <depend condition="$ROS_VERSION == 2">ament_index_cpp</depend>
     <depend condition="$ROS_VERSION == 2">rclcpp</depend>
+    <depend condition="$ROS_VERSION == 2">rclcpp_components</depend>
 
     <!-- Test dependencies -->
     <build_depend condition="$ROS_VERSION == 1">rostest</build_depend>
