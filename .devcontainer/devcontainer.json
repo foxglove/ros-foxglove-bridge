@@ -9,6 +9,10 @@
   "forwardPorts": [
     8765
   ],
+  "settings": {
+    "git.path": "/usr/bin/git"
+  },
+  "postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}",
   "customizations": {
     "vscode": {
       "extensions": [
