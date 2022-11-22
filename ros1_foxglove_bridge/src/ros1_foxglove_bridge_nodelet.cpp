@@ -9,10 +9,10 @@
 #include <pluginlib/class_list_macros.h>
 #include <ros/message_event.h>
 #include <ros/ros.h>
+#include <ros_babel_fish/generation/providers/integrated_description_provider.h>
 #include <ros_type_introspection/utils/shape_shifter.hpp>
 
 #include <foxglove_bridge/foxglove_bridge.hpp>
-#include <foxglove_bridge/msg_parser.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
 
 namespace foxglove_bridge {
@@ -58,7 +58,6 @@ public:
                                                std::placeholders::_1, std::placeholders::_2));
       _server->start(address, static_cast<uint16_t>(port));
 
-      _msgParser = std::make_unique<foxglove_bridge::MsgParser>();
       _updateTimer = getMTNodeHandle().createTimer(ros::Duration(max_update_ms / 1e3),
                                                    &FoxgloveBridge::updateAdvertisedTopics, this);
     } catch (const std::exception& err) {
@@ -236,13 +235,16 @@ private:
         newChannel.encoding = ROS1_CHANNEL_ENCODING;
 
         try {
-          newChannel.schema = _msgParser->get_message_schema(topicAndDatatype.second);
-        } catch (const foxglove_bridge::MsgNotFoundException& err) {
-          ROS_WARN("Could not find definition for type %s: %s", topicAndDatatype.second.c_str(),
-                   err.what());
+          const auto msgDescription =
+            _rosTypeInfoProvider.getMessageDescription(topicAndDatatype.second);
+          if (msgDescription) {
+            newChannel.schema = msgDescription->message_definition;
+          } else {
+            ROS_WARN("Could not find definition for type %s", topicAndDatatype.second.c_str());
 
-          // We still advertise the channel, but with an emtpy schema
-          newChannel.schema = "";
+            // We still advertise the channel, but with an emtpy schema
+            newChannel.schema = "";
+          }
         } catch (const std::exception& err) {
           ROS_WARN("Failed to add channel for topic \"%s\" (%s): %s",
                    topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str(), err.what());
@@ -301,7 +303,7 @@ private:
   }
 
   std::unique_ptr<foxglove::ServerInterface> _server;
-  std::unique_ptr<foxglove_bridge::MsgParser> _msgParser;
+  ros_babel_fish::IntegratedDescriptionProvider _rosTypeInfoProvider;
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
