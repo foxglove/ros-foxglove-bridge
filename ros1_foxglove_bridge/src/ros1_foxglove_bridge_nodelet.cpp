@@ -4,13 +4,14 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_set>
 
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.h>
 #include <ros/message_event.h>
 #include <ros/ros.h>
+#include <ros_babel_fish/babel_fish_message.h>
 #include <ros_babel_fish/generation/providers/integrated_description_provider.h>
-#include <ros_type_introspection/utils/shape_shifter.hpp>
 
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
@@ -112,7 +113,7 @@ private:
 
     try {
       subscriptionsByClient.emplace(
-        clientHandle, getMTNodeHandle().subscribe<RosIntrospection::ShapeShifter>(
+        clientHandle, getMTNodeHandle().subscribe<ros_babel_fish::BabelFishMessage>(
                         topic, SUBSCRIPTION_QUEUE_LENGTH,
                         std::bind(&FoxgloveBridge::rosMessageHandler, this, channel, clientHandle,
                                   std::placeholders::_1)));
@@ -293,13 +294,14 @@ private:
     }
   }
 
-  void rosMessageHandler(const foxglove::Channel& channel, foxglove::ConnHandle clientHandle,
-                         const ros::MessageEvent<RosIntrospection::ShapeShifter const>& msgEvent) {
+  void rosMessageHandler(
+    const foxglove::Channel& channel, foxglove::ConnHandle clientHandle,
+    const ros::MessageEvent<ros_babel_fish::BabelFishMessage const>& msgEvent) {
     const auto& msg = msgEvent.getConstMessage();
     const auto receiptTimeNs = msgEvent.getReceiptTime().toNSec();
     _server->sendMessage(
       clientHandle, channel.id, receiptTimeNs,
-      std::string_view(reinterpret_cast<const char*>(msg->raw_data()), msg->size()));
+      std::string_view(reinterpret_cast<const char*>(msg->buffer()), msg->size()));
   }
 
   std::unique_ptr<foxglove::ServerInterface> _server;
