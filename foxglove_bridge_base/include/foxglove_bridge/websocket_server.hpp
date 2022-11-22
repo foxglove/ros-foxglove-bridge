@@ -150,6 +150,7 @@ public:
                            std::string_view data) = 0;
 
   virtual std::optional<Tcp::endpoint> localEndpoint() = 0;
+  virtual std::string remoteEndpointString(ConnHandle clientHandle) = 0;
 
 private:
   virtual void setupTlsHandler() = 0;
@@ -197,6 +198,7 @@ public:
                    std::string_view data) override;
 
   std::optional<Tcp::endpoint> localEndpoint() override;
+  std::string remoteEndpointString(ConnHandle clientHandle) override;
 
 private:
   struct ClientInfo {
@@ -302,7 +304,7 @@ inline bool Server<ServerConfiguration>::validateConnection(ConnHandle hdl) {
     con->select_subprotocol(SUPPORTED_SUBPROTOCOL);
     return true;
   }
-  _server.get_alog().write(APP, "Rejecting client " + con->get_remote_endpoint() +
+  _server.get_alog().write(APP, "Rejecting client " + remoteEndpointString(hdl) +
                                   " which did not declare support for subprotocol " +
                                   SUPPORTED_SUBPROTOCOL);
   return false;
@@ -312,9 +314,9 @@ template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) {
   std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
   auto con = _server.get_con_from_hdl(hdl);
-  _server.get_alog().write(
-    APP, "Client " + con->get_remote_endpoint() + " connected via " + con->get_resource());
-  _clients.emplace(hdl, ClientInfo{con->get_remote_endpoint(), hdl, {}, {}});
+  const auto endpoint = remoteEndpointString(hdl);
+  _server.get_alog().write(APP, "Client " + endpoint + " connected via " + con->get_resource());
+  _clients.emplace(hdl, ClientInfo{endpoint, hdl, {}, {}});
 
   con->send(json({
                    {"op", "serverInfo"},
@@ -342,11 +344,8 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
     std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
     const auto clientIt = _clients.find(hdl);
     if (clientIt == _clients.end()) {
-      std::error_code ec;
-      const auto con = _server.get_con_from_hdl(hdl, ec);
-      const std::string remoteEndpoint = con ? con->get_remote_endpoint() : "unknown";
-      _server.get_elog().write(
-        RECOVERABLE, "Client " + remoteEndpoint + " disconnected but not found in _clients");
+      _server.get_elog().write(RECOVERABLE, "Client " + remoteEndpointString(hdl) +
+                                              " disconnected but not found in _clients");
       return;
     }
 
@@ -460,7 +459,7 @@ inline void Server<ServerConfiguration>::stop() {
       for (const auto& hdl : connections) {
         if (auto con = _server.get_con_from_hdl(hdl, ec)) {
           _server.get_elog().write(RECOVERABLE,
-                                   "Terminating connection to " + con->get_remote_endpoint());
+                                   "Terminating connection to " + remoteEndpointString(hdl));
           con->terminate(ec);
         }
       }
@@ -554,9 +553,7 @@ template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::sendStatus(ConnHandle clientHandle,
                                                     const StatusLevel level,
                                                     const std::string& message) {
-  std::error_code ec;
-  const auto con = _server.get_con_from_hdl(clientHandle, ec);
-  const std::string endpoint = con ? con->get_remote_endpoint() : "unknown";
+  const std::string endpoint = remoteEndpointString(clientHandle);
   const std::string logMessage =
     "sendStatus(" + endpoint + ", " + StatusLevelToString(level) + ", " + message + ")";
   _server.get_elog().write(RECOVERABLE, logMessage);
@@ -827,6 +824,13 @@ inline std::optional<asio::ip::tcp::endpoint> Server<ServerConfiguration>::local
     return std::nullopt;
   }
   return endpoint;
+}
+
+template <typename ServerConfiguration>
+inline std::string Server<ServerConfiguration>::remoteEndpointString(ConnHandle clientHandle) {
+  std::error_code ec;
+  const auto con = _server.get_con_from_hdl(clientHandle, ec);
+  return con ? con->get_remote_endpoint() : "(unknown)";
 }
 
 template <>

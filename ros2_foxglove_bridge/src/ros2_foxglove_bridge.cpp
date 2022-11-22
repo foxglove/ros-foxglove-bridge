@@ -22,6 +22,9 @@ using namespace std::placeholders;
 using LogLevel = foxglove::WebSocketLogLevel;
 using Subscription = std::pair<rclcpp::GenericSubscription::SharedPtr, rclcpp::SubscriptionOptions>;
 using SubscriptionsByClient = std::map<foxglove::ConnHandle, Subscription, std::owner_less<>>;
+using Publication = std::pair<rclcpp::GenericPublisher::SharedPtr, rclcpp::PublisherOptions>;
+using ClientPublications = std::unordered_map<foxglove::ClientChannelId, Publication>;
+using PublicationsByClient = std::map<foxglove::ConnHandle, ClientPublications, std::owner_less<>>;
 
 namespace foxglove_bridge {
 
@@ -102,6 +105,12 @@ public:
     }
     _server->setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2));
     _server->setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2));
+    _server->setClientAdvertiseHandler(
+      std::bind(&FoxgloveBridge::clientAdvertiseHandler, this, _1, _2));
+    _server->setClientUnadvertiseHandler(
+      std::bind(&FoxgloveBridge::clientUnadvertiseHandler, this, _1, _2));
+    _server->setClientMessageHandler(
+      std::bind(&FoxgloveBridge::clientMessageHandler, this, _1, _2));
 
     auto address = this->get_parameter("address").as_string();
     uint16_t port = uint16_t(this->get_parameter("port").as_int());
@@ -283,7 +292,9 @@ private:
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
+  PublicationsByClient _clientAdvertisedTopics;
   std::mutex _subscriptionsMutex;
+  std::mutex _clientAdvertisementsMutex;
   std::unique_ptr<std::thread> _rosgraphPollThread;
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
@@ -447,6 +458,115 @@ private:
                   "Removed one subscription from channel %d (%ld subscription(s) left)", channelId,
                   subscriptionsByClient.size());
     }
+  }
+
+  void clientAdvertiseHandler(const foxglove::ClientAdvertisement& advertisement,
+                              foxglove::ConnHandle hdl) {
+    std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
+
+    auto it = _clientAdvertisedTopics.find(hdl);
+    if (it == _clientAdvertisedTopics.end()) {
+      _clientAdvertisedTopics.emplace(hdl, ClientPublications{});
+      it = _clientAdvertisedTopics.find(hdl);
+    }
+
+    auto& clientPublications = it->second;
+    auto it2 = clientPublications.find(advertisement.channelId);
+    if (it2 != clientPublications.end()) {
+      RCLCPP_WARN(this->get_logger(),
+                  "Received client advertisement from %s for channel %d it had already advertised",
+                  _server->remoteEndpointString(hdl).c_str(), advertisement.channelId);
+      return;
+    }
+
+    // Create a new topic advertisement
+    auto topicName = advertisement.topic;
+    auto topicType = advertisement.schemaName;
+    rclcpp::QoS qos{rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default)};
+    rclcpp::PublisherOptions publisherOptions{};
+    publisherOptions.callback_group =
+      this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    auto publisher = this->create_generic_publisher(topicName, topicType, qos, publisherOptions);
+
+    RCLCPP_INFO(this->get_logger(), "Client %s is advertising \"%s\" (%s) on channel %d",
+                _server->remoteEndpointString(hdl).c_str(), topicName.c_str(), topicType.c_str(),
+                advertisement.channelId);
+
+    // Store the new topic advertisement
+    auto publication = std::make_pair(publisher, publisherOptions);
+    clientPublications.emplace(advertisement.channelId, std::move(publication));
+  }
+
+  void clientUnadvertiseHandler(foxglove::ChannelId channelId, foxglove::ConnHandle hdl) {
+    std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
+
+    auto it = _clientAdvertisedTopics.find(hdl);
+    if (it == _clientAdvertisedTopics.end()) {
+      RCLCPP_DEBUG(this->get_logger(),
+                   "Ignoring client unadvertisement from %s for unknown channel %d, client has no "
+                   "advertised topics",
+                   _server->remoteEndpointString(hdl).c_str(), channelId);
+      return;
+    }
+
+    auto& clientPublications = it->second;
+    auto it2 = clientPublications.find(channelId);
+    if (it2 == clientPublications.end()) {
+      RCLCPP_WARN(this->get_logger(),
+                  "Ignoring client unadvertisement from %s for unknown channel %d, client has %zu "
+                  "advertised topic(s)",
+                  _server->remoteEndpointString(hdl).c_str(), channelId, clientPublications.size());
+      return;
+    }
+
+    const auto& publisher = it2->second.first;
+    RCLCPP_INFO(this->get_logger(),
+                "Client %s is no longer advertising %s (%zu subscribers) on channel %d",
+                _server->remoteEndpointString(hdl).c_str(), publisher->get_topic_name(),
+                publisher->get_subscription_count(), channelId);
+
+    clientPublications.erase(it2);
+    if (clientPublications.empty()) {
+      _clientAdvertisedTopics.erase(it);
+    }
+  }
+
+  void clientMessageHandler(const foxglove::ClientMessage& message, foxglove::ConnHandle hdl) {
+    // Get the publisher
+    rclcpp::GenericPublisher::SharedPtr publisher;
+    {
+      const auto channelId = message.advertisement.channelId;
+      std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
+
+      auto it = _clientAdvertisedTopics.find(hdl);
+      if (it == _clientAdvertisedTopics.end()) {
+        RCLCPP_WARN(this->get_logger(),
+                    "Dropping client message from %s for unknown channel %d, client has no "
+                    "advertised topics",
+                    _server->remoteEndpointString(hdl).c_str(), channelId);
+        return;
+      }
+
+      auto& clientPublications = it->second;
+      auto it2 = clientPublications.find(channelId);
+      if (it2 == clientPublications.end()) {
+        RCLCPP_WARN(this->get_logger(),
+                    "Dropping client message from %s for unknown channel %d, client has %zu "
+                    "advertised topic(s)",
+                    _server->remoteEndpointString(hdl).c_str(), channelId,
+                    clientPublications.size());
+        return;
+      }
+      publisher = it2->second.first;
+    }
+
+    // Copy the message payload into a SerializedMessage object
+    rclcpp::SerializedMessage serializedMessage{message.dataLength};
+    std::memcpy(serializedMessage.get_rcl_serialized_message().buffer, message.data,
+                message.dataLength);
+
+    // Publish the message
+    publisher->publish(serializedMessage);
   }
 
   void logHandler(LogLevel level, char const* msg) {
