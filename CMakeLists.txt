@@ -111,13 +111,27 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
 
     find_package(ament_cmake REQUIRED)
     find_package(rclcpp REQUIRED)
+    find_package(rclcpp_components REQUIRED)
 
-    add_executable(foxglove_bridge
+    add_library(foxglove_bridge_component SHARED
       ros2_foxglove_bridge/src/message_definition_cache.cpp
       ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp
     )
+    target_include_directories(foxglove_bridge_component
+      PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include>
+        $<INSTALL_INTERFACE:include>
+    )
+    ament_target_dependencies(foxglove_bridge_component rclcpp rclcpp_components)
+    target_link_libraries(foxglove_bridge_component foxglove_bridge_base)
+    rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
+
+    add_executable(foxglove_bridge
+      ros2_foxglove_bridge/src/ros2_foxglove_bridge_node.cpp
+    )
     target_include_directories(foxglove_bridge SYSTEM PRIVATE ${rclcpp_INCLUDE_DIRS})
-    target_link_libraries(foxglove_bridge foxglove_bridge_base ${rclcpp_LIBRARIES})
+    ament_target_dependencies(foxglove_bridge rclcpp rclcpp_components)
   else()
     message(FATAL_ERROR "Could not find ament_cmake")
   endif()
@@ -177,11 +191,11 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
     install(TARGETS foxglove_bridge
       DESTINATION lib/${PROJECT_NAME}
     )
-    install(TARGETS foxglove_bridge_base
+    install(TARGETS foxglove_bridge_base foxglove_bridge_component
       ARCHIVE DESTINATION lib
       LIBRARY DESTINATION lib
       RUNTIME DESTINATION bin
     )
-    ament_export_libraries(foxglove_bridge_base)
+    ament_export_libraries(foxglove_bridge_base foxglove_bridge_component)
     ament_package()
 endif()

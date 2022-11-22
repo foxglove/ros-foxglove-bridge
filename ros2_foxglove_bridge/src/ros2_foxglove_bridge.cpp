@@ -15,7 +15,6 @@
 
 constexpr uint16_t DEFAULT_PORT = 8765;
 constexpr char DEFAULT_ADDRESS[] = "0.0.0.0";
-constexpr int DEFAULT_NUM_THREADS = 0;
 constexpr size_t DEFAULT_MAX_QOS_DEPTH = 10;
 
 using namespace std::chrono_literals;
@@ -23,6 +22,8 @@ using namespace std::placeholders;
 using LogLevel = foxglove::WebSocketLogLevel;
 using Subscription = std::pair<rclcpp::GenericSubscription::SharedPtr, rclcpp::SubscriptionOptions>;
 using SubscriptionsByClient = std::map<foxglove::ConnHandle, Subscription, std::owner_less<>>;
+
+namespace foxglove_bridge {
 
 class FoxgloveBridge : public rclcpp::Node {
 public:
@@ -73,19 +74,6 @@ public:
     keyfileDescription.description = "Path to the private key to use for TLS";
     keyfileDescription.read_only = true;
     this->declare_parameter("keyfile", "", keyfileDescription);
-
-    auto numThreadsDescription = rcl_interfaces::msg::ParameterDescriptor{};
-    numThreadsDescription.name = "num_threads";
-    numThreadsDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
-    numThreadsDescription.description =
-      "The number of threads to use for the ROS node executor. 0 means one thread per CPU core.";
-    numThreadsDescription.read_only = true;
-    numThreadsDescription.additional_constraints = "Must be a non-negative integer";
-    numThreadsDescription.integer_range.resize(1);
-    numThreadsDescription.integer_range[0].from_value = 0;
-    numThreadsDescription.integer_range[0].to_value = INT32_MAX;
-    numThreadsDescription.integer_range[0].step = 1;
-    this->declare_parameter("num_threads", DEFAULT_NUM_THREADS, numThreadsDescription);
 
     auto maxQosDepthDescription = rcl_interfaces::msg::ParameterDescriptor{};
     maxQosDepthDescription.name = "max_qos_depth";
@@ -141,13 +129,6 @@ public:
     }
     _server->stop();
     RCLCPP_INFO(this->get_logger(), "Shutdown complete");
-  }
-
-  size_t numThreads() {
-    int numThreads;
-    rclcpp::spin_some(this->get_node_base_interface());
-    this->get_parameter_or("num_threads", numThreads, DEFAULT_NUM_THREADS);
-    return size_t(numThreads);
   }
 
   void rosgraphPollThread() {
@@ -504,13 +485,11 @@ private:
   }
 };
 
-int main(int argc, char* argv[]) {
-  rclcpp::init(argc, argv);
-  auto bridgeNode = std::make_shared<FoxgloveBridge>();
-  rclcpp::executors::MultiThreadedExecutor executor{rclcpp::ExecutorOptions{},
-                                                    bridgeNode->numThreads()};
-  executor.add_node(bridgeNode);
-  executor.spin();
-  rclcpp::shutdown();
-  return 0;
-}
+}  // namespace foxglove_bridge
+
+#include <rclcpp_components/register_node_macro.hpp>
+
+// Register the component with class_loader.
+// This acts as a sort of entry point, allowing the component to be discoverable when its library
+// is being loaded into a running process.
+RCLCPP_COMPONENTS_REGISTER_NODE(foxglove_bridge::FoxgloveBridge)
