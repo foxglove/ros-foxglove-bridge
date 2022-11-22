@@ -75,13 +75,13 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
     message(STATUS "Building with catkin")
     set(ROS_BUILD_TYPE "catkin")
 
-    find_package(catkin REQUIRED COMPONENTS nodelet ros_babel_fish ros_type_introspection roslib roscpp)
+    find_package(catkin REQUIRED COMPONENTS nodelet ros_babel_fish roslib roscpp)
     find_package(Boost REQUIRED)
 
     catkin_package(
       INCLUDE_DIRS foxglove_bridge_base/include
       LIBRARIES foxglove_bridge_base foxglove_bridge_nodelet
-      CATKIN_DEPENDS nodelet ros_babel_fish ros_type_introspection roslib roscpp
+      CATKIN_DEPENDS nodelet ros_babel_fish roslib roscpp
       DEPENDS Boost
     )
 
