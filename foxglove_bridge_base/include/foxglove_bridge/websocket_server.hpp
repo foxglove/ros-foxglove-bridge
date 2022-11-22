@@ -321,7 +321,7 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
   con->send(json({
                    {"op", "serverInfo"},
                    {"name", _name},
-                   {"capabilities", json::array()},
+                   {"capabilities", json::array({"clientPublish"})},
                  })
               .dump());
 
