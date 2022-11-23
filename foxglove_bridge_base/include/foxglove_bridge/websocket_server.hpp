@@ -651,7 +651,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         }
         ClientAdvertisement advertisement{};
         advertisement.channelId = channelId;
-        advertisement.topic = chan.at("channelId").get<std::string>();
+        advertisement.topic = chan.at("topic").get<std::string>();
         advertisement.encoding = chan.at("encoding").get<std::string>();
         advertisement.schemaName = chan.at("schemaName").get<std::string>();
         _clientChannels.emplace(channelId, std::move(advertisement));
