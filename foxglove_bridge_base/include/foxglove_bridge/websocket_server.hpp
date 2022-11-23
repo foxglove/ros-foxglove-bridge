@@ -96,6 +96,15 @@ struct ClientMessage {
       , advertisement(advertisement)
       , dataLength(dataLength)
       , data(data) {}
+
+  static const size_t MSG_PAYLOAD_OFFSET = 5;
+
+  const uint8_t* getData() const {
+    return data + MSG_PAYLOAD_OFFSET;
+  }
+  std::size_t getLength() const {
+    return dataLength - MSG_PAYLOAD_OFFSET;
+  }
 };
 
 enum class BinaryOpcode : uint8_t {
@@ -736,8 +745,8 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
       if (_clientMessageHandler) {
         const auto& advertisement = channelIt->second;
         const uint32_t sequence = 0;
-        const ClientMessage clientMessage{timestamp,     timestamp,  sequence,
-                                          advertisement, length - 5, msg + 5};
+        const ClientMessage clientMessage{timestamp,     timestamp, sequence,
+                                          advertisement, length,    msg};
         _clientMessageHandler(clientMessage, hdl);
       }
     } break;
