@@ -225,7 +225,8 @@ private:
   uint32_t _nextChannelId = 0;
   std::map<ConnHandle, ClientInfo, std::owner_less<>> _clients;
   std::unordered_map<ChannelId, Channel> _channels;
-  std::unordered_map<ClientChannelId, ClientAdvertisement> _clientChannels;
+  std::map<ConnHandle, std::unordered_map<ClientChannelId, ClientAdvertisement>, std::owner_less<>>
+    _clientChannels;
   SubscribeUnsubscribeHandler _subscribeHandler;
   SubscribeUnsubscribeHandler _unsubscribeHandler;
   ClientAdvertiseHandler _clientAdvertiseHandler;
@@ -363,11 +364,12 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
   for (const auto clientChannelId : oldAdvertisedChannels) {
     _server.get_alog().write(APP, "Client " + clientName + " unadvertising channel " +
                                     std::to_string(clientChannelId) + " due to disconnect");
-    _clientChannels.erase(clientChannelId);
     if (_clientUnadvertiseHandler) {
       _clientUnadvertiseHandler(clientChannelId, hdl);
     }
   }
+
+  _clientChannels.erase(hdl);
 
   // Unsubscribe all channels this client subscribed to
   if (_unsubscribeHandler) {
@@ -643,9 +645,14 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
     } break;
     case Integer("advertise"): {
+      auto [clientPublicationsIt, isFirstPublication] =
+        _clientChannels.emplace(hdl, std::unordered_map<ClientChannelId, ClientAdvertisement>());
+
+      auto& clientPublications = clientPublicationsIt->second;
+
       for (const auto& chan : payload.at("channels")) {
         ClientChannelId channelId = chan.at("id");
-        if (_clientChannels.find(channelId) != _clientChannels.end()) {
+        if (!isFirstPublication && clientPublications.find(channelId) != clientPublications.end()) {
           sendStatus(hdl, StatusLevel::ERROR,
                      "Channel " + std::to_string(channelId) + " was already advertised");
           continue;
@@ -655,7 +662,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         advertisement.topic = chan.at("topic").get<std::string>();
         advertisement.encoding = chan.at("encoding").get<std::string>();
         advertisement.schemaName = chan.at("schemaName").get<std::string>();
-        _clientChannels.emplace(channelId, advertisement);
+        clientPublications.emplace(channelId, advertisement);
         clientInfo.advertisedChannels.emplace(channelId);
         if (_clientAdvertiseHandler) {
           _clientAdvertiseHandler(advertisement, hdl);
@@ -663,13 +670,21 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
     } break;
     case Integer("unadvertise"): {
+      auto clientPublicationsIt = _clientChannels.find(hdl);
+      if (clientPublicationsIt == _clientChannels.end()) {
+        sendStatus(hdl, StatusLevel::ERROR, "Client has no advertised channels");
+        break;
+      }
+
+      auto& clientPublications = clientPublicationsIt->second;
+
       for (const auto& chanIdJson : payload.at("channelIds")) {
         ClientChannelId channelId = chanIdJson.get<ClientChannelId>();
-        const auto& channelIt = _clientChannels.find(channelId);
-        if (channelIt == _clientChannels.end()) {
+        const auto& channelIt = clientPublications.find(channelId);
+        if (channelIt == clientPublications.end()) {
           continue;
         }
-        _clientChannels.erase(channelIt);
+        clientPublications.erase(channelIt);
         if (_clientUnadvertiseHandler) {
           _clientUnadvertiseHandler(channelId, hdl);
         }
@@ -695,6 +710,14 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
 
   std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
 
+  auto clientPublicationsIt = _clientChannels.find(hdl);
+  if (clientPublicationsIt == _clientChannels.end()) {
+    sendStatus(hdl, StatusLevel::ERROR, "Client has no advertised channels");
+    return;
+  }
+
+  auto& clientPublications = clientPublicationsIt->second;
+
   const auto op = static_cast<ClientBinaryOpcode>(msg[0]);
   switch (op) {
     case ClientBinaryOpcode::MESSAGE_DATA: {
@@ -703,8 +726,8 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
         return;
       }
       const ClientChannelId channelId = *reinterpret_cast<const ClientChannelId*>(msg + 1);
-      const auto& channelIt = _clientChannels.find(channelId);
-      if (channelIt == _clientChannels.end()) {
+      const auto& channelIt = clientPublications.find(channelId);
+      if (channelIt == clientPublications.end()) {
         sendStatus(hdl, StatusLevel::ERROR,
                    "Channel " + std::to_string(channelId) + " is not advertised");
         return;
