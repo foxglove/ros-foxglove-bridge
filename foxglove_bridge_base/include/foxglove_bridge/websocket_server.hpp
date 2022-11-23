@@ -713,8 +713,8 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
       if (_clientMessageHandler) {
         const auto& advertisement = channelIt->second;
         const uint32_t sequence = 0;
-        const ClientMessage clientMessage{timestamp,     timestamp, sequence,
-                                          advertisement, length - 5,    msg + 5};
+        const ClientMessage clientMessage{timestamp,     timestamp,  sequence,
+                                          advertisement, length - 5, msg + 5};
         _clientMessageHandler(clientMessage, hdl);
       }
     } break;
