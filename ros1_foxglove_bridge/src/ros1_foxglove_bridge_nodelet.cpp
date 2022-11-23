@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <unordered_set>
 
@@ -24,9 +25,11 @@ constexpr int DEFAULT_MAX_UPDATE_MS = 5000;
 constexpr char ROS1_CHANNEL_ENCODING[] = "ros1";
 constexpr uint32_t SUBSCRIPTION_QUEUE_LENGTH = 10;
 constexpr double MIN_UPDATE_PERIOD_MS = 100.0;
+constexpr uint32_t PUBLICATION_QUEUE_LENGTH = 10;
 
 using TopicAndDatatype = std::pair<std::string, std::string>;
 using SubscriptionsByClient = std::map<foxglove::ConnHandle, ros::Subscriber, std::owner_less<>>;
+using ClientPublications = std::unordered_map<foxglove::ClientChannelId, ros::Publisher>;
 
 class FoxgloveBridge : public nodelet::Nodelet {
 public:
@@ -58,6 +61,13 @@ public:
                                              std::placeholders::_1, std::placeholders::_2));
       _server->setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this,
                                                std::placeholders::_1, std::placeholders::_2));
+      _server->setClientAdvertiseHandler(std::bind(&FoxgloveBridge::clientAdvertiseHandler, this,
+                                                   std::placeholders::_1, std::placeholders::_2));
+      _server->setClientUnadvertiseHandler(std::bind(&FoxgloveBridge::clientUnadvertiseHandler,
+                                                     this, std::placeholders::_1,
+                                                     std::placeholders::_2));
+      _server->setClientMessageHandler(std::bind(&FoxgloveBridge::clientMessageHandler, this,
+                                                 std::placeholders::_1, std::placeholders::_2));
       _server->start(address, static_cast<uint16_t>(port));
 
       updateAdvertisedTopics(ros::TimerEvent());
@@ -171,6 +181,102 @@ private:
       ROS_INFO("Removed one subscription from channel %d (%ld subscription(s) left)", channelId,
                subscriptionsByClient.size());
     }
+  }
+
+  void clientAdvertiseHandler(const foxglove::ClientAdvertisement& channel,
+                              foxglove::ConnHandle clientHandle) {
+    if (channel.encoding != ROS1_CHANNEL_ENCODING) {
+      ROS_ERROR("Unsupported encoding. Only '%s' encoding is supported at the moment.",
+                ROS1_CHANNEL_ENCODING);
+      return;
+    }
+
+    std::unique_lock<std::shared_mutex> lock(_publicationsMutex);
+
+    // Get client publications or insert an empty map.
+    auto [clientPublicationsIt, isFirstPublication] =
+      _publications.emplace(clientHandle, ClientPublications());
+
+    auto& clientPublications = clientPublicationsIt->second;
+    if (!isFirstPublication) {
+      const auto it = std::find_if(clientPublications.begin(), clientPublications.end(),
+                                   [&channel](const auto& channelAndPub) {
+                                     return channelAndPub.second.getTopic() == channel.topic;
+                                   });
+      if (it != clientPublications.end()) {
+        ROS_ERROR("Topic '%s' is already advertised by this client", channel.topic.c_str());
+        return;
+      }
+    }
+
+    const auto msgDescription = _rosTypeInfoProvider.getMessageDescription(channel.schemaName);
+    if (!msgDescription) {
+      ROS_ERROR(
+        "Failed to retrieve type information of data type '%s'. Unable to advertise topic '%s'",
+        channel.schemaName.c_str(), channel.topic.c_str());
+      return;
+    }
+
+    ros::AdvertiseOptions advertiseOptions;
+    advertiseOptions.datatype = channel.schemaName;
+    advertiseOptions.has_header = false;  // TODO
+    advertiseOptions.latch = false;
+    advertiseOptions.md5sum = msgDescription->md5;
+    advertiseOptions.message_definition = msgDescription->message_definition;
+    advertiseOptions.queue_size = PUBLICATION_QUEUE_LENGTH;
+    advertiseOptions.topic = channel.topic;
+    auto publisher = getMTNodeHandle().advertise(advertiseOptions);
+
+    if (publisher) {
+      clientPublications.insert({channel.channelId, std::move(publisher)});
+      ROS_DEBUG("Advertising client publication %d for topic \"%s\" (%s)", channel.channelId,
+                channel.topic.c_str(), channel.schemaName.c_str());
+    } else {
+      ROS_ERROR("Failed to create publisher for topic \"%s\" (%s)", channel.topic.c_str(),
+                channel.schemaName.c_str());
+    }
+  }
+
+  void clientUnadvertiseHandler(foxglove::ClientChannelId channelId,
+                                foxglove::ConnHandle clientHandle) {
+    std::unique_lock<std::shared_mutex> lock(_publicationsMutex);
+
+    auto clientPublicationsIt = _publications.find(clientHandle);
+    if (clientPublicationsIt == _publications.end()) {
+      ROS_ERROR("Cannot unadvertise channel %d, client has no advertised channels", channelId);
+      return;
+    }
+
+    auto channelPublicationIt = clientPublicationsIt->second.find(channelId);
+    if (channelPublicationIt == clientPublicationsIt->second.end()) {
+      ROS_ERROR("Cannot unadvertise channel %d as it is not advertised by the client", channelId);
+      return;
+    }
+
+    ROS_INFO("Removed client publication %d for topic '%s'", channelId,
+             channelPublicationIt->second.getTopic().c_str());
+    clientPublicationsIt->second.erase(channelPublicationIt);
+  }
+
+  void clientMessageHandler(const foxglove::ClientMessage& clientMsg,
+                            foxglove::ConnHandle clientHandle) {
+    ros_babel_fish::BabelFishMessage::Ptr msg(new ros_babel_fish::BabelFishMessage);
+    msg->read(clientMsg);
+
+    std::shared_lock<std::shared_mutex> lock(_publicationsMutex);
+    auto clientPublicationsIt = _publications.find(clientHandle);
+    if (clientPublicationsIt == _publications.end()) {
+      ROS_ERROR("Client has not advertised any channels");
+      return;
+    }
+
+    auto channelPublicationIt =
+      clientPublicationsIt->second.find(clientMsg.advertisement.channelId);
+    if (channelPublicationIt == clientPublicationsIt->second.end()) {
+      ROS_ERROR("Channel %d is not advertised by the client", clientMsg.advertisement.channelId);
+      return;
+    }
+    channelPublicationIt->second.publish(msg);
   }
 
   void updateAdvertisedTopics(const ros::TimerEvent&) {
@@ -311,7 +417,9 @@ private:
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
+  std::map<foxglove::ConnHandle, ClientPublications, std::owner_less<>> _publications;
   std::mutex _subscriptionsMutex;
+  std::shared_mutex _publicationsMutex;
   ros::Timer _updateTimer;
   size_t _maxUpdateMs = size_t(DEFAULT_MAX_UPDATE_MS);
   size_t _updateCount = 0;
