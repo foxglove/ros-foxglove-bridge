@@ -1,15 +1,18 @@
 #include "foxglove_bridge/foxglove_bridge.hpp"
 
 #define ASIO_STANDALONE
-#include <websocketpp/config/asio.hpp>
-#include <websocketpp/server.hpp>
+#include "foxglove_bridge/websocket_notls.hpp"
+#include "foxglove_bridge/websocket_server.hpp"
+#include "foxglove_bridge/websocket_tls.hpp"
 
-using Server = websocketpp::server<websocketpp::config::asio_tls>;
-using ConnectionHdl = websocketpp::connection_hdl;
-using SslContext = websocketpp::lib::asio::ssl::context;
-using websocketpp::lib::placeholders::_1;
-using websocketpp::lib::placeholders::_2;
+namespace foxglove {
 
-const char* foxglove::WebSocketUserAgent() {
+const char* WebSocketUserAgent() {
   return websocketpp::user_agent;
 }
+
+// Explicit template instantiation for common server configurations
+template class Server<WebSocketTls>;
+template class Server<WebSocketNoTls>;
+
+}  // namespace foxglove
