@@ -30,6 +30,7 @@ constexpr uint32_t PUBLICATION_QUEUE_LENGTH = 10;
 using TopicAndDatatype = std::pair<std::string, std::string>;
 using SubscriptionsByClient = std::map<foxglove::ConnHandle, ros::Subscriber, std::owner_less<>>;
 using ClientPublications = std::unordered_map<foxglove::ClientChannelId, ros::Publisher>;
+using PublicationsByClient = std::map<foxglove::ConnHandle, ClientPublications, std::owner_less<>>;
 
 class FoxgloveBridge : public nodelet::Nodelet {
 public:
@@ -195,7 +196,7 @@ private:
 
     // Get client publications or insert an empty map.
     auto [clientPublicationsIt, isFirstPublication] =
-      _publications.emplace(clientHandle, ClientPublications());
+      _clientAdvertisedTopics.emplace(clientHandle, ClientPublications());
 
     auto& clientPublications = clientPublicationsIt->second;
     if (!isFirstPublication) {
@@ -241,8 +242,8 @@ private:
                                 foxglove::ConnHandle clientHandle) {
     std::unique_lock<std::shared_mutex> lock(_publicationsMutex);
 
-    auto clientPublicationsIt = _publications.find(clientHandle);
-    if (clientPublicationsIt == _publications.end()) {
+    auto clientPublicationsIt = _clientAdvertisedTopics.find(clientHandle);
+    if (clientPublicationsIt == _clientAdvertisedTopics.end()) {
       ROS_ERROR("Cannot unadvertise channel %d, client has no advertised channels", channelId);
       return;
     }
@@ -264,8 +265,8 @@ private:
     msg->read(clientMsg);
 
     std::shared_lock<std::shared_mutex> lock(_publicationsMutex);
-    auto clientPublicationsIt = _publications.find(clientHandle);
-    if (clientPublicationsIt == _publications.end()) {
+    auto clientPublicationsIt = _clientAdvertisedTopics.find(clientHandle);
+    if (clientPublicationsIt == _clientAdvertisedTopics.end()) {
       ROS_ERROR("Client has not advertised any channels");
       return;
     }
@@ -417,7 +418,7 @@ private:
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
-  std::map<foxglove::ConnHandle, ClientPublications, std::owner_less<>> _publications;
+  PublicationsByClient _clientAdvertisedTopics;
   std::mutex _subscriptionsMutex;
   std::shared_mutex _publicationsMutex;
   ros::Timer _updateTimer;
