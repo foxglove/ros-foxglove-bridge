@@ -561,9 +561,9 @@ private:
     }
 
     // Copy the message payload into a SerializedMessage object
-    rclcpp::SerializedMessage serializedMessage{message.dataLength};
-    std::memcpy(serializedMessage.get_rcl_serialized_message().buffer, message.data,
-                message.dataLength);
+    rclcpp::SerializedMessage serializedMessage{message.getLength()};
+    std::memcpy(serializedMessage.get_rcl_serialized_message().buffer, message.getData(),
+                message.getLength());
 
     // Publish the message
     publisher->publish(serializedMessage);
