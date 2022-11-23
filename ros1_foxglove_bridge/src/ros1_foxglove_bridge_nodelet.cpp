@@ -23,6 +23,7 @@ constexpr char DEFAULT_ADDRESS[] = "0.0.0.0";
 constexpr int DEFAULT_MAX_UPDATE_MS = 5000;
 constexpr char ROS1_CHANNEL_ENCODING[] = "ros1";
 constexpr uint32_t SUBSCRIPTION_QUEUE_LENGTH = 10;
+constexpr double MIN_UPDATE_PERIOD_MS = 100.0;
 
 using TopicAndDatatype = std::pair<std::string, std::string>;
 using SubscriptionsByClient = std::map<foxglove::ConnHandle, ros::Subscriber, std::owner_less<>>;
@@ -34,10 +35,10 @@ public:
     auto& nhp = getPrivateNodeHandle();
     const auto address = nhp.param<std::string>("address", DEFAULT_ADDRESS);
     const int port = nhp.param<int>("port", DEFAULT_PORT);
-    const int max_update_ms = nhp.param<int>("max_update_ms", DEFAULT_MAX_UPDATE_MS);
     const auto useTLS = nhp.param<bool>("tls", false);
     const auto certfile = nhp.param<std::string>("certfile", "");
     const auto keyfile = nhp.param<std::string>("keyfile", "");
+    _maxUpdateMs = static_cast<size_t>(nhp.param<int>("max_update_ms", DEFAULT_MAX_UPDATE_MS));
 
     ROS_INFO("Starting %s with %s", ros::this_node::getName().c_str(),
              foxglove::WebSocketUserAgent());
@@ -59,8 +60,7 @@ public:
                                                std::placeholders::_1, std::placeholders::_2));
       _server->start(address, static_cast<uint16_t>(port));
 
-      _updateTimer = getMTNodeHandle().createTimer(ros::Duration(max_update_ms / 1e3),
-                                                   &FoxgloveBridge::updateAdvertisedTopics, this);
+      updateAdvertisedTopics(ros::TimerEvent());
     } catch (const std::exception& err) {
       ROS_ERROR("Failed to start websocket server: %s", err.what());
       // Rethrow exception such that the nodelet is unloaded.
@@ -267,9 +267,11 @@ private:
       _server->broadcastChannels();
     }
 
-    // Schedule the next update using truncated exponential backoff, up to `_maxUpdateMs`
+    // Schedule the next update using truncated exponential backoff, between `MIN_UPDATE_PERIOD_MS`
+    // and `_maxUpdateMs`
     _updateCount++;
-    auto nextUpdateMs = static_cast<double>(std::min(size_t(1) << _updateCount, _maxUpdateMs));
+    const auto nextUpdateMs = std::max(
+      MIN_UPDATE_PERIOD_MS, static_cast<double>(std::min(size_t(1) << _updateCount, _maxUpdateMs)));
     _updateTimer = getMTNodeHandle().createTimer(ros::Duration(nextUpdateMs / 1e3),
                                                  &FoxgloveBridge::updateAdvertisedTopics, this);
   }
