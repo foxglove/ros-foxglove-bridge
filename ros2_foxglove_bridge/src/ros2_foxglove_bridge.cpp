@@ -464,15 +464,14 @@ private:
                               foxglove::ConnHandle hdl) {
     std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
 
-    auto it = _clientAdvertisedTopics.find(hdl);
-    if (it == _clientAdvertisedTopics.end()) {
-      _clientAdvertisedTopics.emplace(hdl, ClientPublications{});
-      it = _clientAdvertisedTopics.find(hdl);
-    }
+    // Get client publications or insert an empty map.
+    auto [clientPublicationsIt, isFirstPublication] =
+      _clientAdvertisedTopics.emplace(hdl, ClientPublications());
 
-    auto& clientPublications = it->second;
-    auto it2 = clientPublications.find(advertisement.channelId);
-    if (it2 != clientPublications.end()) {
+    auto& clientPublications = clientPublicationsIt->second;
+
+    if (!isFirstPublication &&
+        clientPublications.find(advertisement.channelId) != clientPublications.end()) {
       RCLCPP_WARN(this->get_logger(),
                   "Received client advertisement from %s for channel %d it had already advertised",
                   _server->remoteEndpointString(hdl).c_str(), advertisement.channelId);
@@ -480,8 +479,8 @@ private:
     }
 
     // Create a new topic advertisement
-    auto topicName = advertisement.topic;
-    auto topicType = advertisement.schemaName;
+    const auto& topicName = advertisement.topic;
+    const auto& topicType = advertisement.schemaName;
     rclcpp::QoS qos{rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default)};
     rclcpp::PublisherOptions publisherOptions{};
     publisherOptions.callback_group =

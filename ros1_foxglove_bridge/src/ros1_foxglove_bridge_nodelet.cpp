@@ -199,15 +199,11 @@ private:
       _clientAdvertisedTopics.emplace(clientHandle, ClientPublications());
 
     auto& clientPublications = clientPublicationsIt->second;
-    if (!isFirstPublication) {
-      const auto it = std::find_if(clientPublications.begin(), clientPublications.end(),
-                                   [&channel](const auto& channelAndPub) {
-                                     return channelAndPub.second.getTopic() == channel.topic;
-                                   });
-      if (it != clientPublications.end()) {
-        ROS_ERROR("Topic '%s' is already advertised by this client", channel.topic.c_str());
-        return;
-      }
+    if (!isFirstPublication &&
+        clientPublications.find(channel.channelId) != clientPublications.end()) {
+      ROS_WARN("Received client advertisement from %s for channel %d it had already advertised",
+               _server->remoteEndpointString(clientHandle).c_str(), channel.channelId);
+      return;
     }
 
     const auto msgDescription = _rosTypeInfoProvider.getMessageDescription(channel.schemaName);
@@ -230,8 +226,9 @@ private:
 
     if (publisher) {
       clientPublications.insert({channel.channelId, std::move(publisher)});
-      ROS_DEBUG("Advertising client publication %d for topic \"%s\" (%s)", channel.channelId,
-                channel.topic.c_str(), channel.schemaName.c_str());
+      ROS_INFO("Client %s is advertising \"%s\" (%s) on channel %d",
+               _server->remoteEndpointString(clientHandle).c_str(), channel.topic.c_str(),
+               channel.schemaName.c_str(), channel.channelId);
     } else {
       ROS_ERROR("Failed to create publisher for topic \"%s\" (%s)", channel.topic.c_str(),
                 channel.schemaName.c_str());
@@ -244,19 +241,33 @@ private:
 
     auto clientPublicationsIt = _clientAdvertisedTopics.find(clientHandle);
     if (clientPublicationsIt == _clientAdvertisedTopics.end()) {
-      ROS_ERROR("Cannot unadvertise channel %d, client has no advertised channels", channelId);
+      ROS_DEBUG(
+        "Ignoring client unadvertisement from %s for unknown channel %d, client has no "
+        "advertised topics",
+        _server->remoteEndpointString(clientHandle).c_str(), channelId);
       return;
     }
 
-    auto channelPublicationIt = clientPublicationsIt->second.find(channelId);
-    if (channelPublicationIt == clientPublicationsIt->second.end()) {
-      ROS_ERROR("Cannot unadvertise channel %d as it is not advertised by the client", channelId);
+    auto& clientPublications = clientPublicationsIt->second;
+
+    auto channelPublicationIt = clientPublications.find(channelId);
+    if (channelPublicationIt == clientPublications.end()) {
+      ROS_WARN(
+        "Ignoring client unadvertisement from %s for unknown channel %d, client has %zu "
+        "advertised topic(s)",
+        _server->remoteEndpointString(clientHandle).c_str(), channelId, clientPublications.size());
       return;
     }
 
-    ROS_INFO("Removed client publication %d for topic '%s'", channelId,
-             channelPublicationIt->second.getTopic().c_str());
-    clientPublicationsIt->second.erase(channelPublicationIt);
+    const auto& publisher = channelPublicationIt->second;
+    ROS_INFO("Client %s is no longer advertising %s (%d subscribers) on channel %d",
+             _server->remoteEndpointString(clientHandle).c_str(), publisher.getTopic().c_str(),
+             publisher.getNumSubscribers(), channelId);
+    clientPublications.erase(channelPublicationIt);
+
+    if (clientPublications.empty()) {
+      _clientAdvertisedTopics.erase(clientPublicationsIt);
+    }
   }
 
   void clientMessageHandler(const foxglove::ClientMessage& clientMsg,
@@ -264,17 +275,26 @@ private:
     ros_babel_fish::BabelFishMessage::Ptr msg(new ros_babel_fish::BabelFishMessage);
     msg->read(clientMsg);
 
+    const auto channelId = clientMsg.advertisement.channelId;
     std::shared_lock<std::shared_mutex> lock(_publicationsMutex);
+
     auto clientPublicationsIt = _clientAdvertisedTopics.find(clientHandle);
     if (clientPublicationsIt == _clientAdvertisedTopics.end()) {
-      ROS_ERROR("Client has not advertised any channels");
+      ROS_WARN(
+        "Dropping client message from %s for unknown channel %d, client has no "
+        "advertised topics",
+        _server->remoteEndpointString(clientHandle).c_str(), channelId);
       return;
     }
 
-    auto channelPublicationIt =
-      clientPublicationsIt->second.find(clientMsg.advertisement.channelId);
-    if (channelPublicationIt == clientPublicationsIt->second.end()) {
-      ROS_ERROR("Channel %d is not advertised by the client", clientMsg.advertisement.channelId);
+    auto& clientPublications = clientPublicationsIt->second;
+
+    auto channelPublicationIt = clientPublications.find(clientMsg.advertisement.channelId);
+    if (channelPublicationIt == clientPublications.end()) {
+      ROS_WARN(
+        "Dropping client message from %s for unknown channel %d, client has %zu "
+        "advertised topic(s)",
+        _server->remoteEndpointString(clientHandle).c_str(), channelId, clientPublications.size());
       return;
     }
     channelPublicationIt->second.publish(msg);
