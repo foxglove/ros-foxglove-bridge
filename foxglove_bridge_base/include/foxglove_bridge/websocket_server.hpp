@@ -10,6 +10,7 @@
 #include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -27,10 +28,15 @@ using ConnHandle = websocketpp::connection_hdl;
 using OpCode = websocketpp::frame::opcode::value;
 
 using ChannelId = uint32_t;
+using ClientChannelId = uint32_t;
 using SubscriptionId = uint32_t;
 
 static const websocketpp::log::level APP = websocketpp::log::alevel::app;
 static const websocketpp::log::level RECOVERABLE = websocketpp::log::elevel::rerror;
+
+constexpr uint32_t Integer(const char* str, uint32_t h = 0) {
+  return !str[h] ? 5381 : (Integer(str, h + 1) * 33) ^ str[h];
+}
 
 struct ChannelWithoutId {
   std::string topic;
@@ -66,7 +72,46 @@ struct Channel : ChannelWithoutId {
   }
 };
 
+struct ClientAdvertisement {
+  ChannelId channelId;
+  std::string topic;
+  std::string encoding;
+  std::string schemaName;
+  std::vector<uint8_t> schema;
+};
+
+struct ClientMessage {
+  uint64_t logTime;
+  uint64_t publishTime;
+  uint32_t sequence;
+  const ClientAdvertisement& advertisement;
+  size_t dataLength;
+  const uint8_t* data;
+
+  ClientMessage(uint64_t logTime, uint64_t publishTime, uint32_t sequence,
+                const ClientAdvertisement& advertisement, size_t dataLength, const uint8_t* data)
+      : logTime(logTime)
+      , publishTime(publishTime)
+      , sequence(sequence)
+      , advertisement(advertisement)
+      , dataLength(dataLength)
+      , data(data) {}
+
+  static const size_t MSG_PAYLOAD_OFFSET = 5;
+
+  const uint8_t* getData() const {
+    return data + MSG_PAYLOAD_OFFSET;
+  }
+  std::size_t getLength() const {
+    return dataLength - MSG_PAYLOAD_OFFSET;
+  }
+};
+
 enum class BinaryOpcode : uint8_t {
+  MESSAGE_DATA = 1,
+};
+
+enum class ClientBinaryOpcode : uint8_t {
   MESSAGE_DATA = 1,
 };
 
@@ -76,9 +121,25 @@ enum class StatusLevel : uint8_t {
   ERROR = 2,
 };
 
+constexpr const char* StatusLevelToString(StatusLevel level) {
+  switch (level) {
+    case StatusLevel::INFO:
+      return "INFO";
+    case StatusLevel::WARNING:
+      return "WARN";
+    case StatusLevel::ERROR:
+      return "ERROR";
+    default:
+      return "UNKNOWN";
+  }
+}
+
 class ServerInterface {
   using Tcp = websocketpp::lib::asio::ip::tcp;
   using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
+  using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
+  using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
+  using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
 
 public:
   virtual void start(const std::string& host, uint16_t port) = 0;
@@ -90,12 +151,16 @@ public:
 
   virtual void setSubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
   virtual void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
+  virtual void setClientAdvertiseHandler(ClientAdvertiseHandler handler) = 0;
+  virtual void setClientUnadvertiseHandler(ClientUnadvertiseHandler handler) = 0;
+  virtual void setClientMessageHandler(ClientMessageHandler handler) = 0;
 
   virtual void sendMessage(ChannelId chanId, uint64_t timestamp, std::string_view data) = 0;
   virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                            std::string_view data) = 0;
 
   virtual std::optional<Tcp::endpoint> localEndpoint() = 0;
+  virtual std::string remoteEndpointString(ConnHandle clientHandle) = 0;
 
 private:
   virtual void setupTlsHandler() = 0;
@@ -109,6 +174,9 @@ public:
   using MessagePtr = typename ServerType::message_ptr;
   using Tcp = websocketpp::lib::asio::ip::tcp;
   using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
+  using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
+  using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
+  using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
 
   static const std::string SUPPORTED_SUBPROTOCOL;
   static bool USES_TLS;
@@ -131,18 +199,23 @@ public:
 
   void setSubscribeHandler(SubscribeUnsubscribeHandler handler) override;
   void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) override;
+  void setClientAdvertiseHandler(ClientAdvertiseHandler handler) override;
+  void setClientUnadvertiseHandler(ClientUnadvertiseHandler handler) override;
+  void setClientMessageHandler(ClientMessageHandler handler) override;
 
   void sendMessage(ChannelId chanId, uint64_t timestamp, std::string_view data) override;
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                    std::string_view data) override;
 
   std::optional<Tcp::endpoint> localEndpoint() override;
+  std::string remoteEndpointString(ConnHandle clientHandle) override;
 
 private:
   struct ClientInfo {
     std::string name;
     ConnHandle handle;
     std::unordered_map<ChannelId, SubscriptionId> subscriptionsByChannel;
+    std::unordered_set<ClientChannelId> advertisedChannels;
 
     ClientInfo(const ClientInfo&) = delete;
     ClientInfo& operator=(const ClientInfo&) = delete;
@@ -161,8 +234,13 @@ private:
   uint32_t _nextChannelId = 0;
   std::map<ConnHandle, ClientInfo, std::owner_less<>> _clients;
   std::unordered_map<ChannelId, Channel> _channels;
+  std::map<ConnHandle, std::unordered_map<ClientChannelId, ClientAdvertisement>, std::owner_less<>>
+    _clientChannels;
   SubscribeUnsubscribeHandler _subscribeHandler;
   SubscribeUnsubscribeHandler _unsubscribeHandler;
+  ClientAdvertiseHandler _clientAdvertiseHandler;
+  ClientUnadvertiseHandler _clientUnadvertiseHandler;
+  ClientMessageHandler _clientMessageHandler;
   std::shared_mutex _clientsChannelMutex;
 
   void setupTlsHandler() override;
@@ -171,10 +249,13 @@ private:
   void handleConnectionOpened(ConnHandle hdl);
   void handleConnectionClosed(ConnHandle hdl);
   void handleMessage(ConnHandle hdl, MessagePtr msg);
+  void handleTextMessage(ConnHandle hdl, const std::string& msg);
+  void handleBinaryMessage(ConnHandle hdl, const uint8_t* msg, size_t length);
 
   void sendJson(ConnHandle hdl, json&& payload);
   void sendJsonRaw(ConnHandle hdl, const std::string& payload);
   void sendBinary(ConnHandle hdl, const std::vector<uint8_t>& payload);
+  void sendStatus(ConnHandle clientHandle, const StatusLevel level, const std::string& message);
 };
 
 template <typename ServerConfiguration>
@@ -234,7 +315,7 @@ inline bool Server<ServerConfiguration>::validateConnection(ConnHandle hdl) {
     con->select_subprotocol(SUPPORTED_SUBPROTOCOL);
     return true;
   }
-  _server.get_alog().write(APP, "Rejecting client " + con->get_remote_endpoint() +
+  _server.get_alog().write(APP, "Rejecting client " + remoteEndpointString(hdl) +
                                   " which did not declare support for subprotocol " +
                                   SUPPORTED_SUBPROTOCOL);
   return false;
@@ -244,14 +325,14 @@ template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) {
   std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
   auto con = _server.get_con_from_hdl(hdl);
-  _server.get_alog().write(
-    APP, "Client " + con->get_remote_endpoint() + " connected via " + con->get_resource());
-  _clients.emplace(hdl, ClientInfo{con->get_remote_endpoint(), hdl, {}});
+  const auto endpoint = remoteEndpointString(hdl);
+  _server.get_alog().write(APP, "Client " + endpoint + " connected via " + con->get_resource());
+  _clients.emplace(hdl, ClientInfo{endpoint, hdl, {}, {}});
 
   con->send(json({
                    {"op", "serverInfo"},
                    {"name", _name},
-                   {"capabilities", json::array()},
+                   {"capabilities", json::array({"clientPublish"})},
                  })
               .dump());
 
@@ -268,22 +349,38 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) {
   std::unordered_map<ChannelId, SubscriptionId> oldSubscriptionsByChannel;
+  std::unordered_set<ClientChannelId> oldAdvertisedChannels;
+  std::string clientName;
   {
     std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
-    const auto& client = _clients.find(hdl);
-    if (client == _clients.end()) {
-      _server.get_elog().write(RECOVERABLE, "Client " +
-                                              _server.get_con_from_hdl(hdl)->get_remote_endpoint() +
+    const auto clientIt = _clients.find(hdl);
+    if (clientIt == _clients.end()) {
+      _server.get_elog().write(RECOVERABLE, "Client " + remoteEndpointString(hdl) +
                                               " disconnected but not found in _clients");
       return;
     }
 
-    _server.get_alog().write(APP, "Client " + client->second.name + " disconnected");
+    const auto& client = clientIt->second;
+    clientName = client.name;
+    _server.get_alog().write(APP, "Client " + clientName + " disconnected");
 
-    oldSubscriptionsByChannel = std::move(client->second.subscriptionsByChannel);
-    _clients.erase(client);
+    oldSubscriptionsByChannel = std::move(client.subscriptionsByChannel);
+    oldAdvertisedChannels = std::move(client.advertisedChannels);
+    _clients.erase(clientIt);
   }
 
+  // Unadvertise all channels this client advertised
+  for (const auto clientChannelId : oldAdvertisedChannels) {
+    _server.get_alog().write(APP, "Client " + clientName + " unadvertising channel " +
+                                    std::to_string(clientChannelId) + " due to disconnect");
+    if (_clientUnadvertiseHandler) {
+      _clientUnadvertiseHandler(clientChannelId, hdl);
+    }
+  }
+
+  _clientChannels.erase(hdl);
+
+  // Unsubscribe all channels this client subscribed to
   if (_unsubscribeHandler) {
     for (const auto& [chanId, subs] : oldSubscriptionsByChannel) {
       _unsubscribeHandler(chanId, hdl);
@@ -300,6 +397,22 @@ template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::setUnsubscribeHandler(
   SubscribeUnsubscribeHandler handler) {
   _unsubscribeHandler = std::move(handler);
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::setClientAdvertiseHandler(ClientAdvertiseHandler handler) {
+  _clientAdvertiseHandler = std::move(handler);
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::setClientUnadvertiseHandler(
+  ClientUnadvertiseHandler handler) {
+  _clientUnadvertiseHandler = std::move(handler);
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::setClientMessageHandler(ClientMessageHandler handler) {
+  _clientMessageHandler = std::move(handler);
 }
 
 template <typename ServerConfiguration>
@@ -358,7 +471,7 @@ inline void Server<ServerConfiguration>::stop() {
       for (const auto& hdl : connections) {
         if (auto con = _server.get_con_from_hdl(hdl, ec)) {
           _server.get_elog().write(RECOVERABLE,
-                                   "Terminating connection to " + con->get_remote_endpoint());
+                                   "Terminating connection to " + remoteEndpointString(hdl));
           con->terminate(ec);
         }
       }
@@ -449,52 +562,72 @@ inline void Server<ServerConfiguration>::sendBinary(ConnHandle hdl,
 }
 
 template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePtr msg) {
-  std::error_code ec;
-  auto con = _server.get_con_from_hdl(hdl, ec);
-  if (!con) {
-    _server.get_elog().write(RECOVERABLE, "get_con_from_hdl failed in handleMessage");
-    return;
-  }
+inline void Server<ServerConfiguration>::sendStatus(ConnHandle clientHandle,
+                                                    const StatusLevel level,
+                                                    const std::string& message) {
+  const std::string endpoint = remoteEndpointString(clientHandle);
+  const std::string logMessage =
+    "sendStatus(" + endpoint + ", " + StatusLevelToString(level) + ", " + message + ")";
+  _server.get_elog().write(RECOVERABLE, logMessage);
+  sendJson(clientHandle, json{
+                           {"op", "status"},
+                           {"level", static_cast<uint8_t>(level)},
+                           {"message", message},
+                         });
+}
 
-  const std::string remoteEndpoint = con->get_remote_endpoint();
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePtr msg) {
+  const OpCode op = msg->get_opcode();
 
   try {
-    std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
-    auto& clientInfo = _clients.at(hdl);
+    switch (op) {
+      case OpCode::TEXT: {
+        handleTextMessage(hdl, msg->get_payload());
+      } break;
+      case OpCode::BINARY: {
+        const auto& payload = msg->get_payload();
+        handleBinaryMessage(hdl, reinterpret_cast<const uint8_t*>(payload.data()), payload.size());
+      } break;
+      default:
+        break;
+    }
+  } catch (std::exception const& ex) {
+    sendStatus(hdl, StatusLevel::ERROR, std::string{"Error parsing message: "} + ex.what());
+  }
+}
 
-    const auto findSubscriptionBySubId = [&clientInfo](SubscriptionId subId) {
-      return std::find_if(clientInfo.subscriptionsByChannel.begin(),
-                          clientInfo.subscriptionsByChannel.end(), [&subId](const auto& mo) {
-                            return mo.second == subId;
-                          });
-    };
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const std::string& msg) {
+  const json payload = json::parse(msg);
+  const std::string& op = payload.at("op").get<std::string>();
 
-    const auto& payloadStr = msg->get_payload();
-    const json payload = json::parse(payloadStr);
-    const std::string& op = payload.at("op").get<std::string>();
+  std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
+  auto& clientInfo = _clients.at(hdl);
 
-    if (op == "subscribe") {
+  const auto findSubscriptionBySubId = [&clientInfo](SubscriptionId subId) {
+    return std::find_if(clientInfo.subscriptionsByChannel.begin(),
+                        clientInfo.subscriptionsByChannel.end(), [&subId](const auto& mo) {
+                          return mo.second == subId;
+                        });
+  };
+
+  switch (Integer(op.c_str())) {
+    case Integer("subscribe"): {
       for (const auto& sub : payload.at("subscriptions")) {
         SubscriptionId subId = sub.at("id");
         ChannelId channelId = sub.at("channelId");
         if (findSubscriptionBySubId(subId) != clientInfo.subscriptionsByChannel.end()) {
-          sendJson(hdl, json{
-                          {"op", "status"},
-                          {"level", static_cast<uint8_t>(StatusLevel::ERROR)},
-                          {"message", "Client subscription id " + std::to_string(subId) +
-                                        " was already used; ignoring subscription"},
-                        });
+          sendStatus(hdl, StatusLevel::ERROR,
+                     "Client subscription id " + std::to_string(subId) +
+                       " was already used; ignoring subscription");
           continue;
         }
         const auto& channelIt = _channels.find(channelId);
         if (channelIt == _channels.end()) {
-          sendJson(hdl, json{
-                          {"op", "status"},
-                          {"level", static_cast<uint8_t>(StatusLevel::WARNING)},
-                          {"message", "Channel " + std::to_string(channelId) +
-                                        " is not available; ignoring subscription"},
-                        });
+          sendStatus(
+            hdl, StatusLevel::WARNING,
+            "Channel " + std::to_string(channelId) + " is not available; ignoring subscription");
           continue;
         }
         clientInfo.subscriptionsByChannel.emplace(channelId, subId);
@@ -502,17 +635,15 @@ inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePt
           _subscribeHandler(channelId, hdl);
         }
       }
-    } else if (op == "unsubscribe") {
+    } break;
+    case Integer("unsubscribe"): {
       for (const auto& subIdJson : payload.at("subscriptionIds")) {
         SubscriptionId subId = subIdJson;
         const auto& sub = findSubscriptionBySubId(subId);
         if (sub == clientInfo.subscriptionsByChannel.end()) {
-          sendJson(hdl, json{
-                          {"op", "status"},
-                          {"level", static_cast<uint8_t>(StatusLevel::WARNING)},
-                          {"message", "Client subscription id " + std::to_string(subId) +
-                                        " did not exist; ignoring unsubscription"},
-                        });
+          sendStatus(hdl, StatusLevel::WARNING,
+                     "Client subscription id " + std::to_string(subId) +
+                       " did not exist; ignoring unsubscription");
           continue;
         }
         ChannelId chanId = sub->first;
@@ -521,19 +652,108 @@ inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePt
           _unsubscribeHandler(chanId, hdl);
         }
       }
+    } break;
+    case Integer("advertise"): {
+      auto [clientPublicationsIt, isFirstPublication] =
+        _clientChannels.emplace(hdl, std::unordered_map<ClientChannelId, ClientAdvertisement>());
 
-    } else {
-      _server.get_elog().write(RECOVERABLE, "Unrecognized client opcode: " + op);
-      sendJson(hdl, {
-                      {"op", "status"},
-                      {"level", static_cast<uint8_t>(StatusLevel::ERROR)},
-                      {"message", "Unrecognized opcode " + op},
-                    });
-    }
-  } catch (std::exception const& ex) {
-    _server.get_elog().write(RECOVERABLE,
-                             "Error parsing message from " + remoteEndpoint + ": " + ex.what());
+      auto& clientPublications = clientPublicationsIt->second;
+
+      for (const auto& chan : payload.at("channels")) {
+        ClientChannelId channelId = chan.at("id");
+        if (!isFirstPublication && clientPublications.find(channelId) != clientPublications.end()) {
+          sendStatus(hdl, StatusLevel::ERROR,
+                     "Channel " + std::to_string(channelId) + " was already advertised");
+          continue;
+        }
+        ClientAdvertisement advertisement{};
+        advertisement.channelId = channelId;
+        advertisement.topic = chan.at("topic").get<std::string>();
+        advertisement.encoding = chan.at("encoding").get<std::string>();
+        advertisement.schemaName = chan.at("schemaName").get<std::string>();
+        clientPublications.emplace(channelId, advertisement);
+        clientInfo.advertisedChannels.emplace(channelId);
+        if (_clientAdvertiseHandler) {
+          _clientAdvertiseHandler(advertisement, hdl);
+        }
+      }
+    } break;
+    case Integer("unadvertise"): {
+      auto clientPublicationsIt = _clientChannels.find(hdl);
+      if (clientPublicationsIt == _clientChannels.end()) {
+        sendStatus(hdl, StatusLevel::ERROR, "Client has no advertised channels");
+        break;
+      }
+
+      auto& clientPublications = clientPublicationsIt->second;
+
+      for (const auto& chanIdJson : payload.at("channelIds")) {
+        ClientChannelId channelId = chanIdJson.get<ClientChannelId>();
+        const auto& channelIt = clientPublications.find(channelId);
+        if (channelIt == clientPublications.end()) {
+          continue;
+        }
+        clientPublications.erase(channelIt);
+        if (_clientUnadvertiseHandler) {
+          _clientUnadvertiseHandler(channelId, hdl);
+        }
+      }
+    } break;
+    default: {
+      sendStatus(hdl, StatusLevel::ERROR, "Unrecognized client opcode \"" + op + "\"");
+    } break;
+  }
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, const uint8_t* msg,
+                                                             size_t length) {
+  const uint64_t timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                               std::chrono::high_resolution_clock::now().time_since_epoch())
+                               .count();
+
+  if (length < 1) {
+    sendStatus(hdl, StatusLevel::ERROR, "Received an empty binary message");
     return;
+  }
+
+  std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
+
+  auto clientPublicationsIt = _clientChannels.find(hdl);
+  if (clientPublicationsIt == _clientChannels.end()) {
+    sendStatus(hdl, StatusLevel::ERROR, "Client has no advertised channels");
+    return;
+  }
+
+  auto& clientPublications = clientPublicationsIt->second;
+
+  const auto op = static_cast<ClientBinaryOpcode>(msg[0]);
+  switch (op) {
+    case ClientBinaryOpcode::MESSAGE_DATA: {
+      if (length < 5) {
+        sendStatus(hdl, StatusLevel::ERROR, "Invalid message length " + std::to_string(length));
+        return;
+      }
+      const ClientChannelId channelId = *reinterpret_cast<const ClientChannelId*>(msg + 1);
+      const auto& channelIt = clientPublications.find(channelId);
+      if (channelIt == clientPublications.end()) {
+        sendStatus(hdl, StatusLevel::ERROR,
+                   "Channel " + std::to_string(channelId) + " is not advertised");
+        return;
+      }
+
+      if (_clientMessageHandler) {
+        const auto& advertisement = channelIt->second;
+        const uint32_t sequence = 0;
+        const ClientMessage clientMessage{timestamp,     timestamp, sequence,
+                                          advertisement, length,    msg};
+        _clientMessageHandler(clientMessage, hdl);
+      }
+    } break;
+    default: {
+      sendStatus(hdl, StatusLevel::ERROR,
+                 "Unrecognized client opcode " + std::to_string(uint8_t(op)));
+    } break;
   }
 }
 
@@ -637,6 +857,13 @@ inline std::optional<asio::ip::tcp::endpoint> Server<ServerConfiguration>::local
     return std::nullopt;
   }
   return endpoint;
+}
+
+template <typename ServerConfiguration>
+inline std::string Server<ServerConfiguration>::remoteEndpointString(ConnHandle clientHandle) {
+  std::error_code ec;
+  const auto con = _server.get_con_from_hdl(clientHandle, ec);
+  return con ? con->get_remote_endpoint() : "(unknown)";
 }
 
 template <>
