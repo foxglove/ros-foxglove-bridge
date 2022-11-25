@@ -35,6 +35,7 @@ int main(int argc, char* argv[]) {
   auto componentFactory = componentManager.create_component_factory(componentResources.front());
   auto node = componentFactory->create_node_instance(rclcpp::NodeOptions());
 
+  executor->add_node(node.get_node_base_interface());
   executor->spin();
   rclcpp::shutdown();
 
