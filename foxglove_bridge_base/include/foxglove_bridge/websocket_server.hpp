@@ -314,6 +314,7 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
 
   json channels;
   for (const auto& [id, channel] : _channels) {
+    (void)id;
     channels.push_back(channel);
   }
   sendJson(hdl, {
@@ -359,6 +360,7 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
   // Unsubscribe all channels this client subscribed to
   if (_unsubscribeHandler) {
     for (const auto& [chanId, subs] : oldSubscriptionsByChannel) {
+      (void)subs;
       _unsubscribeHandler(chanId, hdl);
     }
   }
@@ -414,6 +416,7 @@ inline void Server<ServerConfiguration>::stop() {
     std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
     connections.reserve(_clients.size());
     for (const auto& [hdl, client] : _clients) {
+      (void)client;
       if (auto connection = _server.get_con_from_hdl(hdl, ec)) {
         connections.push_back(connection);
       }
@@ -765,11 +768,13 @@ inline void Server<ServerConfiguration>::broadcastChannels() {
 
   json channels;
   for (const auto& [id, channel] : _channels) {
+    (void)id;
     channels.push_back(channel);
   }
   std::string msg = json{{"op", "advertise"}, {"channels", std::move(channels)}}.dump();
 
   for (const auto& [hdl, clientInfo] : _clients) {
+    (void)clientInfo;
     sendJsonRaw(hdl, msg);
   }
 }
