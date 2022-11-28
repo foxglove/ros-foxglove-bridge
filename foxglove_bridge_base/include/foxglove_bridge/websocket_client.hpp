@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <future>
 #include <shared_mutex>
 #include <utility>
 #include <vector>
@@ -22,9 +23,9 @@ using OpCode = websocketpp::frame::opcode::value;
 class ClientInterface {
 public:
   virtual void connect(
-    const std::string& uri,
-    std::function<void(websocketpp::connection_hdl)> onOpenHandler = nullptr,
+    const std::string& uri, std::function<void(websocketpp::connection_hdl)> onOpenHandler,
     std::function<void(websocketpp::connection_hdl)> onCloseHandler = nullptr) = 0;
+  virtual std::future<void> connect(const std::string& uri) = 0;
   virtual void close() = 0;
 
   virtual void subscribe(
@@ -59,12 +60,13 @@ public:
   }
 
   virtual ~Client() {
+    close();
     _endpoint.stop_perpetual();
     _thread->join();
   }
 
   void connect(const std::string& uri,
-               std::function<void(websocketpp::connection_hdl)> onOpenHandler = nullptr,
+               std::function<void(websocketpp::connection_hdl)> onOpenHandler,
                std::function<void(websocketpp::connection_hdl)> onCloseHandler = nullptr) override {
     std::unique_lock<std::shared_mutex> lock(_mutex);
 
@@ -84,6 +86,17 @@ public:
 
     _con->add_subprotocol(SUPPORTED_SUBPROTOCOL);
     _endpoint.connect(_con);
+  }
+
+  std::future<void> connect(const std::string& uri) override {
+    auto promise = std::make_shared<std::promise<void>>();
+    auto future = promise->get_future();
+
+    connect(uri, [p = std::move(promise)](websocketpp::connection_hdl) mutable {
+      p->set_value();
+    });
+
+    return future;
   }
 
   void close() override {
@@ -121,7 +134,7 @@ public:
 
   void subscribe(const std::vector<std::pair<SubscriptionId, ChannelId>>& subscriptions) override {
     nlohmann::json subscriptionsJson;
-    for (const auto [channelId, subId] : subscriptions) {
+    for (const auto [subId, channelId] : subscriptions) {
       subscriptionsJson.push_back({{"id", subId}, {"channelId", channelId}});
     }
 
