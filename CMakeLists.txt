@@ -145,10 +145,9 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
 
     add_rostest_gtest(smoke_test ros1_foxglove_bridge/tests/smoke.test ros1_foxglove_bridge/tests/smoke_test.cpp)
     target_include_directories(smoke_test SYSTEM PRIVATE
-      PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
-        ${catkin_INCLUDE_DIRS}
-        $<INSTALL_INTERFACE:include>
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
+      ${catkin_INCLUDE_DIRS}
+      $<INSTALL_INTERFACE:include>
     )
     target_link_libraries(smoke_test ${catkin_LIBRARIES})
   endif()
