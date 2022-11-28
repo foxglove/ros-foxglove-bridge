@@ -137,13 +137,20 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
   if (CATKIN_ENABLE_TESTING)
     message(STATUS "Building tests with catkin")
 
-    find_package(catkin REQUIRED COMPONENTS rostest)
     find_package(GTest REQUIRED)
+    find_package(rostest REQUIRED)
 
     catkin_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
     target_link_libraries(version_test foxglove_bridge_base GTest::GTest GTest::Main)
 
-    add_rostest(ros1_foxglove_bridge/tests/smoke.test)
+    add_rostest_gtest(smoke_test ros1_foxglove_bridge/tests/smoke.test ros1_foxglove_bridge/tests/smoke_test.cpp)
+    target_include_directories(smoke_test SYSTEM PRIVATE
+      PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
+        ${catkin_INCLUDE_DIRS}
+        $<INSTALL_INTERFACE:include>
+    )
+    target_link_libraries(smoke_test ${catkin_LIBRARIES})
   endif()
 elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
   if(BUILD_TESTING)
