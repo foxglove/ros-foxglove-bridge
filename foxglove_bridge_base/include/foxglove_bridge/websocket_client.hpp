@@ -46,21 +46,21 @@ public:
   using ConnectionPtr = typename ClientType::connection_ptr;
 
   Client() {
-    m_endpoint.clear_access_channels(websocketpp::log::alevel::all);
-    m_endpoint.clear_error_channels(websocketpp::log::elevel::all);
+    _endpoint.clear_access_channels(websocketpp::log::alevel::all);
+    _endpoint.clear_error_channels(websocketpp::log::elevel::all);
 
-    m_endpoint.init_asio();
-    m_endpoint.start_perpetual();
+    _endpoint.init_asio();
+    _endpoint.start_perpetual();
 
-    m_endpoint.set_message_handler(
+    _endpoint.set_message_handler(
       bind(&Client::on_message, this, std::placeholders::_1, std::placeholders::_2));
 
-    m_thread.reset(new websocketpp::lib::thread(&ClientType::run, &m_endpoint));
+    _thread.reset(new websocketpp::lib::thread(&ClientType::run, &_endpoint));
   }
 
   virtual ~Client() {
-    m_endpoint.stop_perpetual();
-    m_thread->join();
+    _endpoint.stop_perpetual();
+    _thread->join();
   }
 
   void connect(const std::string& uri,
@@ -69,7 +69,7 @@ public:
     std::unique_lock<std::shared_mutex> lock(_mutex);
 
     websocketpp::lib::error_code ec;
-    _con = m_endpoint.get_connection(uri, ec);
+    _con = _endpoint.get_connection(uri, ec);
 
     if (ec) {
       throw std::runtime_error("Failed to get connection from URI " + uri);
@@ -83,7 +83,7 @@ public:
     }
 
     _con->add_subprotocol(SUPPORTED_SUBPROTOCOL);
-    m_endpoint.connect(_con);
+    _endpoint.connect(_con);
   }
 
   void close() override {
@@ -92,7 +92,7 @@ public:
       return;  // Already disconnected
     }
 
-    m_endpoint.close(_con, websocketpp::close::status::going_away, "");
+    _endpoint.close(_con, websocketpp::close::status::going_away, "");
     _con.reset();
   }
 
@@ -167,17 +167,17 @@ public:
 
   void sendText(const std::string& payload) {
     std::shared_lock<std::shared_mutex> lock(_mutex);
-    m_endpoint.send(_con, payload, OpCode::TEXT);
+    _endpoint.send(_con, payload, OpCode::TEXT);
   }
 
   void sendBinary(const uint8_t* data, size_t dataLength) {
     std::shared_lock<std::shared_mutex> lock(_mutex);
-    m_endpoint.send(_con, data, dataLength, OpCode::BINARY);
+    _endpoint.send(_con, data, dataLength, OpCode::BINARY);
   }
 
 protected:
-  ClientType m_endpoint;
-  websocketpp::lib::shared_ptr<websocketpp::lib::thread> m_thread;
+  ClientType _endpoint;
+  websocketpp::lib::shared_ptr<websocketpp::lib::thread> _thread;
   ConnectionPtr _con;
   std::shared_mutex _mutex;
   TextMessageHandler _textMessageHandler;
