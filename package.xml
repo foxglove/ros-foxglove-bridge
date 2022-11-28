@@ -3,10 +3,11 @@
     <name>foxglove_bridge</name>
     <version>0.1.0</version>
     <description>ROS Foxglove Bridge</description>
-    <maintainer email="contact@foxglove.dev">Foxglove</maintainer>
     <license>MIT</license>
     <url type="website">https://github.com/foxglove/ros-foxglove-bridge</url>
     <author email="contact@foxglove.dev">Foxglove</author>
+    <maintainer email="john@foxglove.dev">John Hurliman</maintainer>
+    <maintainer email="achim@foxglove.dev">Hans-Joachim Krauch</maintainer>
 
     <buildtool_depend condition="$ROS_VERSION == 1">catkin</buildtool_depend>
     <buildtool_depend condition="$ROS_VERSION == 2">ament_cmake</buildtool_depend>
