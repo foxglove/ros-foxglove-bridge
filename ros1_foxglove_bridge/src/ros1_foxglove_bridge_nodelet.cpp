@@ -330,6 +330,7 @@ private:
     // Create a list of topics that have been removed
     std::vector<TopicAndDatatype> removedTopics;
     for (const auto& [topic, channel] : _advertisedTopics) {
+      (void)channel;
       if (latestTopics.find(topic) == latestTopics.end()) {
         removedTopics.push_back(topic);
       }
