@@ -24,7 +24,7 @@
     <depend condition="$ROS_VERSION == 2">rclcpp_components</depend>
 
     <!-- Test dependencies -->
-    <test_depend condition="$ROS_VERSION == 1">libgtest-dev</test_depend>
+    <test_depend condition="$ROS_VERSION == 1">gtest</test_depend>
     <test_depend condition="$ROS_VERSION == 1">rostest</test_depend>
     <test_depend condition="$ROS_VERSION == 1">rosunit</test_depend>
     <test_depend condition="$ROS_VERSION == 1">geometry_msgs</test_depend>
