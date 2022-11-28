@@ -15,6 +15,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "common.hpp"
 #include "serialization.hpp"
 #include "websocket_logging.hpp"
 #include "websocket_notls.hpp"
@@ -26,10 +27,6 @@ using json = nlohmann::json;
 
 using ConnHandle = websocketpp::connection_hdl;
 using OpCode = websocketpp::frame::opcode::value;
-
-using ChannelId = uint32_t;
-using ClientChannelId = uint32_t;
-using SubscriptionId = uint32_t;
 
 static const websocketpp::log::level APP = websocketpp::log::alevel::app;
 static const websocketpp::log::level RECOVERABLE = websocketpp::log::elevel::rerror;
@@ -72,14 +69,6 @@ struct Channel : ChannelWithoutId {
   }
 };
 
-struct ClientAdvertisement {
-  ChannelId channelId;
-  std::string topic;
-  std::string encoding;
-  std::string schemaName;
-  std::vector<uint8_t> schema;
-};
-
 struct ClientMessage {
   uint64_t logTime;
   uint64_t publishTime;
@@ -105,14 +94,6 @@ struct ClientMessage {
   std::size_t getLength() const {
     return dataLength - MSG_PAYLOAD_OFFSET;
   }
-};
-
-enum class BinaryOpcode : uint8_t {
-  MESSAGE_DATA = 1,
-};
-
-enum class ClientBinaryOpcode : uint8_t {
-  MESSAGE_DATA = 1,
 };
 
 enum class StatusLevel : uint8_t {
@@ -178,7 +159,6 @@ public:
   using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
   using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
 
-  static const std::string SUPPORTED_SUBPROTOCOL;
   static bool USES_TLS;
 
   explicit Server(std::string name, LogCallback logger, const std::string& certfile = "",
@@ -257,10 +237,6 @@ private:
   void sendBinary(ConnHandle hdl, const std::vector<uint8_t>& payload);
   void sendStatus(ConnHandle clientHandle, const StatusLevel level, const std::string& message);
 };
-
-template <typename ServerConfiguration>
-inline const std::string Server<ServerConfiguration>::SUPPORTED_SUBPROTOCOL =
-  "foxglove.websocket.v1";
 
 template <typename ServerConfiguration>
 inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger,
