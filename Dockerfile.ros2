@@ -36,7 +36,7 @@ SHELL [ "/bin/bash" , "-c" ]
 # Build the ROS 2 workspace and ensure it's sourced when a container is run
 RUN source /opt/ros/$ROS_DISTRIBUTION/setup.bash \
   && cd /ros2_ws \
-  && colcon build
+  && colcon build --event-handlers console_direct+
 RUN echo "source /ros2_ws/install/setup.bash" >> ~/.bashrc
 
 # Set the working folder at startup
