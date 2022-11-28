@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - uses: satackey/action-docker-layer-caching@v0.0.11
+      - uses: jpribyl/action-docker-layer-caching@v0.1.0
         continue-on-error: true
       - run: make lint
 
@@ -35,6 +35,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - uses: satackey/action-docker-layer-caching@v0.0.11
+      - uses: jpribyl/action-docker-layer-caching@v0.1.0
         continue-on-error: true
       - run: make ${{ matrix.ros_distribution }}-test
