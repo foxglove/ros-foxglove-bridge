@@ -138,6 +138,7 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
     message(STATUS "Building tests with catkin")
 
     find_package(catkin REQUIRED COMPONENTS rostest)
+    find_package(GTest)
 
     catkin_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
     target_link_libraries(version_test foxglove_bridge_base)
