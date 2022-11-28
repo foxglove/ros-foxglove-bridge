@@ -137,6 +137,7 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
   if (CATKIN_ENABLE_TESTING)
     message(STATUS "Building tests with catkin")
 
+    find_package(catkin REQUIRED COMPONENTS roscpp std_msgs)
     find_package(GTest REQUIRED)
     find_package(rostest REQUIRED)
 
@@ -149,7 +150,7 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
       ${catkin_INCLUDE_DIRS}
       $<INSTALL_INTERFACE:include>
     )
-    target_link_libraries(smoke_test ${catkin_LIBRARIES})
+    target_link_libraries(smoke_test foxglove_bridge_base ${catkin_LIBRARIES})
   endif()
 elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
   if(BUILD_TESTING)

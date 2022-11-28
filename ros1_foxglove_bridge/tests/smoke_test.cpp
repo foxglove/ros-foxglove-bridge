@@ -83,22 +83,23 @@ TEST(SmokeTest, testPublishing) {
   advertisement.encoding = "ros1";
   advertisement.schemaName = "std_msgs/String";
 
+  // Set up a ROS node with a subscriber
   ros::NodeHandle nh;
   std::promise<std::string> msgPromise;
   auto msgFuture = msgPromise.get_future();
   auto subscriber = nh.subscribe<std_msgs::String>(
     advertisement.topic, 10, [&msgPromise](const std_msgs::String::ConstPtr& msg) {
-      ROS_INFO_STREAM("DATA: " << msg->data);
       msgPromise.set_value(msg->data);
     });
 
+  // Set up the client, advertise and publish the binary message
   ASSERT_EQ(std::future_status::ready, wsClient.connect(URI).wait_for(std::chrono::seconds(5)));
-
   wsClient.advertise({advertisement});
   std::this_thread::sleep_for(std::chrono::seconds(1));
   wsClient.publish(advertisement.channelId, HELLO_WORLD_BINARY, sizeof(HELLO_WORLD_BINARY));
   wsClient.unadvertise({advertisement.channelId});
 
+  // Ensure that we have received the correct message via our ROS subscriber
   const auto msgResult = msgFuture.wait_for(std::chrono::seconds(1));
   ASSERT_EQ(std::future_status::ready, msgResult);
   EXPECT_EQ("hello world", msgFuture.get());
