@@ -13,7 +13,7 @@
 
 constexpr char URI[] = "ws://localhost:8765";
 
-// Binary representation of std_msgs/String for "hello world"
+// Binary representation of std_msgs/msg/String for "hello world"
 constexpr uint8_t HELLO_WORLD_BINARY[] = {0,   1,   0,   0,  12,  0,   0,   0,   104, 101,
                                           108, 108, 111, 32, 119, 111, 114, 108, 100, 0};
 

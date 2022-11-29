@@ -134,7 +134,7 @@ public:
 
   void subscribe(const std::vector<std::pair<SubscriptionId, ChannelId>>& subscriptions) override {
     nlohmann::json subscriptionsJson;
-    for (const auto [subId, channelId] : subscriptions) {
+    for (const auto& [subId, channelId] : subscriptions) {
       subscriptionsJson.push_back({{"id", subId}, {"channelId", channelId}});
     }
 
