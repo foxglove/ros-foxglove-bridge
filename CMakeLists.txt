@@ -138,11 +138,13 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
     message(STATUS "Building tests with catkin")
 
     find_package(catkin REQUIRED COMPONENTS roscpp std_msgs)
-    find_package(GTest REQUIRED)
+    if(NOT "$ENV{ROS_DISTRO}" STREQUAL "melodic")
+      find_package(GTest REQUIRED)
+    endif()
     find_package(rostest REQUIRED)
 
     catkin_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
-    target_link_libraries(version_test foxglove_bridge_base GTest::GTest GTest::Main)
+    target_link_libraries(version_test foxglove_bridge_base)
 
     add_rostest_gtest(smoke_test ros1_foxglove_bridge/tests/smoke.test ros1_foxglove_bridge/tests/smoke_test.cpp)
     target_include_directories(smoke_test SYSTEM PRIVATE
@@ -156,12 +158,12 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
   if(BUILD_TESTING)
     message(STATUS "Building tests with ament_cmake")
 
+    find_package(ament_cmake_gtest REQUIRED)
     find_package(ament_lint_auto REQUIRED)
-    find_package(GTest REQUIRED)
     ament_lint_auto_find_test_dependencies()
 
     ament_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
-    target_link_libraries(version_test foxglove_bridge_base GTest::GTest GTest::Main)
+    target_link_libraries(version_test foxglove_bridge_base)
   endif()
 endif()
 
