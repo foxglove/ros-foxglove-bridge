@@ -35,6 +35,7 @@
     <build_depend>libssl-dev</build_depend>
     <build_depend>libwebsocketpp-dev</build_depend>
     <build_depend>nlohmann-json-dev</build_depend>
+    <build_depend>ros_environment</build_depend>
 
     <exec_depend>openssl</exec_depend>
 
