@@ -3,7 +3,7 @@
 #include <functional>
 
 #include <asio/ip/address.hpp>
-#include <websocketpp/logger/basic.hpp>
+#include <websocketpp/logger/levels.hpp>
 
 namespace foxglove {
 
@@ -26,24 +26,38 @@ inline std::string IPAddressToString(const asio::ip::address& addr) {
 
 inline void NoOpLogCallback(WebSocketLogLevel, char const*) {}
 
-template <typename concurrency, typename names>
-class CallbackLogger : public websocketpp::log::basic<concurrency, names> {
+class CallbackLogger {
 public:
   using channel_type_hint = websocketpp::log::channel_type_hint;
 
   CallbackLogger(channel_type_hint::value hint = channel_type_hint::access)
-      : websocketpp::log::basic<concurrency, names>(hint)
+      : _staticChannels(0xffffffff)
+      , _dynamicChannels(0)
       , _channelTypeHint(hint)
       , _callback(NoOpLogCallback) {}
 
   CallbackLogger(websocketpp::log::level channels,
                  channel_type_hint::value hint = channel_type_hint::access)
-      : websocketpp::log::basic<concurrency, names>(channels, hint)
+      : _staticChannels(channels)
+      , _dynamicChannels(0)
       , _channelTypeHint(hint)
       , _callback(NoOpLogCallback) {}
 
   void set_callback(LogCallback callback) {
     _callback = callback;
+  }
+
+  void set_channels(websocketpp::log::level channels) {
+    if (channels == 0) {
+      clear_channels(0xffffffff);
+      return;
+    }
+
+    _dynamicChannels |= (channels & _staticChannels);
+  }
+
+  void clear_channels(websocketpp::log::level channels) {
+    _dynamicChannels &= ~channels;
   }
 
   void write(websocketpp::log::level channel, std::string const& msg) {
@@ -74,7 +88,17 @@ public:
     }
   }
 
+  constexpr bool static_test(websocketpp::log::level channel) const {
+    return ((channel & _staticChannels) != 0);
+  }
+
+  bool dynamic_test(websocketpp::log::level channel) {
+    return ((channel & _dynamicChannels) != 0);
+  }
+
 private:
+  websocketpp::log::level const _staticChannels;
+  websocketpp::log::level _dynamicChannels;
   channel_type_hint::value _channelTypeHint;
   LogCallback _callback;
 };

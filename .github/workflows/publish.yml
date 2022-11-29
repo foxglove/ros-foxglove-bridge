@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: satackey/action-docker-layer-caching@v0.0.11
+      - uses: jpribyl/action-docker-layer-caching@v0.1.0
         continue-on-error: true
 
       - name: Login to GitHub Container Registry
@@ -73,7 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: satackey/action-docker-layer-caching@v0.0.11
+      - uses: jpribyl/action-docker-layer-caching@v0.1.0
         continue-on-error: true
 
       - name: Login to GitHub Container Registry
