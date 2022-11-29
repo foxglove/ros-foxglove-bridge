@@ -19,12 +19,6 @@ COPY foxglove_bridge_base /ros1_ws/src/ros-foxglove-bridge/foxglove_bridge_base
 COPY nodelets.xml /ros1_ws/src/ros-foxglove-bridge/nodelets.xml
 COPY ros1_foxglove_bridge /ros1_ws/src/ros-foxglove-bridge/ros1_foxglove_bridge
 
-# Build and install gtest.
-RUN cd /usr/src/gtest \
-  && cmake CMakeLists.txt \
-  && make \
-  && cp ./*.a /usr/lib || true
-
 # Build the Catkin workspace and ensure it's sourced when a container is run
 RUN . /opt/ros/$ROS_DISTRIBUTION/setup.sh \
   && cd /ros1_ws \

@@ -60,7 +60,7 @@ SHELL ["/bin/bash", "-c"]
 # Unset the ROS_DISTRO and add aliases to .bashrc
 RUN echo $'\
 unset ROS_DISTRO\n\
-alias ros2_build_debug="colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Debug"\n\
-alias ros2_build_release="colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo"\n\
+alias ros2_build_debug="colcon build --event-handlers console_direct+ --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Debug"\n\
+alias ros2_build_release="colcon build --event-handlers console_direct+ --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo"\n\
 alias ros2_foxglove_bridge="source /ros_ws/install/setup.bash && ros2 run foxglove_bridge foxglove_bridge --ros-args --log-level debug --log-level rcl:=INFO"\n\
 ' >> ~/.bashrc

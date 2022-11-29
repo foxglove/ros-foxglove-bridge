@@ -9,3 +9,8 @@ TEST(VersionTest, TestWebSocketVersion) {
   const std::string version = foxglove::WebSocketUserAgent();
   EXPECT_EQ(version.substr(0, 14), "WebSocket++/0.");
 }
+
+int main(int argc, char** argv) {
+  testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}
