@@ -15,6 +15,7 @@
 
 constexpr uint16_t DEFAULT_PORT = 8765;
 constexpr char DEFAULT_ADDRESS[] = "0.0.0.0";
+constexpr int DEFAULT_MAX_UPDATE_MS = 5000;
 constexpr size_t DEFAULT_MAX_QOS_DEPTH = 10;
 
 using namespace std::chrono_literals;
@@ -56,6 +57,20 @@ public:
     addressDescription.description = "The host address to bind the WebSocket server to";
     addressDescription.read_only = true;
     this->declare_parameter("address", DEFAULT_ADDRESS, addressDescription);
+
+    auto maxUpdateDescription = rcl_interfaces::msg::ParameterDescriptor{};
+    maxUpdateDescription.name = "max_update_ms";
+    maxUpdateDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+    maxUpdateDescription.description =
+      "The maximum time in milliseconds between refreshing the list of known topics, services, "
+      "actions, and parameters";
+    maxUpdateDescription.read_only = true;
+    maxUpdateDescription.additional_constraints = "Must be a positive integer";
+    maxUpdateDescription.integer_range.resize(1);
+    maxUpdateDescription.integer_range[0].from_value = 1;
+    maxUpdateDescription.integer_range[0].to_value = INT32_MAX;
+    maxUpdateDescription.integer_range[0].step = 1;
+    this->declare_parameter("max_update_ms", DEFAULT_MAX_UPDATE_MS, maxUpdateDescription);
 
     auto useTlsDescription = rcl_interfaces::msg::ParameterDescriptor{};
     useTlsDescription.name = "tls";
@@ -124,41 +139,24 @@ public:
       this->set_parameter(rclcpp::Parameter{"port", listeningPort});
     }
 
-    // Start the thread polling for rosgraph changes
-    _rosgraphPollThread =
-      std::make_unique<std::thread>(std::bind(&FoxgloveBridge::rosgraphPollThread, this));
+    _maxUpdateMs = size_t(this->get_parameter("max_update_ms").as_int());
+    _updateTimer =
+      this->create_wall_timer(1ms, std::bind(&FoxgloveBridge::updateAdvertisedTopics, this));
 
     _maxQosDepth = this->get_parameter("max_qos_depth").as_int();
   }
 
   ~FoxgloveBridge() {
     RCLCPP_INFO(this->get_logger(), "Shutting down %s", this->get_name());
-    if (_rosgraphPollThread) {
-      _rosgraphPollThread->join();
+    if (_updateTimer) {
+      _updateTimer.reset();
     }
     _server->stop();
     RCLCPP_INFO(this->get_logger(), "Shutdown complete");
   }
 
-  void rosgraphPollThread() {
-    updateAdvertisedTopics();
-
-    auto graphEvent = this->get_graph_event();
-    while (rclcpp::ok()) {
-      this->wait_for_graph_change(graphEvent, 200ms);
-      bool triggered = graphEvent->check_and_clear();
-      if (triggered) {
-        RCLCPP_DEBUG(this->get_logger(), "rosgraph change detected");
-        updateAdvertisedTopics();
-        // Graph changes tend to come in batches, so wait a bit before checking again
-        std::this_thread::sleep_for(500ms);
-      }
-    }
-
-    RCLCPP_DEBUG(this->get_logger(), "rosgraph polling thread exiting");
-  }
-
   void updateAdvertisedTopics() {
+    _updateTimer.reset();
     if (!rclcpp::ok()) {
       return;
     }
@@ -277,6 +275,13 @@ public:
     if (newTopics.size() > 0) {
       _server->broadcastChannels();
     }
+
+    // Schedule the next update using truncated exponential backoff, up to `_maxUpdateMs`
+    _updateCount++;
+    auto nextUpdateMs =
+      std::chrono::milliseconds(std::min(size_t(1) << _updateCount, _maxUpdateMs));
+    _updateTimer = this->create_wall_timer(
+      nextUpdateMs, std::bind(&FoxgloveBridge::updateAdvertisedTopics, this));
   }
 
 private:
@@ -295,7 +300,9 @@ private:
   PublicationsByClient _clientAdvertisedTopics;
   std::mutex _subscriptionsMutex;
   std::mutex _clientAdvertisementsMutex;
-  std::unique_ptr<std::thread> _rosgraphPollThread;
+  rclcpp::TimerBase::SharedPtr _updateTimer;
+  size_t _maxUpdateMs = size_t(DEFAULT_MAX_UPDATE_MS);
+  size_t _updateCount = 0;
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
   std::atomic<uint64_t> _simTimeNs = 0;
