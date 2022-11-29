@@ -59,11 +59,13 @@ TEST(SmokeTest, testSubscription) {
     ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(std::chrono::seconds(5)));
 
     // Set up binary message handler to resolve when a binary message has been received
-    std::promise<std::pair<const uint8_t*, size_t>> msgPromise;
+    std::promise<std::vector<uint8_t>> msgPromise;
     auto msgFuture = msgPromise.get_future();
     wsClient.setBinaryMessageHandler([&msgPromise](const uint8_t* data, size_t dataLength) {
       const size_t offset = 1 + 4 + 8;
-      msgPromise.set_value({data + offset, dataLength - offset});
+      std::vector<uint8_t> dataCopy(dataLength - offset);
+      std::memcpy(dataCopy.data(), data + offset, dataLength - offset);
+      msgPromise.set_value(std::move(dataCopy));
     });
 
     // Subscribe to the channel that corresponds to the string topic
@@ -72,9 +74,9 @@ TEST(SmokeTest, testSubscription) {
 
     // Wait until we have received a binary message and test that it is the right one
     ASSERT_EQ(std::future_status::ready, msgFuture.wait_for(std::chrono::seconds(5)));
-    const auto& [data, dataLength] = msgFuture.get();
-    ASSERT_EQ(sizeof(HELLO_WORLD_BINARY), dataLength);
-    EXPECT_TRUE(std::memcmp(HELLO_WORLD_BINARY, data, dataLength));
+    const auto& msgData = msgFuture.get();
+    ASSERT_EQ(sizeof(HELLO_WORLD_BINARY), msgData.size());
+    EXPECT_EQ(0, std::memcmp(HELLO_WORLD_BINARY, msgData.data(), msgData.size()));
   }
 }
 
