@@ -138,7 +138,9 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
     message(STATUS "Building tests with catkin")
 
     find_package(catkin REQUIRED COMPONENTS roscpp std_msgs)
-    find_package(GTest QUIET)
+    if(NOT "$ENV{ROS_DISTRO}" STREQUAL "melodic")
+      find_package(GTest REQUIRED)
+    endif()
     find_package(rostest REQUIRED)
 
     catkin_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
