@@ -76,6 +76,8 @@ target_link_libraries(foxglove_bridge_base
 )
 
 message(STATUS "ROS_VERSION: " $ENV{ROS_VERSION})
+message(STATUS "ROS_DISTRO: " $ENV{ROS_DISTRO})
+message(STATUS "ROS_ROOT: " $ENV{ROS_ROOT})
 if("$ENV{ROS_VERSION}" STREQUAL "1")
   # ROS 1
   if(CATKIN_DEVEL_PREFIX OR catkin_FOUND OR CATKIN_BUILD_BINARY_PACKAGE)
