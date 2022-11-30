@@ -68,7 +68,7 @@ Parameters are provided to configure the behavior of the bridge. These parameter
 
 ## Clients
 
-[Foxglove Studio](https://foxglove.dev/studio) connects to foxglove_bridge for live robotics visualization. There are [client libraries](https://github.com/foxglove/ws-protocol) for the Foxglove WebSocket protocol in Python, C++, and TypeScript.
+[Foxglove Studio](https://foxglove.dev/studio) connects to foxglove_bridge for live robotics visualization.
 
 ## Development
 
