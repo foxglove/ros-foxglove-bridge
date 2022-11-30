@@ -603,7 +603,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
   constexpr auto ADVERTISE = Integer("advertise");
   constexpr auto UNADVERTISE = Integer("unadvertise");
 
-  switch (Integer(op.c_str())) {
+  switch (Integer(op)) {
     case SUBSCRIBE: {
       for (const auto& sub : payload.at("subscriptions")) {
         SubscriptionId subId = sub.at("id");
