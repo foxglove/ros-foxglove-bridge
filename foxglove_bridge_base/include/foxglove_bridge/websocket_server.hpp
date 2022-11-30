@@ -97,18 +97,18 @@ struct ClientMessage {
 };
 
 enum class StatusLevel : uint8_t {
-  INFO = 0,
-  WARNING = 1,
-  ERROR = 2,
+  Info = 0,
+  Warning = 1,
+  Error = 2,
 };
 
 constexpr const char* StatusLevelToString(StatusLevel level) {
   switch (level) {
-    case StatusLevel::INFO:
+    case StatusLevel::Info:
       return "INFO";
-    case StatusLevel::WARNING:
+    case StatusLevel::Warning:
       return "WARN";
-    case StatusLevel::ERROR:
+    case StatusLevel::Error:
       return "ERROR";
     default:
       return "UNKNOWN";
@@ -570,7 +570,7 @@ inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePt
         break;
     }
   } catch (std::exception const& ex) {
-    sendStatus(hdl, StatusLevel::ERROR, std::string{"Error parsing message: "} + ex.what());
+    sendStatus(hdl, StatusLevel::Error, std::string{"Error parsing message: "} + ex.what());
   }
 }
 
@@ -595,7 +595,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         SubscriptionId subId = sub.at("id");
         ChannelId channelId = sub.at("channelId");
         if (findSubscriptionBySubId(subId) != clientInfo.subscriptionsByChannel.end()) {
-          sendStatus(hdl, StatusLevel::ERROR,
+          sendStatus(hdl, StatusLevel::Error,
                      "Client subscription id " + std::to_string(subId) +
                        " was already used; ignoring subscription");
           continue;
@@ -603,7 +603,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         const auto& channelIt = _channels.find(channelId);
         if (channelIt == _channels.end()) {
           sendStatus(
-            hdl, StatusLevel::WARNING,
+            hdl, StatusLevel::Warning,
             "Channel " + std::to_string(channelId) + " is not available; ignoring subscription");
           continue;
         }
@@ -618,7 +618,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         SubscriptionId subId = subIdJson;
         const auto& sub = findSubscriptionBySubId(subId);
         if (sub == clientInfo.subscriptionsByChannel.end()) {
-          sendStatus(hdl, StatusLevel::WARNING,
+          sendStatus(hdl, StatusLevel::Warning,
                      "Client subscription id " + std::to_string(subId) +
                        " did not exist; ignoring unsubscription");
           continue;
@@ -639,7 +639,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       for (const auto& chan : payload.at("channels")) {
         ClientChannelId channelId = chan.at("id");
         if (!isFirstPublication && clientPublications.find(channelId) != clientPublications.end()) {
-          sendStatus(hdl, StatusLevel::ERROR,
+          sendStatus(hdl, StatusLevel::Error,
                      "Channel " + std::to_string(channelId) + " was already advertised");
           continue;
         }
@@ -658,7 +658,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
     case Integer("unadvertise"): {
       auto clientPublicationsIt = _clientChannels.find(hdl);
       if (clientPublicationsIt == _clientChannels.end()) {
-        sendStatus(hdl, StatusLevel::ERROR, "Client has no advertised channels");
+        sendStatus(hdl, StatusLevel::Error, "Client has no advertised channels");
         break;
       }
 
@@ -677,7 +677,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
     } break;
     default: {
-      sendStatus(hdl, StatusLevel::ERROR, "Unrecognized client opcode \"" + op + "\"");
+      sendStatus(hdl, StatusLevel::Error, "Unrecognized client opcode \"" + op + "\"");
     } break;
   }
 }
@@ -690,7 +690,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
                                .count();
 
   if (length < 1) {
-    sendStatus(hdl, StatusLevel::ERROR, "Received an empty binary message");
+    sendStatus(hdl, StatusLevel::Error, "Received an empty binary message");
     return;
   }
 
@@ -698,7 +698,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
 
   auto clientPublicationsIt = _clientChannels.find(hdl);
   if (clientPublicationsIt == _clientChannels.end()) {
-    sendStatus(hdl, StatusLevel::ERROR, "Client has no advertised channels");
+    sendStatus(hdl, StatusLevel::Error, "Client has no advertised channels");
     return;
   }
 
@@ -708,13 +708,13 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
   switch (op) {
     case ClientBinaryOpcode::MESSAGE_DATA: {
       if (length < 5) {
-        sendStatus(hdl, StatusLevel::ERROR, "Invalid message length " + std::to_string(length));
+        sendStatus(hdl, StatusLevel::Error, "Invalid message length " + std::to_string(length));
         return;
       }
       const ClientChannelId channelId = *reinterpret_cast<const ClientChannelId*>(msg + 1);
       const auto& channelIt = clientPublications.find(channelId);
       if (channelIt == clientPublications.end()) {
-        sendStatus(hdl, StatusLevel::ERROR,
+        sendStatus(hdl, StatusLevel::Error,
                    "Channel " + std::to_string(channelId) + " is not advertised");
         return;
       }
@@ -728,7 +728,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
       }
     } break;
     default: {
-      sendStatus(hdl, StatusLevel::ERROR,
+      sendStatus(hdl, StatusLevel::Error,
                  "Unrecognized client opcode " + std::to_string(uint8_t(op)));
     } break;
   }
