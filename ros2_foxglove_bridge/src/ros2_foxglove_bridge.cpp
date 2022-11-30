@@ -124,15 +124,20 @@ public:
       this->set_parameter(rclcpp::Parameter{"port", listeningPort});
     }
 
+    _maxQosDepth = this->get_parameter("max_qos_depth").as_int();
+
     // Start the thread polling for rosgraph changes
     _rosgraphPollThread =
       std::make_unique<std::thread>(std::bind(&FoxgloveBridge::rosgraphPollThread, this));
 
-    _maxQosDepth = this->get_parameter("max_qos_depth").as_int();
+    // Start a no-op timer. This appears to be required to spin the node after multiple
+    // subscribe/unsubscribes to the same topic
+    _updateTimer = this->create_wall_timer(100ms, []() {});
   }
 
   ~FoxgloveBridge() {
     RCLCPP_INFO(this->get_logger(), "Shutting down %s", this->get_name());
+    _updateTimer.reset();
     if (_rosgraphPollThread) {
       _rosgraphPollThread->join();
     }
@@ -296,6 +301,7 @@ private:
   std::mutex _subscriptionsMutex;
   std::mutex _clientAdvertisementsMutex;
   std::unique_ptr<std::thread> _rosgraphPollThread;
+  rclcpp::TimerBase::SharedPtr _updateTimer;
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
   std::atomic<uint64_t> _simTimeNs = 0;
