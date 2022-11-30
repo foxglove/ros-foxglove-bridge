@@ -78,7 +78,7 @@ target_link_libraries(foxglove_bridge_base
 if(nlohmann_json_FOUND)
   target_link_libraries(foxglove_bridge_base nlohmann_json::nlohmann_json)
 else()
-  message("nlohmann_json not found, will search at compile time")
+  message(STATUS "nlohmann_json not found, will search at compile time")
 endif()
 
 message(STATUS "ROS_VERSION: " $ENV{ROS_VERSION})
