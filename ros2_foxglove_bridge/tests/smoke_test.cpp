@@ -54,10 +54,6 @@ TEST(SmokeTest, testSubscription) {
       }
     });
 
-    // Connect the client and wait for the channel future
-    ASSERT_EQ(std::future_status::ready, wsClient.connect(URI).wait_for(std::chrono::seconds(5)));
-    ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(std::chrono::seconds(5)));
-
     // Set up binary message handler to resolve when a binary message has been received
     std::promise<std::vector<uint8_t>> msgPromise;
     auto msgFuture = msgPromise.get_future();
@@ -67,6 +63,10 @@ TEST(SmokeTest, testSubscription) {
       std::memcpy(dataCopy.data(), data + offset, dataLength - offset);
       msgPromise.set_value(std::move(dataCopy));
     });
+
+    // Connect the client and wait for the channel future
+    ASSERT_EQ(std::future_status::ready, wsClient.connect(URI).wait_for(std::chrono::seconds(5)));
+    ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(std::chrono::seconds(5)));
 
     // Subscribe to the channel that corresponds to the string topic
     const auto channelId = channelFuture.get().at("id").get<foxglove::ChannelId>();
