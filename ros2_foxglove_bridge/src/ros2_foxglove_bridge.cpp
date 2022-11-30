@@ -88,8 +88,7 @@ public:
     maxQosDepthDescription.integer_range[0].from_value = 0;
     maxQosDepthDescription.integer_range[0].to_value = INT32_MAX;
     maxQosDepthDescription.integer_range[0].step = 1;
-    this->declare_parameter("max_qos_depth", static_cast<int>(DEFAULT_MAX_QOS_DEPTH),
-                            maxQosDepthDescription);
+    this->declare_parameter("max_qos_depth", int(DEFAULT_MAX_QOS_DEPTH), maxQosDepthDescription);
 
     const auto useTLS = this->get_parameter("tls").as_bool();
     const auto certfile = this->get_parameter("certfile").as_string();
@@ -124,15 +123,20 @@ public:
       this->set_parameter(rclcpp::Parameter{"port", listeningPort});
     }
 
+    _maxQosDepth = this->get_parameter("max_qos_depth").as_int();
+
     // Start the thread polling for rosgraph changes
     _rosgraphPollThread =
       std::make_unique<std::thread>(std::bind(&FoxgloveBridge::rosgraphPollThread, this));
 
-    _maxQosDepth = this->get_parameter("max_qos_depth").as_int();
+    // Start a no-op timer. This appears to be required to spin the node after multiple
+    // subscribe/unsubscribes to the same topic
+    _updateTimer = this->create_wall_timer(100ms, []() {});
   }
 
   ~FoxgloveBridge() {
     RCLCPP_INFO(this->get_logger(), "Shutting down %s", this->get_name());
+    _updateTimer.reset();
     if (_rosgraphPollThread) {
       _rosgraphPollThread->join();
     }
@@ -225,8 +229,8 @@ public:
         _channelToTopicAndDatatype.erase(channel.id);
         _advertisedTopics.erase(topicAndDatatype);
 
-        RCLCPP_DEBUG(this->get_logger(), "Removed channel %d for topic \"%s\" (%s)", channel.id,
-                     topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
+        RCLCPP_INFO(this->get_logger(), "Removed channel %d for topic \"%s\" (%s)", channel.id,
+                    topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
       }
 
       // Advertise new topics
@@ -296,6 +300,7 @@ private:
   std::mutex _subscriptionsMutex;
   std::mutex _clientAdvertisementsMutex;
   std::unique_ptr<std::thread> _rosgraphPollThread;
+  rclcpp::TimerBase::SharedPtr _updateTimer;
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
   std::atomic<uint64_t> _simTimeNs = 0;
@@ -391,6 +396,15 @@ private:
       qos.durability_volatile();
     }
 
+    if (firstSubscription) {
+      RCLCPP_INFO(this->get_logger(), "Subscribing to topic \"%s\" (%s) on channel %d",
+                  topic.c_str(), datatype.c_str(), channelId);
+
+    } else {
+      RCLCPP_INFO(this->get_logger(), "Adding subscriber #%ld to topic \"%s\" (%s) on channel %d",
+                  subscriptionsByClient.size(), topic.c_str(), datatype.c_str(), channelId);
+    }
+
     try {
       auto subscriber = this->create_generic_subscription(
         topic, datatype, qos,
@@ -398,15 +412,6 @@ private:
         subscriptionOptions);
       subscriptionsByClient.emplace(clientHandle,
                                     std::make_pair(std::move(subscriber), subscriptionOptions));
-
-      if (firstSubscription) {
-        RCLCPP_INFO(this->get_logger(), "Subscribed to topic \"%s\" (%s) on channel %d",
-                    topic.c_str(), datatype.c_str(), channelId);
-
-      } else {
-        RCLCPP_INFO(this->get_logger(), "Added subscriber #%ld to topic \"%s\" (%s) on channel %d",
-                    subscriptionsByClient.size(), topic.c_str(), datatype.c_str(), channelId);
-      }
     } catch (const std::exception& ex) {
       RCLCPP_ERROR(this->get_logger(), "Failed to subscribe to topic \"%s\" (%s): %s",
                    topic.c_str(), datatype.c_str(), ex.what());

@@ -54,7 +54,7 @@ public:
     _endpoint.start_perpetual();
 
     _endpoint.set_message_handler(
-      bind(&Client::on_message, this, std::placeholders::_1, std::placeholders::_2));
+      bind(&Client::messageHandler, this, std::placeholders::_1, std::placeholders::_2));
 
     _thread.reset(new websocketpp::lib::thread(&ClientType::run, &_endpoint));
   }
@@ -109,7 +109,7 @@ public:
     _con.reset();
   }
 
-  void on_message(websocketpp::connection_hdl hdl, MessagePtr msg) {
+  void messageHandler(websocketpp::connection_hdl hdl, MessagePtr msg) {
     (void)hdl;
     const OpCode op = msg->get_opcode();
 
@@ -134,7 +134,7 @@ public:
 
   void subscribe(const std::vector<std::pair<SubscriptionId, ChannelId>>& subscriptions) override {
     nlohmann::json subscriptionsJson;
-    for (const auto [subId, channelId] : subscriptions) {
+    for (const auto& [subId, channelId] : subscriptions) {
       subscriptionsJson.push_back({{"id", subId}, {"channelId", channelId}});
     }
 
