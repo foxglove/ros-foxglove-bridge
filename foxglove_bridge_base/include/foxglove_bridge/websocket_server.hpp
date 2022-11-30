@@ -31,7 +31,7 @@ using OpCode = websocketpp::frame::opcode::value;
 static const websocketpp::log::level APP = websocketpp::log::alevel::app;
 static const websocketpp::log::level RECOVERABLE = websocketpp::log::elevel::rerror;
 
-constexpr uint32_t Integer(const std::string_view& str) {
+constexpr uint32_t Integer(const std::string_view str) {
   uint32_t result = 0x811C9DC5;  // FNV-1a 32-bit algorithm
   for (char c : str) {
     result = (c ^ result) * 0x01000193;
