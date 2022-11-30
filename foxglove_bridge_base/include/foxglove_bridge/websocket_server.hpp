@@ -39,11 +39,6 @@ constexpr uint32_t Integer(const std::string_view& str) {
   return result;
 }
 
-template <size_t N>
-constexpr size_t Integer(char const (&str)[N]) {
-  return Integer(std::string_view(str));
-}
-
 struct ChannelWithoutId {
   std::string topic;
   std::string encoding;
