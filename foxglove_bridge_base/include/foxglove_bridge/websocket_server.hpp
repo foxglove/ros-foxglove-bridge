@@ -31,8 +31,12 @@ using OpCode = websocketpp::frame::opcode::value;
 static const websocketpp::log::level APP = websocketpp::log::alevel::app;
 static const websocketpp::log::level RECOVERABLE = websocketpp::log::elevel::rerror;
 
-constexpr uint32_t Integer(const char* str, uint32_t h = 0) {
-  return !str[h] ? 5381 : (Integer(str, h + 1) * 33) ^ str[h];
+constexpr uint32_t Integer(const std::string_view& str) {
+  uint32_t result = 0x811C9DC5;  // FNV-1a 32-bit algorithm
+  for (char c : str) {
+    result = (c ^ result) * 0x01000193;
+  }
+  return result;
 }
 
 struct ChannelWithoutId {
@@ -589,8 +593,13 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
                         });
   };
 
-  switch (Integer(op.c_str())) {
-    case Integer("subscribe"): {
+  constexpr auto SUBSCRIBE = Integer("subscribe");
+  constexpr auto UNSUBSCRIBE = Integer("unsubscribe");
+  constexpr auto ADVERTISE = Integer("advertise");
+  constexpr auto UNADVERTISE = Integer("unadvertise");
+
+  switch (Integer(op)) {
+    case SUBSCRIBE: {
       for (const auto& sub : payload.at("subscriptions")) {
         SubscriptionId subId = sub.at("id");
         ChannelId channelId = sub.at("channelId");
@@ -613,7 +622,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         }
       }
     } break;
-    case Integer("unsubscribe"): {
+    case UNSUBSCRIBE: {
       for (const auto& subIdJson : payload.at("subscriptionIds")) {
         SubscriptionId subId = subIdJson;
         const auto& sub = findSubscriptionBySubId(subId);
@@ -630,7 +639,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         }
       }
     } break;
-    case Integer("advertise"): {
+    case ADVERTISE: {
       auto [clientPublicationsIt, isFirstPublication] =
         _clientChannels.emplace(hdl, std::unordered_map<ClientChannelId, ClientAdvertisement>());
 
@@ -655,7 +664,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         }
       }
     } break;
-    case Integer("unadvertise"): {
+    case UNADVERTISE: {
       auto clientPublicationsIt = _clientChannels.find(hdl);
       if (clientPublicationsIt == _clientChannels.end()) {
         sendStatus(hdl, StatusLevel::Error, "Client has no advertised channels");
