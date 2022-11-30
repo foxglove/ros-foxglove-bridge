@@ -2,9 +2,11 @@ cmake_minimum_required(VERSION 3.10.2)
 
 if(POLICY CMP0048)
   cmake_policy(SET CMP0048 NEW)
+  set(CMAKE_POLICY_DEFAULT_CMP0048 NEW)
 endif()
 if(POLICY CMP0024)
   cmake_policy(SET CMP0024 NEW)
+  set(CMAKE_POLICY_DEFAULT_CMP0024 NEW)
 endif()
 
 project(foxglove_bridge LANGUAGES CXX VERSION 0.0.1)
