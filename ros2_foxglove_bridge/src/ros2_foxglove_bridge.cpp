@@ -88,8 +88,7 @@ public:
     maxQosDepthDescription.integer_range[0].from_value = 0;
     maxQosDepthDescription.integer_range[0].to_value = INT32_MAX;
     maxQosDepthDescription.integer_range[0].step = 1;
-    this->declare_parameter("max_qos_depth", static_cast<int>(DEFAULT_MAX_QOS_DEPTH),
-                            maxQosDepthDescription);
+    this->declare_parameter("max_qos_depth", int(DEFAULT_MAX_QOS_DEPTH), maxQosDepthDescription);
 
     const auto useTLS = this->get_parameter("tls").as_bool();
     const auto certfile = this->get_parameter("certfile").as_string();
@@ -230,8 +229,8 @@ public:
         _channelToTopicAndDatatype.erase(channel.id);
         _advertisedTopics.erase(topicAndDatatype);
 
-        RCLCPP_DEBUG(this->get_logger(), "Removed channel %d for topic \"%s\" (%s)", channel.id,
-                     topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
+        RCLCPP_INFO(this->get_logger(), "Removed channel %d for topic \"%s\" (%s)", channel.id,
+                    topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
       }
 
       // Advertise new topics
@@ -397,6 +396,15 @@ private:
       qos.durability_volatile();
     }
 
+    if (firstSubscription) {
+      RCLCPP_INFO(this->get_logger(), "Subscribing to topic \"%s\" (%s) on channel %d",
+                  topic.c_str(), datatype.c_str(), channelId);
+
+    } else {
+      RCLCPP_INFO(this->get_logger(), "Adding subscriber #%ld to topic \"%s\" (%s) on channel %d",
+                  subscriptionsByClient.size(), topic.c_str(), datatype.c_str(), channelId);
+    }
+
     try {
       auto subscriber = this->create_generic_subscription(
         topic, datatype, qos,
@@ -404,15 +412,6 @@ private:
         subscriptionOptions);
       subscriptionsByClient.emplace(clientHandle,
                                     std::make_pair(std::move(subscriber), subscriptionOptions));
-
-      if (firstSubscription) {
-        RCLCPP_INFO(this->get_logger(), "Subscribed to topic \"%s\" (%s) on channel %d",
-                    topic.c_str(), datatype.c_str(), channelId);
-
-      } else {
-        RCLCPP_INFO(this->get_logger(), "Added subscriber #%ld to topic \"%s\" (%s) on channel %d",
-                    subscriptionsByClient.size(), topic.c_str(), datatype.c_str(), channelId);
-      }
     } catch (const std::exception& ex) {
       RCLCPP_ERROR(this->get_logger(), "Failed to subscribe to topic \"%s\" (%s): %s",
                    topic.c_str(), datatype.c_str(), ex.what());
