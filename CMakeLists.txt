@@ -16,7 +16,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
 
-find_package(nlohmann_json REQUIRED CONFIG PATHS "/usr/lib/cmake/")
+find_package(nlohmann_json QUIET)
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 find_package(websocketpp REQUIRED)
@@ -71,11 +71,15 @@ target_include_directories(foxglove_bridge_base
     $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(foxglove_bridge_base
-  nlohmann_json
   OpenSSL::Crypto
   OpenSSL::SSL
   ${CMAKE_THREAD_LIBS_INIT}
 )
+if(nlohmann_json_FOUND)
+  target_link_libraries(foxglove_bridge_base nlohmann_json::nlohmann_json)
+else()
+  message(STATUS "nlohmann_json not found, will search at compile time")
+endif()
 
 message(STATUS "ROS_VERSION: " $ENV{ROS_VERSION})
 message(STATUS "ROS_DISTRO: " $ENV{ROS_DISTRO})
