@@ -20,7 +20,7 @@ constexpr size_t DEFAULT_MAX_QOS_DEPTH = 10;
 using namespace std::chrono_literals;
 using namespace std::placeholders;
 using LogLevel = foxglove::WebSocketLogLevel;
-using Subscription = std::pair<rclcpp::GenericSubscription::SharedPtr, rclcpp::SubscriptionOptions>;
+using Subscription = rclcpp::GenericSubscription::SharedPtr;
 using SubscriptionsByClient = std::map<foxglove::ConnHandle, Subscription, std::owner_less<>>;
 using Publication = std::pair<rclcpp::GenericPublisher::SharedPtr, rclcpp::PublisherOptions>;
 using ClientPublications = std::unordered_map<foxglove::ClientChannelId, Publication>;
@@ -128,15 +128,10 @@ public:
     // Start the thread polling for rosgraph changes
     _rosgraphPollThread =
       std::make_unique<std::thread>(std::bind(&FoxgloveBridge::rosgraphPollThread, this));
-
-    // Start a no-op timer. This appears to be required to spin the node after multiple
-    // subscribe/unsubscribes to the same topic
-    _updateTimer = this->create_wall_timer(100ms, []() {});
   }
 
   ~FoxgloveBridge() {
     RCLCPP_INFO(this->get_logger(), "Shutting down %s", this->get_name());
-    _updateTimer.reset();
     if (_rosgraphPollThread) {
       _rosgraphPollThread->join();
     }
@@ -296,11 +291,11 @@ private:
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
+  std::unordered_map<foxglove::ChannelId, rclcpp::CallbackGroup::SharedPtr> _channelCallbackGroups;
   PublicationsByClient _clientAdvertisedTopics;
   std::mutex _subscriptionsMutex;
   std::mutex _clientAdvertisementsMutex;
   std::unique_ptr<std::thread> _rosgraphPollThread;
-  rclcpp::TimerBase::SharedPtr _updateTimer;
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
   std::atomic<uint64_t> _simTimeNs = 0;
@@ -342,10 +337,13 @@ private:
                    topic.c_str(), datatype.c_str());
     };
 
+    const auto& [callbackGroup, isNewlyInserted] = _channelCallbackGroups.insert(
+      {channelId, this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive)});
+    (void)isNewlyInserted;
+
     rclcpp::SubscriptionOptions subscriptionOptions;
     subscriptionOptions.event_callbacks = eventCallbacks;
-    subscriptionOptions.callback_group =
-      this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    subscriptionOptions.callback_group = callbackGroup->second;
 
     // Select an appropriate subscription QOS profile. This is similar to how ros2 topic echo
     // does it:
@@ -410,8 +408,7 @@ private:
         topic, datatype, qos,
         std::bind(&FoxgloveBridge::rosMessageHandler, this, channel, clientHandle, _1),
         subscriptionOptions);
-      subscriptionsByClient.emplace(clientHandle,
-                                    std::make_pair(std::move(subscriber), subscriptionOptions));
+      subscriptionsByClient.emplace(clientHandle, std::move(subscriber));
     } catch (const std::exception& ex) {
       RCLCPP_ERROR(this->get_logger(), "Failed to subscribe to topic \"%s\" (%s): %s",
                    topic.c_str(), datatype.c_str(), ex.what());
