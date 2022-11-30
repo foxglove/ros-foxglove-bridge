@@ -16,7 +16,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
 
-find_package(nlohmann_json REQUIRED CONFIG PATHS "/usr/lib/cmake/")
+find_package(nlohmann_json REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 find_package(websocketpp REQUIRED)
