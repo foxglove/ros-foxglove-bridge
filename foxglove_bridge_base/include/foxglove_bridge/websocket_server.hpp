@@ -136,7 +136,6 @@ public:
   virtual void setClientUnadvertiseHandler(ClientUnadvertiseHandler handler) = 0;
   virtual void setClientMessageHandler(ClientMessageHandler handler) = 0;
 
-  virtual void sendMessage(ChannelId chanId, uint64_t timestamp, std::string_view data) = 0;
   virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                            std::string_view data) = 0;
 
@@ -183,7 +182,6 @@ public:
   void setClientUnadvertiseHandler(ClientUnadvertiseHandler handler) override;
   void setClientMessageHandler(ClientMessageHandler handler) override;
 
-  void sendMessage(ChannelId chanId, uint64_t timestamp, std::string_view data) override;
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                    std::string_view data) override;
 
@@ -776,29 +774,6 @@ inline void Server<ServerConfiguration>::broadcastChannels() {
   for (const auto& [hdl, clientInfo] : _clients) {
     (void)clientInfo;
     sendJsonRaw(hdl, msg);
-  }
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::sendMessage(ChannelId chanId, uint64_t timestamp,
-                                                     std::string_view data) {
-  std::shared_lock<std::shared_mutex> lock(_clientsChannelMutex);
-  std::vector<uint8_t> message;
-  for (const auto& [hdl, client] : _clients) {
-    const auto& subs = client.subscriptionsByChannel.find(chanId);
-    if (subs == client.subscriptionsByChannel.end()) {
-      continue;
-    }
-    const auto subId = subs->second;
-    if (message.empty()) {
-      message.resize(1 + 4 + 8 + data.size());
-      message[0] = uint8_t(BinaryOpcode::MESSAGE_DATA);
-      // message[1..4] is the subscription id, which we'll fill in per-recipient below
-      foxglove::WriteUint64LE(message.data() + 5, timestamp);
-      std::memcpy(message.data() + 1 + 4 + 8, data.data(), data.size());
-    }
-    foxglove::WriteUint32LE(message.data() + 1, subId);
-    sendBinary(hdl, message);
   }
 }
 
