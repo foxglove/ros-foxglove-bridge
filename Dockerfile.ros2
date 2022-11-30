@@ -16,11 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Initialize rosdep
 RUN rosdep init && rosdep update
 
-# Add common files and ROS 2 source code
-COPY CMakeLists.txt /ros2_ws/src/ros-foxglove-bridge/CMakeLists.txt
+# Add package.xml so we can install package dependencies.
 COPY package.xml /ros2_ws/src/ros-foxglove-bridge/package.xml
-COPY foxglove_bridge_base /ros2_ws/src/ros-foxglove-bridge/foxglove_bridge_base
-COPY ros2_foxglove_bridge /ros2_ws/src/ros-foxglove-bridge/ros2_foxglove_bridge
 
 # Install rosdep dependencies
 RUN . /opt/ros/$ROS_DISTRIBUTION/setup.sh && \
@@ -29,6 +26,11 @@ RUN . /opt/ros/$ROS_DISTRIBUTION/setup.sh && \
         /ros2_ws/src \
       --ignore-src \
     && rm -rf /var/lib/apt/lists/*
+
+# Add common files and ROS 2 source code
+COPY CMakeLists.txt /ros2_ws/src/ros-foxglove-bridge/CMakeLists.txt
+COPY foxglove_bridge_base /ros2_ws/src/ros-foxglove-bridge/foxglove_bridge_base
+COPY ros2_foxglove_bridge /ros2_ws/src/ros-foxglove-bridge/ros2_foxglove_bridge
 
 # Use the bash shell so we can use the source command
 SHELL [ "/bin/bash" , "-c" ]
