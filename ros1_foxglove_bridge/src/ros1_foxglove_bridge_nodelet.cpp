@@ -1,5 +1,6 @@
 #define ASIO_STANDALONE
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -13,6 +14,7 @@
 #include <ros/ros.h>
 #include <ros_babel_fish/babel_fish_message.h>
 #include <ros_babel_fish/generation/providers/integrated_description_provider.h>
+#include <rosgraph_msgs/Clock.h>
 
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
@@ -315,8 +317,27 @@ private:
 
     std::unordered_set<TopicAndDatatype, PairHash> latestTopics;
     latestTopics.reserve(topicNamesAndTypes.size());
-    for (const auto& topicNameAndType : topicNamesAndTypes) {
-      latestTopics.emplace(topicNameAndType.name, topicNameAndType.datatype);
+    bool hasClockTopic = false;
+    for (const auto& [topicName, datatype] : topicNamesAndTypes) {
+      // Check if a /clock topic is published
+      if (topicName == "/clock" && datatype == "rosgraph_msgs/Clock") {
+        hasClockTopic = true;
+      }
+      latestTopics.emplace(topicName, datatype);
+    }
+
+    // Enable or disable simulated time based on the presence of a /clock topic
+    if (!_useSimTime && hasClockTopic) {
+      ROS_INFO("/clock topic found, using simulated time");
+      _useSimTime = true;
+      _clockSubscription = getMTNodeHandle().subscribe<rosgraph_msgs::Clock>(
+        "/clock", 10, [&](const rosgraph_msgs::Clock::ConstPtr msg) {
+          _simTimeNs = msg->clock.toNSec();
+        });
+    } else if (_useSimTime && !hasClockTopic) {
+      ROS_WARN("/clock topic disappeared");
+      _useSimTime = false;
+      _clockSubscription.shutdown();
     }
 
     // Create a list of topics that are new to us
@@ -428,7 +449,7 @@ private:
     const foxglove::Channel& channel, foxglove::ConnHandle clientHandle,
     const ros::MessageEvent<ros_babel_fish::BabelFishMessage const>& msgEvent) {
     const auto& msg = msgEvent.getConstMessage();
-    const auto receiptTimeNs = msgEvent.getReceiptTime().toNSec();
+    const auto receiptTimeNs = _useSimTime ? _simTimeNs.load() : msgEvent.getReceiptTime().toNSec();
     _server->sendMessage(
       clientHandle, channel.id, receiptTimeNs,
       std::string_view(reinterpret_cast<const char*>(msg->buffer()), msg->size()));
@@ -445,6 +466,9 @@ private:
   ros::Timer _updateTimer;
   size_t _maxUpdateMs = size_t(DEFAULT_MAX_UPDATE_MS);
   size_t _updateCount = 0;
+  ros::Subscriber _clockSubscription;
+  std::atomic<uint64_t> _simTimeNs = 0;
+  std::atomic<bool> _useSimTime = false;
 };
 
 }  // namespace foxglove_bridge

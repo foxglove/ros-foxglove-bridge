@@ -90,13 +90,13 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
     message(STATUS "Building with catkin")
     set(ROS_BUILD_TYPE "catkin")
 
-    find_package(catkin REQUIRED COMPONENTS nodelet ros_babel_fish roslib roscpp)
+    find_package(catkin REQUIRED COMPONENTS nodelet ros_babel_fish rosgraph_msgs roslib roscpp)
     find_package(Boost REQUIRED)
 
     catkin_package(
       INCLUDE_DIRS foxglove_bridge_base/include
       LIBRARIES foxglove_bridge_base foxglove_bridge_nodelet
-      CATKIN_DEPENDS nodelet ros_babel_fish roslib roscpp
+      CATKIN_DEPENDS nodelet ros_babel_fish rosgraph_msgs roslib roscpp
       DEPENDS Boost
     )
 
@@ -117,6 +117,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     set(ROS_BUILD_TYPE "ament_cmake")
 
     find_package(ament_cmake REQUIRED)
+    find_package(rosgraph_msgs REQUIRED)
     find_package(rclcpp REQUIRED)
     find_package(rclcpp_components REQUIRED)
 
@@ -130,7 +131,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include>
         $<INSTALL_INTERFACE:include>
     )
-    ament_target_dependencies(foxglove_bridge_component rclcpp rclcpp_components)
+    ament_target_dependencies(foxglove_bridge_component rclcpp rclcpp_components rosgraph_msgs)
     target_link_libraries(foxglove_bridge_component foxglove_bridge_base)
     rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
 
