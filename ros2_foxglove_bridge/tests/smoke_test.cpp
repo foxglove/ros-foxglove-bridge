@@ -9,6 +9,7 @@
 #include <std_msgs/msg/string.hpp>
 #include <websocketpp/config/asio_client.hpp>
 
+#include <foxglove_bridge/test/test_client.hpp>
 #include <foxglove_bridge/websocket_client.hpp>
 
 constexpr char URI[] = "ws://localhost:8765";
@@ -34,47 +35,39 @@ TEST(SmokeTest, testSubscription) {
   auto pub = node->create_publisher<std_msgs::msg::String>(topic_name, qos);
   pub->publish(rosMsg);
 
+  // Connect a few clients and make sure that they receive the correct message
   const auto clientCount = 3;
   for (auto i = 0; i < clientCount; ++i) {
-    (void)i;
+    std::vector<uint8_t> msgData;
+    ASSERT_NO_THROW(msgData = foxglove::connectClientAndReceiveMsg(URI, topic_name));
+    ASSERT_EQ(sizeof(HELLO_WORLD_BINARY), msgData.size());
+    EXPECT_EQ(0, std::memcmp(HELLO_WORLD_BINARY, msgData.data(), msgData.size()));
+  }
+}
 
-    // Set up text message handler to resolve the promise when the string topic is advertised
-    foxglove::Client<websocketpp::config::asio_client> wsClient;
-    std::promise<nlohmann::json> channelPromise;
-    auto channelFuture = channelPromise.get_future();
-    wsClient.setTextMessageHandler([&topic_name, &channelPromise](const std::string& payload) {
-      const auto msg = nlohmann::json::parse(payload);
-      const auto& op = msg.at("op").get<std::string>();
-      if (op == "advertise") {
-        for (const auto& channel : msg.at("channels")) {
-          if (topic_name == channel.at("topic")) {
-            channelPromise.set_value(channel);
-          }
-        }
-      }
-    });
+TEST(SmokeTest, testSubscriptionParallel) {
+  // Publish a string message on a latched ros topic
+  const std::string topic_name = "/pub_topic";
+  std_msgs::msg::String rosMsg;
+  rosMsg.data = "hello world";
 
-    // Set up binary message handler to resolve when a binary message has been received
-    std::promise<std::vector<uint8_t>> msgPromise;
-    auto msgFuture = msgPromise.get_future();
-    wsClient.setBinaryMessageHandler([&msgPromise](const uint8_t* data, size_t dataLength) {
-      const size_t offset = 1 + 4 + 8;
-      std::vector<uint8_t> dataCopy(dataLength - offset);
-      std::memcpy(dataCopy.data(), data + offset, dataLength - offset);
-      msgPromise.set_value(std::move(dataCopy));
-    });
+  auto node = rclcpp::Node::make_shared("tester");
+  rclcpp::QoS qos = rclcpp::QoS{rclcpp::KeepLast(1lu)};
+  qos.transient_local();
+  auto pub = node->create_publisher<std_msgs::msg::String>(topic_name, qos);
+  pub->publish(rosMsg);
 
-    // Connect the client and wait for the channel future
-    ASSERT_EQ(std::future_status::ready, wsClient.connect(URI).wait_for(std::chrono::seconds(5)));
-    ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(std::chrono::seconds(5)));
+  // Connect a few clients (in parallel) and make sure that they receive the correct message
+  std::vector<std::future<std::vector<uint8_t>>> futures;
+  const auto clientCount = 3;
+  for (auto i = 0; i < clientCount; ++i) {
+    futures.push_back(
+      std::async(std::launch::async, foxglove::connectClientAndReceiveMsg, URI, topic_name));
+  }
 
-    // Subscribe to the channel that corresponds to the string topic
-    const auto channelId = channelFuture.get().at("id").get<foxglove::ChannelId>();
-    wsClient.subscribe({{1, channelId}});
-
-    // Wait until we have received a binary message and test that it is the right one
-    ASSERT_EQ(std::future_status::ready, msgFuture.wait_for(std::chrono::seconds(5)));
-    const auto& msgData = msgFuture.get();
+  for (auto& future : futures) {
+    ASSERT_EQ(std::future_status::ready, future.wait_for(std::chrono::seconds(5)));
+    auto msgData = future.get();
     ASSERT_EQ(sizeof(HELLO_WORLD_BINARY), msgData.size());
     EXPECT_EQ(0, std::memcmp(HELLO_WORLD_BINARY, msgData.data(), msgData.size()));
   }
