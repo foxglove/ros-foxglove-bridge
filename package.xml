@@ -40,6 +40,8 @@
 
     <exec_depend>openssl</exec_depend>
 
+    <depend>rosgraph_msgs</depend>
+
     <!-- The export tag contains other, unspecified, tags -->
     <export>
         <build_type condition="$ROS_VERSION == 1">catkin</build_type>
