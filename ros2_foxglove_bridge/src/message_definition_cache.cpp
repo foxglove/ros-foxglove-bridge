@@ -16,12 +16,6 @@
 
 namespace foxglove {
 
-#ifdef _WIN32
-static const std::string SEPARATOR = "\\";
-#else
-static const std::string SEPARATOR = "/";
-#endif
-
 // Match datatype names (foo_msgs/Bar or foo_msgs/msg/Bar)
 static const std::regex PACKAGE_TYPENAME_REGEX{R"(^([a-zA-Z0-9_]+)/(?:msg/)?([a-zA-Z0-9_]+)$)"};
 
@@ -164,7 +158,7 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
   }
 
   // Read the file
-  const std::string full_path = share_dir + SEPARATOR + *it;
+  const std::string full_path = share_dir + std::filesystem::path::preferred_separator + *it;
   std::ifstream file{full_path};
   if (!file.good()) {
     throw DefinitionNotFoundError(definition_identifier.package_resource_name);
