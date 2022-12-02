@@ -135,7 +135,7 @@ private:
                  channelId);
 
       } else {
-        ROS_INFO("Added subscriber #%ld to topic \"%s\" (%s) on channel %d",
+        ROS_INFO("Added subscriber #%zu to topic \"%s\" (%s) on channel %d",
                  subscriptionsByClient.size(), topic.c_str(), datatype.c_str(), channelId);
       }
     } catch (const std::exception& ex) {
@@ -181,7 +181,7 @@ private:
                topicAndDatatype.second.c_str(), channelId);
       _subscriptions.erase(it2);
     } else {
-      ROS_INFO("Removed one subscription from channel %d (%ld subscription(s) left)", channelId,
+      ROS_INFO("Removed one subscription from channel %d (%zu subscription(s) left)", channelId,
                subscriptionsByClient.size());
     }
   }

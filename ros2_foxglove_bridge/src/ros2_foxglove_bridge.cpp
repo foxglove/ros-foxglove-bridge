@@ -399,7 +399,7 @@ private:
                   topic.c_str(), datatype.c_str(), channelId);
 
     } else {
-      RCLCPP_INFO(this->get_logger(), "Adding subscriber #%ld to topic \"%s\" (%s) on channel %d",
+      RCLCPP_INFO(this->get_logger(), "Adding subscriber #%zu to topic \"%s\" (%s) on channel %d",
                   subscriptionsByClient.size(), topic.c_str(), datatype.c_str(), channelId);
     }
 
@@ -457,7 +457,7 @@ private:
       _subscriptions.erase(it2);
     } else {
       RCLCPP_INFO(this->get_logger(),
-                  "Removed one subscription from channel %d (%ld subscription(s) left)", channelId,
+                  "Removed one subscription from channel %d (%zu subscription(s) left)", channelId,
                   subscriptionsByClient.size());
     }
   }
