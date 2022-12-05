@@ -5,7 +5,7 @@
     <description>ROS Foxglove Bridge</description>
     <license>MIT</license>
     <url type="website">https://github.com/foxglove/ros-foxglove-bridge</url>
-    <author email="contact@foxglove.dev">Foxglove</author>
+    <author email="ros-tooling+foxglove_bridge@foxglove.dev">Foxglove</author>
     <maintainer email="john@foxglove.dev">John Hurliman</maintainer>
     <maintainer email="achim@foxglove.dev">Hans-Joachim Krauch</maintainer>
 
