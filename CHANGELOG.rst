@@ -2,6 +2,11 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.2.1 (2022-12-05)
+------------------
+* Fix compilation on platforms where size_t is defined as `unsigned int`
+* Contributors: Hans-Joachim Krauch
+
 0.2.0 (2022-12-01)
 ------------------
 
