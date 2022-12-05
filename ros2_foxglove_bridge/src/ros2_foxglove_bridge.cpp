@@ -1,6 +1,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <regex>
 #include <thread>
 #include <unordered_set>
 
@@ -90,6 +91,28 @@ public:
     maxQosDepthDescription.integer_range[0].step = 1;
     this->declare_parameter("max_qos_depth", int(DEFAULT_MAX_QOS_DEPTH), maxQosDepthDescription);
 
+    auto topicWhiteListDescription = rcl_interfaces::msg::ParameterDescriptor{};
+    topicWhiteListDescription.name = "topic_whitelist";
+    topicWhiteListDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+    topicWhiteListDescription.description =
+      "List of regular expressions (ECMAScript) of whitelisted topic names.";
+    topicWhiteListDescription.read_only = true;
+    this->declare_parameter<std::vector<std::string>>(
+      topicWhiteListDescription.name, std::vector<std::string>({".*"}), topicWhiteListDescription);
+
+    const auto regexPatterns =
+      this->get_parameter(topicWhiteListDescription.name).as_string_array();
+    _topicWhitelistPatterns.reserve(regexPatterns.size());
+    for (const auto& pattern : regexPatterns) {
+      try {
+        _topicWhitelistPatterns.push_back(
+          std::regex(pattern, std::regex_constants::ECMAScript | std::regex_constants::icase));
+      } catch (const std::exception& ex) {
+        RCLCPP_ERROR(this->get_logger(), "Ignoring invalid regular expression '%s': %s",
+                     pattern.c_str(), ex.what());
+      }
+    }
+
     const auto useTLS = this->get_parameter("tls").as_bool();
     const auto certfile = this->get_parameter("certfile").as_string();
     const auto keyfile = this->get_parameter("keyfile").as_string();
@@ -167,14 +190,31 @@ public:
     std::unordered_set<TopicAndDatatype, PairHash> latestTopics;
     latestTopics.reserve(topicNamesAndTypes.size());
     bool hasClockTopic = false;
-    for (const auto& [topicName, datatypes] : topicNamesAndTypes) {
-      for (const auto& datatype : datatypes) {
-        // Check if a /clock topic is published
-        if (topicName == "/clock" && datatype == "rosgraph_msgs/msg/Clock") {
-          hasClockTopic = true;
+    for (const auto& topicNamesAndType : topicNamesAndTypes) {
+      const auto& topicName = topicNamesAndType.first;
+      const auto& datatypes = topicNamesAndType.second;
+
+      // Check if a /clock topic is published
+      hasClockTopic = hasClockTopic || (topicName == "/clock" &&
+                                        std::find(datatypes.begin(), datatypes.end(),
+                                                  "rosgraph_msgs/msg/Clock") != datatypes.end());
+
+      // Ignore the topic if it is not on the topic whitelist
+      if (std::find_if(_topicWhitelistPatterns.begin(), _topicWhitelistPatterns.end(),
+                       [&topicName](const auto& regex) {
+                         return std::regex_match(topicName, regex);
+                       }) != _topicWhitelistPatterns.end()) {
+        for (const auto& datatype : datatypes) {
+          latestTopics.emplace(topicName, datatype);
         }
-        latestTopics.emplace(topicName, datatype);
       }
+    }
+
+    if (const auto numIgnoredTopics = topicNamesAndTypes.size() - latestTopics.size()) {
+      RCLCPP_DEBUG(
+        this->get_logger(),
+        "%zu topics have been ignored as they do not match any pattern on the topic whitelist",
+        numIgnoredTopics);
     }
 
     // Enable or disable simulated time based on the presence of a /clock topic
@@ -288,6 +328,7 @@ private:
 
   std::unique_ptr<foxglove::ServerInterface> _server;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
+  std::vector<std::regex> _topicWhitelistPatterns;
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;

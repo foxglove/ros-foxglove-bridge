@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <regex>
 #include <shared_mutex>
 #include <string>
 #include <unordered_set>
@@ -45,6 +46,17 @@ public:
     const auto certfile = nhp.param<std::string>("certfile", "");
     const auto keyfile = nhp.param<std::string>("keyfile", "");
     _maxUpdateMs = static_cast<size_t>(nhp.param<int>("max_update_ms", DEFAULT_MAX_UPDATE_MS));
+
+    const auto regexPatterns = nhp.param<std::vector<std::string>>("topic_whitelist", {".*"});
+    _topicWhitelistPatterns.reserve(regexPatterns.size());
+    for (const auto& pattern : regexPatterns) {
+      try {
+        _topicWhitelistPatterns.push_back(
+          std::regex(pattern, std::regex_constants::ECMAScript | std::regex_constants::icase));
+      } catch (const std::exception& ex) {
+        ROS_ERROR("Ignoring invalid regular expression '%s': %s", pattern.c_str(), ex.what());
+      }
+    }
 
     ROS_INFO("Starting %s with %s", ros::this_node::getName().c_str(),
              foxglove::WebSocketUserAgent());
@@ -318,12 +330,26 @@ private:
     std::unordered_set<TopicAndDatatype, PairHash> latestTopics;
     latestTopics.reserve(topicNamesAndTypes.size());
     bool hasClockTopic = false;
-    for (const auto& [topicName, datatype] : topicNamesAndTypes) {
+    for (const auto& topicNameAndType : topicNamesAndTypes) {
+      const auto& topicName = topicNameAndType.name;
+      const auto& datatype = topicNameAndType.datatype;
+
       // Check if a /clock topic is published
-      if (topicName == "/clock" && datatype == "rosgraph_msgs/Clock") {
-        hasClockTopic = true;
+      hasClockTopic = hasClockTopic || (topicName == "/clock" && datatype == "rosgraph_msgs/Clock");
+
+      // Ignore the topic if it is not on the topic whitelist
+      if (std::find_if(_topicWhitelistPatterns.begin(), _topicWhitelistPatterns.end(),
+                       [&topicName](const auto& regex) {
+                         return std::regex_match(topicName, regex);
+                       }) != _topicWhitelistPatterns.end()) {
+        latestTopics.emplace(topicName, datatype);
       }
-      latestTopics.emplace(topicName, datatype);
+    }
+
+    if (const auto numIgnoredTopics = topicNamesAndTypes.size() - latestTopics.size()) {
+      ROS_DEBUG(
+        "%zu topics have been ignored as they do not match any pattern on the topic whitelist",
+        numIgnoredTopics);
     }
 
     // Enable or disable simulated time based on the presence of a /clock topic
@@ -457,6 +483,7 @@ private:
 
   std::unique_ptr<foxglove::ServerInterface> _server;
   ros_babel_fish::IntegratedDescriptionProvider _rosTypeInfoProvider;
+  std::vector<std::regex> _topicWhitelistPatterns;
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
