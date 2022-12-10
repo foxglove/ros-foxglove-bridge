@@ -7,6 +7,7 @@
 namespace foxglove {
 
 constexpr char SUPPORTED_SUBPROTOCOL[] = "foxglove.websocket.v1";
+constexpr char CAPABILITY_CLIENT_PUBLISH[] = "clientPublish";
 
 using ChannelId = uint32_t;
 using ClientChannelId = uint32_t;

@@ -113,6 +113,9 @@ public:
       }
     }
 
+    const std::vector<std::string> serverCapabilities = {
+      foxglove::CAPABILITY_CLIENT_PUBLISH,
+    };
     const auto useTLS = this->get_parameter("tls").as_bool();
     const auto certfile = this->get_parameter("certfile").as_string();
     const auto keyfile = this->get_parameter("keyfile").as_string();
@@ -120,10 +123,10 @@ public:
 
     if (useTLS) {
       _server = std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(
-        "foxglove_bridge", std::move(logHandler), certfile, keyfile);
+        "foxglove_bridge", std::move(logHandler), serverCapabilities, certfile, keyfile);
     } else {
-      _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>("foxglove_bridge",
-                                                                             std::move(logHandler));
+      _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
+        "foxglove_bridge", std::move(logHandler), serverCapabilities);
     }
     _server->setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2));
     _server->setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2));

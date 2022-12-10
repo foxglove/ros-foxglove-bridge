@@ -62,14 +62,17 @@ public:
              foxglove::WebSocketUserAgent());
 
     try {
+      const std::vector<std::string> serverCapabilities = {
+        foxglove::CAPABILITY_CLIENT_PUBLISH,
+      };
       const auto logHandler =
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);
       if (useTLS) {
         _server = std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(
-          "foxglove_bridge", std::move(logHandler), certfile, keyfile);
+          "foxglove_bridge", std::move(logHandler), serverCapabilities, certfile, keyfile);
       } else {
         _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
-          "foxglove_bridge", std::move(logHandler));
+          "foxglove_bridge", std::move(logHandler), serverCapabilities);
       }
 
       _server->setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this,
