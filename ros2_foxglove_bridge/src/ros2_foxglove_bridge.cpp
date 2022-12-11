@@ -23,7 +23,7 @@ using namespace std::placeholders;
 using LogLevel = foxglove::WebSocketLogLevel;
 using Subscription = rclcpp::GenericSubscription::SharedPtr;
 using SubscriptionsByClient = std::map<foxglove::ConnHandle, Subscription, std::owner_less<>>;
-using Publication = std::pair<rclcpp::GenericPublisher::SharedPtr, rclcpp::PublisherOptions>;
+using Publication = rclcpp::GenericPublisher::SharedPtr;
 using ClientPublications = std::unordered_map<foxglove::ClientChannelId, Publication>;
 using PublicationsByClient = std::map<foxglove::ConnHandle, ClientPublications, std::owner_less<>>;
 
@@ -151,6 +151,9 @@ public:
     // Start the thread polling for rosgraph changes
     _rosgraphPollThread =
       std::make_unique<std::thread>(std::bind(&FoxgloveBridge::rosgraphPollThread, this));
+
+    _clientPublishCallbackGroup =
+      this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
   }
 
   ~FoxgloveBridge() {
@@ -334,6 +337,7 @@ private:
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
   std::unordered_map<foxglove::ChannelId, rclcpp::CallbackGroup::SharedPtr> _channelCallbackGroups;
   PublicationsByClient _clientAdvertisedTopics;
+  rclcpp::CallbackGroup::SharedPtr _clientPublishCallbackGroup;
   std::mutex _subscriptionsMutex;
   std::mutex _clientAdvertisementsMutex;
   std::unique_ptr<std::thread> _rosgraphPollThread;
@@ -526,8 +530,7 @@ private:
     const auto& topicType = advertisement.schemaName;
     rclcpp::QoS qos{rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default)};
     rclcpp::PublisherOptions publisherOptions{};
-    publisherOptions.callback_group =
-      this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    publisherOptions.callback_group = _clientPublishCallbackGroup;
     auto publisher = this->create_generic_publisher(topicName, topicType, qos, publisherOptions);
 
     RCLCPP_INFO(this->get_logger(), "Client %s is advertising \"%s\" (%s) on channel %d",
@@ -535,8 +538,7 @@ private:
                 advertisement.channelId);
 
     // Store the new topic advertisement
-    auto publication = std::make_pair(publisher, publisherOptions);
-    clientPublications.emplace(advertisement.channelId, std::move(publication));
+    clientPublications.emplace(advertisement.channelId, std::move(publisher));
   }
 
   void clientUnadvertiseHandler(foxglove::ChannelId channelId, foxglove::ConnHandle hdl) {
@@ -561,7 +563,7 @@ private:
       return;
     }
 
-    const auto& publisher = it2->second.first;
+    const auto& publisher = it2->second;
     RCLCPP_INFO(this->get_logger(),
                 "Client %s is no longer advertising %s (%zu subscribers) on channel %d",
                 _server->remoteEndpointString(hdl).c_str(), publisher->get_topic_name(),
@@ -599,7 +601,7 @@ private:
                     clientPublications.size());
         return;
       }
-      publisher = it2->second.first;
+      publisher = it2->second;
     }
 
     // Copy the message payload into a SerializedMessage object
