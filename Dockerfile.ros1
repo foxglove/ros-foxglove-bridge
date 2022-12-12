@@ -1,12 +1,11 @@
 ARG ROS_DISTRIBUTION=noetic
 FROM ros:$ROS_DISTRIBUTION-ros-base
-ARG ROS_DISTRIBUTION=noetic
 
 # Add package.xml so we can install package dependencies.
 COPY package.xml /ros1_ws/src/ros-foxglove-bridge/package.xml
 
 # Install rosdep dependencies
-RUN . /opt/ros/$ROS_DISTRIBUTION/setup.sh && \
+RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
     apt-get update && rosdep update && rosdep install -y \
       --from-paths \
         /ros1_ws/src \
@@ -20,7 +19,7 @@ COPY nodelets.xml /ros1_ws/src/ros-foxglove-bridge/nodelets.xml
 COPY ros1_foxglove_bridge /ros1_ws/src/ros-foxglove-bridge/ros1_foxglove_bridge
 
 # Build the Catkin workspace and ensure it's sourced when a container is run
-RUN . /opt/ros/$ROS_DISTRIBUTION/setup.sh \
+RUN . /opt/ros/$ROS_DISTRO/setup.sh \
   && cd /ros1_ws \
   && catkin_make
 RUN echo "source /ros1_ws/devel/setup.bash" >> ~/.bashrc
