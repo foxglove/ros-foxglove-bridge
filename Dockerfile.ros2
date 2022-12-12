@@ -1,10 +1,8 @@
 ARG ROS_DISTRIBUTION=humble
-ARG ROS_WS=/ros2_ws
 FROM ros:$ROS_DISTRIBUTION-ros-base
 
 # Set environment and working directory
-ARG ROS_WS
-ENV ROS_WS $ROS_WS
+ENV ROS_WS /ros2_ws
 WORKDIR $ROS_WS
 
 # Install system dependencies

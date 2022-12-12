@@ -1,10 +1,8 @@
 ARG ROS_DISTRIBUTION=noetic
-ARG ROS_WS=/ros1_ws
 FROM ros:$ROS_DISTRIBUTION-ros-base
 
 # Set environment and working directory
-ARG ROS_WS
-ENV ROS_WS $ROS_WS
+ENV ROS_WS /ros1_ws
 WORKDIR $ROS_WS
 
 # Add package.xml so we can install package dependencies.
