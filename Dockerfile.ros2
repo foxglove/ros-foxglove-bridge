@@ -9,24 +9,18 @@ WORKDIR $ROS_WS
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  build-essential \
-  python3-colcon-common-extensions \
-  python3-rosdep \
   nlohmann-json3-dev \
   libasio-dev \
   libssl-dev \
   libwebsocketpp-dev \
   && rm -rf /var/lib/apt/lists/*
 
-# Initialize rosdep
-RUN rosdep init && rosdep update
-
 # Add package.xml so we can install package dependencies.
 COPY package.xml src/ros-foxglove-bridge/
 
 # Install rosdep dependencies
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
-    apt-get update && rosdep install -y \
+    apt-get update && rosdep update && rosdep install -y \
       --from-paths \
         src \
       --ignore-src \
