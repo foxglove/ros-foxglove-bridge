@@ -43,10 +43,11 @@ SHELL [ "/bin/bash" , "-c" ]
 # Build the ROS 2 workspace and ensure it's sourced when a container is run
 RUN source /opt/ros/$ROS_DISTRO/setup.bash \
   && colcon build --event-handlers console_direct+
-RUN echo "source install/setup.bash" >> ~/.bashrc
 
-# Set the working folder at startup
-WORKDIR /ros2_ws
+# source workspace from entrypoint
+RUN sed --in-place \
+      's|^source .*|source "$ROS_WS/install/setup.bash"|' \
+      /ros_entrypoint.sh
 
 # Run foxglove_bridge
-CMD ["/bin/bash", "-c", "source install/setup.bash && ros2 run foxglove_bridge foxglove_bridge"]
+CMD ["ros2", "run", "foxglove_bridge", "foxglove_bridge"]

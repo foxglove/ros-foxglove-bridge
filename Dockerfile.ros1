@@ -27,10 +27,11 @@ COPY ros1_foxglove_bridge src/ros-foxglove-bridge/ros1_foxglove_bridge
 # Build the Catkin workspace and ensure it's sourced when a container is run
 RUN . /opt/ros/$ROS_DISTRO/setup.sh \
   && catkin_make
-RUN echo "source devel/setup.bash" >> ~/.bashrc
 
-# Set the working folder at startup
-WORKDIR /ros1_ws
+# source workspace from entrypoint
+RUN sed --in-place \
+      's|^source .*|source "$ROS_WS/install/setup.bash"|' \
+      /ros_entrypoint.sh
 
 # Run foxglove_bridge
-CMD ["/bin/bash", "-c", "source devel/setup.bash && rosrun foxglove_bridge foxglove_bridge"]
+CMD ["rosrun", "foxglove_bridge", "foxglove_bridge"]
