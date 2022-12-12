@@ -1,32 +1,35 @@
 ARG ROS_DISTRIBUTION=noetic
 FROM ros:$ROS_DISTRIBUTION-ros-base
-ARG ROS_DISTRIBUTION=noetic
+
+# Set environment and working directory
+ENV ROS_WS /ros1_ws
+WORKDIR $ROS_WS
 
 # Add package.xml so we can install package dependencies.
-COPY package.xml /ros1_ws/src/ros-foxglove-bridge/package.xml
+COPY package.xml src/ros-foxglove-bridge/
 
 # Install rosdep dependencies
-RUN . /opt/ros/$ROS_DISTRIBUTION/setup.sh && \
+RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
     apt-get update && rosdep update && rosdep install -y \
       --from-paths \
-        /ros1_ws/src \
+        src \
       --ignore-src \
     && rm -rf /var/lib/apt/lists/*
 
 # Add common files and ROS 1 source code
-COPY CMakeLists.txt /ros1_ws/src/ros-foxglove-bridge/CMakeLists.txt
-COPY foxglove_bridge_base /ros1_ws/src/ros-foxglove-bridge/foxglove_bridge_base
-COPY nodelets.xml /ros1_ws/src/ros-foxglove-bridge/nodelets.xml
-COPY ros1_foxglove_bridge /ros1_ws/src/ros-foxglove-bridge/ros1_foxglove_bridge
+COPY CMakeLists.txt src/ros-foxglove-bridge/CMakeLists.txt
+COPY foxglove_bridge_base src/ros-foxglove-bridge/foxglove_bridge_base
+COPY nodelets.xml src/ros-foxglove-bridge/nodelets.xml
+COPY ros1_foxglove_bridge src/ros-foxglove-bridge/ros1_foxglove_bridge
 
-# Build the Catkin workspace and ensure it's sourced when a container is run
-RUN . /opt/ros/$ROS_DISTRIBUTION/setup.sh \
-  && cd /ros1_ws \
+# Build the Catkin workspace
+RUN . /opt/ros/$ROS_DISTRO/setup.sh \
   && catkin_make
-RUN echo "source /ros1_ws/devel/setup.bash" >> ~/.bashrc
 
-# Set the working folder at startup
-WORKDIR /ros1_ws
+# source workspace from entrypoint
+RUN sed --in-place \
+      's|^source .*|source "$ROS_WS/devel/setup.bash"|' \
+      /ros_entrypoint.sh
 
 # Run foxglove_bridge
-CMD ["/bin/bash", "-c", "source /ros1_ws/devel/setup.bash && rosrun foxglove_bridge foxglove_bridge"]
+CMD ["rosrun", "foxglove_bridge", "foxglove_bridge"]
