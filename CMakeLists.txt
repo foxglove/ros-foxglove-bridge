@@ -64,6 +64,8 @@ endif()
 # Build the foxglove_bridge_base library
 add_library(foxglove_bridge_base SHARED
   foxglove_bridge_base/src/foxglove_bridge.cpp
+  foxglove_bridge_base/src/parameter.cpp
+  foxglove_bridge_base/src/serialization.cpp
   foxglove_bridge_base/src/test/test_client.cpp
 )
 target_include_directories(foxglove_bridge_base

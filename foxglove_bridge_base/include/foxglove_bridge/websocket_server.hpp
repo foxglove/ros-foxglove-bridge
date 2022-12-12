@@ -17,6 +17,7 @@
 #include <nlohmann/json.hpp>
 
 #include "common.hpp"
+#include "parameter.hpp"
 #include "serialization.hpp"
 #include "websocket_logging.hpp"
 #include "websocket_notls.hpp"
@@ -141,6 +142,10 @@ class ServerInterface {
   using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
   using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
   using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
+  using ParameterRequestHandler = std::function<void(const std::vector<std::string>&, ConnHandle)>;
+  using ParameterChangeHandler = std::function<void(const std::vector<Parameter>&, ConnHandle)>;
+  using ParameterSubscriptionHandler = std::function<void(
+    const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
 
 public:
   virtual ~ServerInterface() {}
@@ -150,12 +155,17 @@ public:
   virtual ChannelId addChannel(ChannelWithoutId channel) = 0;
   virtual void removeChannel(ChannelId chanId) = 0;
   virtual void broadcastChannels() = 0;
+  virtual void publishParameterValues(ConnHandle clientHandle,
+                                      const std::vector<Parameter>& parameters) = 0;
 
   virtual void setSubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
   virtual void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
   virtual void setClientAdvertiseHandler(ClientAdvertiseHandler handler) = 0;
   virtual void setClientUnadvertiseHandler(ClientUnadvertiseHandler handler) = 0;
   virtual void setClientMessageHandler(ClientMessageHandler handler) = 0;
+  virtual void setParameterRequestHandler(ParameterRequestHandler handler) = 0;
+  virtual void setParameterChangeHandler(ParameterChangeHandler handler) = 0;
+  virtual void setParameterSubscriptionHandler(ParameterSubscriptionHandler handler) = 0;
 
   virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                            std::string_view data) = 0;
@@ -179,6 +189,10 @@ public:
   using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
   using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
   using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
+  using ParameterRequestHandler = std::function<void(const std::vector<std::string>&, ConnHandle)>;
+  using ParameterChangeHandler = std::function<void(const std::vector<Parameter>&, ConnHandle)>;
+  using ParameterSubscriptionHandler = std::function<void(
+    const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
 
   static bool USES_TLS;
 
@@ -199,12 +213,17 @@ public:
   ChannelId addChannel(ChannelWithoutId channel) override;
   void removeChannel(ChannelId chanId) override;
   void broadcastChannels() override;
+  void publishParameterValues(ConnHandle clientHandle,
+                              const std::vector<Parameter>& parameters) override;
 
   void setSubscribeHandler(SubscribeUnsubscribeHandler handler) override;
   void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) override;
   void setClientAdvertiseHandler(ClientAdvertiseHandler handler) override;
   void setClientUnadvertiseHandler(ClientUnadvertiseHandler handler) override;
   void setClientMessageHandler(ClientMessageHandler handler) override;
+  void setParameterRequestHandler(ParameterRequestHandler handler) override;
+  void setParameterChangeHandler(ParameterChangeHandler handler) override;
+  void setParameterSubscriptionHandler(ParameterSubscriptionHandler handler) override;
 
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                    std::string_view data) override;
@@ -246,6 +265,9 @@ private:
   ClientAdvertiseHandler _clientAdvertiseHandler;
   ClientUnadvertiseHandler _clientUnadvertiseHandler;
   ClientMessageHandler _clientMessageHandler;
+  ParameterRequestHandler _parameterRequestHandler;
+  ParameterChangeHandler _parameterChangeHandler;
+  ParameterSubscriptionHandler _ParameterSubscriptionHandler;
   std::shared_mutex _clientsChannelMutex;
 
   void setupTlsHandler() override;
@@ -420,6 +442,23 @@ inline void Server<ServerConfiguration>::setClientUnadvertiseHandler(
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::setClientMessageHandler(ClientMessageHandler handler) {
   _clientMessageHandler = std::move(handler);
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::setParameterRequestHandler(
+  ParameterRequestHandler handler) {
+  _parameterRequestHandler = std::move(handler);
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::setParameterChangeHandler(ParameterChangeHandler handler) {
+  _parameterChangeHandler = std::move(handler);
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::setParameterSubscriptionHandler(
+  ParameterSubscriptionHandler handler) {
+  _ParameterSubscriptionHandler = std::move(handler);
 }
 
 template <typename ServerConfiguration>
@@ -624,6 +663,10 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
   constexpr auto UNSUBSCRIBE = Integer("unsubscribe");
   constexpr auto ADVERTISE = Integer("advertise");
   constexpr auto UNADVERTISE = Integer("unadvertise");
+  constexpr auto GET_PARAMETERS = Integer("getParameters");
+  constexpr auto SET_PARAMETERS = Integer("setParameters");
+  constexpr auto SUBSCRIBE_PARAMETER_UPDATES = Integer("subscribeParameterUpdates");
+  constexpr auto UNSUBSCRIBE_PARAMETER_UPDATES = Integer("unsubscribeParameterUpdates");
 
   switch (Integer(op)) {
     case SUBSCRIBE: {
@@ -710,6 +753,30 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         if (_clientUnadvertiseHandler) {
           _clientUnadvertiseHandler(channelId, hdl);
         }
+      }
+    } break;
+    case GET_PARAMETERS: {
+      if (_parameterRequestHandler) {
+        const auto paramNames = payload.at("parameters").get<std::vector<std::string>>();
+        _parameterRequestHandler(paramNames, hdl);
+      }
+    } break;
+    case SET_PARAMETERS: {
+      if (_parameterChangeHandler) {
+        const auto parameters = payload.at("parameters").get<std::vector<Parameter>>();
+        _parameterChangeHandler(parameters, hdl);
+      }
+    } break;
+    case SUBSCRIBE_PARAMETER_UPDATES: {
+      if (_ParameterSubscriptionHandler) {
+        const auto paramNames = payload.at("parameters").get<std::vector<std::string>>();
+        _ParameterSubscriptionHandler(paramNames, ParameterSubscriptionOperation::SUBSCRIBE, hdl);
+      }
+    } break;
+    case UNSUBSCRIBE_PARAMETER_UPDATES: {
+      if (_ParameterSubscriptionHandler) {
+        const auto paramNames = payload.at("parameters").get<std::vector<std::string>>();
+        _ParameterSubscriptionHandler(paramNames, ParameterSubscriptionOperation::UNSUBSCRIBE, hdl);
       }
     } break;
     default: {
@@ -815,6 +882,13 @@ inline void Server<ServerConfiguration>::broadcastChannels() {
     (void)clientInfo;
     sendJsonRaw(hdl, msg);
   }
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::publishParameterValues(
+  ConnHandle hdl, const std::vector<Parameter>& parameters) {
+  nlohmann::json jsonPayload{{"op", "parameterValues"}, {"parameters", parameters}};
+  sendJsonRaw(hdl, jsonPayload.dump());
 }
 
 template <typename ServerConfiguration>
