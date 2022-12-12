@@ -2,6 +2,12 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.2.2 (2022-12-12)
+------------------
+* Fix messages not being received anymore after unadvertising a client publication (`#109 <https://github.com/foxglove/ros-foxglove-bridge/issues/109>`_)
+* Allow to whitelist topics via a ROS paramater (`#108 <https://github.com/foxglove/ros-foxglove-bridge/issues/108>`_)
+* Contributors: Hans-Joachim Krauch
+
 0.2.1 (2022-12-05)
 ------------------
 * Fix compilation on platforms where size_t is defined as `unsigned int`
