@@ -12,6 +12,7 @@
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/message_definition_cache.hpp>
 #include <foxglove_bridge/param_utils.hpp>
+#include <foxglove_bridge/parameter_interface.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
 
 using namespace std::chrono_literals;
@@ -22,6 +23,8 @@ using SubscriptionsByClient = std::map<foxglove::ConnHandle, Subscription, std::
 using Publication = rclcpp::GenericPublisher::SharedPtr;
 using ClientPublications = std::unordered_map<foxglove::ClientChannelId, Publication>;
 using PublicationsByClient = std::map<foxglove::ConnHandle, ClientPublications, std::owner_less<>>;
+using SubscribedParametersByClient =
+  std::map<foxglove::ConnHandle, std::unordered_set<std::string>, std::owner_less<>>;
 
 namespace foxglove_bridge {
 
@@ -30,7 +33,8 @@ public:
   using TopicAndDatatype = std::pair<std::string, std::string>;
 
   FoxgloveBridge(const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
-      : Node("foxglove_bridge", options) {
+      : Node("foxglove_bridge", options)
+      , _paramInterface(this) {
     RCLCPP_INFO(this->get_logger(), "Starting %s with %s", this->get_name(),
                 foxglove::WebSocketUserAgent());
 
@@ -51,6 +55,8 @@ public:
     const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
     std::vector<std::string> serverCapabilities = {
       foxglove::CAPABILITY_CLIENT_PUBLISH,
+      foxglove::CAPABILITY_PARAMETERS,
+      foxglove::CAPABILITY_PARAMETERS_SUBSCRIBE,
     };
     if (_useSimTime) {
       serverCapabilities.push_back(foxglove::CAPABILITY_TIME);
@@ -72,6 +78,14 @@ public:
       std::bind(&FoxgloveBridge::clientUnadvertiseHandler, this, _1, _2));
     _server->setClientMessageHandler(
       std::bind(&FoxgloveBridge::clientMessageHandler, this, _1, _2));
+    _server->setParameterRequestHandler(
+      std::bind(&FoxgloveBridge::parameterRequestHandler, this, _1, _2));
+    _server->setParameterChangeHandler(
+      std::bind(&FoxgloveBridge::parameterChangeHandler, this, _1, _2));
+    _server->setParameterSubscriptionHandler(
+      std::bind(&FoxgloveBridge::parameterSubscriptionHandler, this, _1, _2, _3));
+
+    _paramInterface.setParamUpdateCallback(std::bind(&FoxgloveBridge::parameterUpdates, this, _1));
 
     _server->start(address, port);
 
@@ -254,6 +268,7 @@ private:
     }
   };
 
+  ParameterInterface _paramInterface;
   std::unique_ptr<foxglove::ServerInterface> _server;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::vector<std::regex> _topicWhitelistPatterns;
@@ -263,6 +278,7 @@ private:
   PublicationsByClient _clientAdvertisedTopics;
   rclcpp::CallbackGroup::SharedPtr _subscriptionCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _clientPublishCallbackGroup;
+  SubscribedParametersByClient _clientSubscribedParams;
   std::mutex _subscriptionsMutex;
   std::mutex _clientAdvertisementsMutex;
   std::unique_ptr<std::thread> _rosgraphPollThread;
@@ -532,6 +548,70 @@ private:
 
     // Publish the message
     publisher->publish(serializedMessage);
+  }
+
+  void parameterChangeHandler(const std::vector<foxglove::Parameter>& parameters,
+                              foxglove::ConnHandle hdl) {
+    (void)hdl;
+    RCLCPP_INFO(this->get_logger(), "Received a parameter change request to set %zu parameters",
+                parameters.size());
+    _paramInterface.setParams(parameters, std::chrono::seconds(5));
+  }
+
+  void parameterRequestHandler(const std::vector<std::string>& parameters,
+                               foxglove::ConnHandle hdl) {
+    RCLCPP_INFO(this->get_logger(), "Received a parameter request, %zu parameters requested",
+                parameters.size());
+
+    const auto params = _paramInterface.getParams(parameters, std::chrono::seconds(5));
+
+    RCLCPP_INFO(this->get_logger(), "sending back, %zu parameters", params.size());
+
+    _server->publishParameterValues(hdl, params);
+  }
+
+  void parameterSubscriptionHandler(const std::vector<std::string>& parameters,
+                                    foxglove::ParameterSubscriptionOperation op,
+                                    foxglove::ConnHandle hdl) {
+    RCLCPP_INFO(this->get_logger(),
+                "Received a parameter subscribe / unsubscribe request, %zu parameters",
+                parameters.size());
+
+    // Get client subscribed params or insert an empty map.
+    auto [clientSubscribedParamsIt, newlyInserted] =
+      _clientSubscribedParams.try_emplace(hdl, std::unordered_set<std::string>());
+
+    if (op == foxglove::ParameterSubscriptionOperation::SUBSCRIBE) {
+      _paramInterface.subscribeParams(parameters);
+      clientSubscribedParamsIt->second.insert(parameters.begin(), parameters.end());
+    } else {
+      _paramInterface.unsubscribeParams(parameters);
+      for (const auto& paramName : parameters) {
+        clientSubscribedParamsIt->second.erase(paramName);
+      }
+    }
+  }
+
+  void parameterUpdates(const std::vector<foxglove::Parameter>& parameters) {
+    RCLCPP_INFO(this->get_logger(), "Received a parameter update with %zu changed parameters",
+                parameters.size());
+
+    for (const auto& clientParamSubscriptions : _clientSubscribedParams) {
+      const auto hdl = clientParamSubscriptions.first;
+      const auto& paramSubscriptions = clientParamSubscriptions.second;
+
+      std::vector<foxglove::Parameter> paramsToSend;
+      std::copy_if(parameters.begin(), parameters.end(), std::back_inserter(paramsToSend),
+                   [paramSubscriptions](const auto& p) {
+                     return paramSubscriptions.find(p.getName()) != paramSubscriptions.end();
+                   });
+
+      if (!paramsToSend.empty()) {
+        RCLCPP_INFO(this->get_logger(), "Updating client with %zu changed parameters",
+                    paramsToSend.size());
+        _server->publishParameterValues(hdl, paramsToSend);
+      }
+    }
   }
 
   void logHandler(LogLevel level, char const* msg) {

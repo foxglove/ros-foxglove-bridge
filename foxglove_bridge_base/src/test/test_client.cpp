@@ -4,6 +4,7 @@
 #define ASIO_STANDALONE
 #include <websocketpp/config/asio_client.hpp>
 
+#include <foxglove_bridge/serialization.hpp>
 #include <foxglove_bridge/test/test_client.hpp>
 #include <foxglove_bridge/websocket_client.hpp>
 
@@ -53,6 +54,26 @@ std::vector<uint8_t> connectClientAndReceiveMsg(const std::string& uri,
     throw std::runtime_error("Client failed to receive message");
   }
   return msgFuture.get();
+}
+
+std::vector<Parameter> waitForParameters(std::shared_ptr<ClientInterface> client,
+                                         const std::chrono::duration<double>& timeout) {
+  std::promise<std::vector<Parameter>> paramPromise;
+  auto paramFuture = paramPromise.get_future();
+  client->setTextMessageHandler([&paramPromise](const std::string& payload) {
+    const auto msg = nlohmann::json::parse(payload);
+    const auto& op = msg["op"].get<std::string>();
+    if (op == "parameterValues") {
+      const auto parameters = msg["parameters"].get<std::vector<Parameter>>();
+      paramPromise.set_value(std::move(parameters));
+    }
+  });
+
+  // Wait until we have received parameters
+  if (std::future_status::ready != paramFuture.wait_for(timeout)) {
+    throw std::runtime_error("Client failed to receive parameters");
+  }
+  return paramFuture.get();
 }
 
 // Explicit template instantiation
