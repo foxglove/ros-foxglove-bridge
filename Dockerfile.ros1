@@ -8,7 +8,7 @@ ENV ROS_WS $ROS_WS
 WORKDIR $ROS_WS
 
 # Add package.xml so we can install package dependencies.
-COPY package.xml src/ros-foxglove-bridge/package.xml
+COPY package.xml src/ros-foxglove-bridge/
 
 # Install rosdep dependencies
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \

@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN rosdep init && rosdep update
 
 # Add package.xml so we can install package dependencies.
-COPY package.xml src/ros-foxglove-bridge/package.xml
+COPY package.xml src/ros-foxglove-bridge/
 
 # Install rosdep dependencies
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
