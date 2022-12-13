@@ -64,6 +64,7 @@ public:
     try {
       const std::vector<std::string> serverCapabilities = {
         foxglove::CAPABILITY_CLIENT_PUBLISH,
+        foxglove::CAPABILITY_TIME,
       };
       const auto logHandler =
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);

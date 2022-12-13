@@ -115,6 +115,7 @@ public:
 
     const std::vector<std::string> serverCapabilities = {
       foxglove::CAPABILITY_CLIENT_PUBLISH,
+      foxglove::CAPABILITY_TIME,
     };
     const auto useTLS = this->get_parameter("tls").as_bool();
     const auto certfile = this->get_parameter("certfile").as_string();
