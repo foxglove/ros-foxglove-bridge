@@ -15,6 +15,7 @@ using SubscriptionId = uint32_t;
 
 enum class BinaryOpcode : uint8_t {
   MESSAGE_DATA = 1,
+  TIME_DATA = 2,
 };
 
 enum class ClientBinaryOpcode : uint8_t {

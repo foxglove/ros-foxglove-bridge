@@ -231,6 +231,7 @@ public:
         "/clock", rclcpp::QoS{rclcpp::KeepLast(1)}.best_effort(),
         [&](std::shared_ptr<rosgraph_msgs::msg::Clock> msg) {
           _simTimeNs = uint64_t(rclcpp::Time{msg->clock}.nanoseconds());
+          _server->broadcastTime(_simTimeNs);
         });
     } else if (_useSimTime && !hasClockTopic) {
       RCLCPP_WARN(this->get_logger(), "/clock topic disappeared");

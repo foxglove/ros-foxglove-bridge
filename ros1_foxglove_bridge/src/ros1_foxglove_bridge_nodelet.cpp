@@ -362,6 +362,7 @@ private:
       _clockSubscription = getMTNodeHandle().subscribe<rosgraph_msgs::Clock>(
         "/clock", 10, [&](const rosgraph_msgs::Clock::ConstPtr msg) {
           _simTimeNs = msg->clock.toNSec();
+          _server->broadcastTime(_simTimeNs);
         });
     } else if (_useSimTime && !hasClockTopic) {
       ROS_WARN("/clock topic disappeared");

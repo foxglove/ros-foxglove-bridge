@@ -142,6 +142,7 @@ public:
 
   virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                            std::string_view data) = 0;
+  virtual void broadcastTime(uint64_t timestamp) = 0;
 
   virtual std::optional<Tcp::endpoint> localEndpoint() = 0;
   virtual std::string remoteEndpointString(ConnHandle clientHandle) = 0;
@@ -189,6 +190,7 @@ public:
 
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                    std::string_view data) override;
+  void broadcastTime(uint64_t timestamp) override;
 
   std::optional<Tcp::endpoint> localEndpoint() override;
   std::string remoteEndpointString(ConnHandle clientHandle) override;
@@ -816,6 +818,19 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
   foxglove::WriteUint64LE(message.data() + 5, timestamp);
   std::memcpy(message.data() + 1 + 4 + 8, data.data(), data.size());
   sendBinary(clientHandle, message);
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::broadcastTime(uint64_t timestamp) {
+  std::vector<uint8_t> message(1 + 8);
+  message[0] = uint8_t(BinaryOpcode::TIME_DATA);
+  foxglove::WriteUint64LE(message.data() + 1, timestamp);
+
+  std::shared_lock<std::shared_mutex> lock(_clientsChannelMutex);
+  for (const auto& [hdl, clientInfo] : _clients) {
+    (void)clientInfo;
+    sendBinary(hdl, message);
+  }
 }
 
 template <typename ServerConfiguration>
