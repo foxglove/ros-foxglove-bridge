@@ -1,4 +1,3 @@
-#include <atomic>
 #include <chrono>
 #include <memory>
 #include <regex>
@@ -113,14 +112,18 @@ public:
       }
     }
 
-    const std::vector<std::string> serverCapabilities = {
-      foxglove::CAPABILITY_CLIENT_PUBLISH,
-      foxglove::CAPABILITY_TIME,
-    };
     const auto useTLS = this->get_parameter("tls").as_bool();
     const auto certfile = this->get_parameter("certfile").as_string();
     const auto keyfile = this->get_parameter("keyfile").as_string();
+    _useSimTime = this->get_parameter("use_sim_time").as_bool();
     const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
+
+    std::vector<std::string> serverCapabilities = {
+      foxglove::CAPABILITY_CLIENT_PUBLISH,
+    };
+    if (_useSimTime) {
+      serverCapabilities.push_back(foxglove::CAPABILITY_TIME);
+    }
 
     if (useTLS) {
       _server = std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(
@@ -158,6 +161,16 @@ public:
 
     _clientPublishCallbackGroup =
       this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+
+    if (_useSimTime) {
+      _clockSubscription = this->create_subscription<rosgraph_msgs::msg::Clock>(
+        "/clock", rclcpp::QoS{rclcpp::KeepLast(1)}.best_effort(),
+        [&](std::shared_ptr<rosgraph_msgs::msg::Clock> msg) {
+          const auto timestamp = rclcpp::Time{msg->clock}.nanoseconds();
+          assert(timestamp >= 0 && "Timestamp is negative");
+          _server->broadcastTime(static_cast<uint64_t>(timestamp));
+        });
+    }
   }
 
   ~FoxgloveBridge() {
@@ -196,15 +209,9 @@ public:
     auto topicNamesAndTypes = this->get_node_graph_interface()->get_topic_names_and_types();
     std::unordered_set<TopicAndDatatype, PairHash> latestTopics;
     latestTopics.reserve(topicNamesAndTypes.size());
-    bool hasClockTopic = false;
     for (const auto& topicNamesAndType : topicNamesAndTypes) {
       const auto& topicName = topicNamesAndType.first;
       const auto& datatypes = topicNamesAndType.second;
-
-      // Check if a /clock topic is published
-      hasClockTopic = hasClockTopic || (topicName == "/clock" &&
-                                        std::find(datatypes.begin(), datatypes.end(),
-                                                  "rosgraph_msgs/msg/Clock") != datatypes.end());
 
       // Ignore the topic if it is not on the topic whitelist
       if (std::find_if(_topicWhitelistPatterns.begin(), _topicWhitelistPatterns.end(),
@@ -222,22 +229,6 @@ public:
         this->get_logger(),
         "%zu topics have been ignored as they do not match any pattern on the topic whitelist",
         numIgnoredTopics);
-    }
-
-    // Enable or disable simulated time based on the presence of a /clock topic
-    if (!_useSimTime && hasClockTopic) {
-      RCLCPP_INFO(this->get_logger(), "/clock topic found, using simulated time");
-      _useSimTime = true;
-      _clockSubscription = this->create_subscription<rosgraph_msgs::msg::Clock>(
-        "/clock", rclcpp::QoS{rclcpp::KeepLast(1)}.best_effort(),
-        [&](std::shared_ptr<rosgraph_msgs::msg::Clock> msg) {
-          _simTimeNs = uint64_t(rclcpp::Time{msg->clock}.nanoseconds());
-          _server->broadcastTime(_simTimeNs);
-        });
-    } else if (_useSimTime && !hasClockTopic) {
-      RCLCPP_WARN(this->get_logger(), "/clock topic disappeared");
-      _useSimTime = false;
-      _clockSubscription.reset();
     }
 
     // Create a list of topics that are new to us
@@ -348,8 +339,7 @@ private:
   std::unique_ptr<std::thread> _rosgraphPollThread;
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
-  std::atomic<uint64_t> _simTimeNs = 0;
-  std::atomic<bool> _useSimTime = false;
+  bool _useSimTime = false;
 
   void subscribeHandler(foxglove::ChannelId channelId, foxglove::ConnHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
@@ -643,15 +633,12 @@ private:
                          std::shared_ptr<rclcpp::SerializedMessage> msg) {
     // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
     // to `/rosout` will cause a feedback loop
-    const auto timestamp = currentTimeNs();
+    const auto timestamp = this->now().nanoseconds();
+    assert(timestamp >= 0 && "Timestamp is negative");
     const auto payload =
       std::string_view{reinterpret_cast<const char*>(msg->get_rcl_serialized_message().buffer),
                        msg->get_rcl_serialized_message().buffer_length};
-    _server->sendMessage(clientHandle, channel.id, timestamp, payload);
-  }
-
-  uint64_t currentTimeNs() {
-    return _useSimTime ? _simTimeNs.load() : uint64_t(this->now().nanoseconds());
+    _server->sendMessage(clientHandle, channel.id, static_cast<uint64_t>(timestamp), payload);
   }
 };
 
