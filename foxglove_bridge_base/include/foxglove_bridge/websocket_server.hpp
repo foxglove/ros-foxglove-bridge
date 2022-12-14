@@ -142,6 +142,7 @@ public:
 
   virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                            std::string_view data) = 0;
+  virtual void broadcastTime(uint64_t timestamp) = 0;
 
   virtual std::optional<Tcp::endpoint> localEndpoint() = 0;
   virtual std::string remoteEndpointString(ConnHandle clientHandle) = 0;
@@ -164,7 +165,8 @@ public:
 
   static bool USES_TLS;
 
-  explicit Server(std::string name, LogCallback logger, const std::string& certfile = "",
+  explicit Server(std::string name, LogCallback logger,
+                  const std::vector<std::string>& capabilities, const std::string& certfile = "",
                   const std::string& keyfile = "");
   virtual ~Server();
 
@@ -188,6 +190,7 @@ public:
 
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                    std::string_view data) override;
+  void broadcastTime(uint64_t timestamp) override;
 
   std::optional<Tcp::endpoint> localEndpoint() override;
   std::string remoteEndpointString(ConnHandle clientHandle) override;
@@ -208,6 +211,7 @@ private:
 
   std::string _name;
   LogCallback _logger;
+  std::vector<std::string> _capabilities;
   std::string _certfile;
   std::string _keyfile;
   ServerType _server;
@@ -242,9 +246,11 @@ private:
 
 template <typename ServerConfiguration>
 inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger,
+                                           const std::vector<std::string>& capabilities,
                                            const std::string& certfile, const std::string& keyfile)
     : _name(std::move(name))
     , _logger(logger)
+    , _capabilities(capabilities)
     , _certfile(certfile)
     , _keyfile(keyfile) {
   // Redirect logging
@@ -310,7 +316,7 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
   con->send(json({
                    {"op", "serverInfo"},
                    {"name", _name},
-                   {"capabilities", json::array({"clientPublish"})},
+                   {"capabilities", _capabilities},
                  })
               .dump());
 
@@ -812,6 +818,19 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
   foxglove::WriteUint64LE(message.data() + 5, timestamp);
   std::memcpy(message.data() + 1 + 4 + 8, data.data(), data.size());
   sendBinary(clientHandle, message);
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::broadcastTime(uint64_t timestamp) {
+  std::vector<uint8_t> message(1 + 8);
+  message[0] = uint8_t(BinaryOpcode::TIME_DATA);
+  foxglove::WriteUint64LE(message.data() + 1, timestamp);
+
+  std::shared_lock<std::shared_mutex> lock(_clientsChannelMutex);
+  for (const auto& [hdl, clientInfo] : _clients) {
+    (void)clientInfo;
+    sendBinary(hdl, message);
+  }
 }
 
 template <typename ServerConfiguration>
