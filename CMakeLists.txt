@@ -124,6 +124,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
 
     add_library(foxglove_bridge_component SHARED
       ros2_foxglove_bridge/src/message_definition_cache.cpp
+      ros2_foxglove_bridge/src/param_utils.cpp
       ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp
     )
     target_include_directories(foxglove_bridge_component
