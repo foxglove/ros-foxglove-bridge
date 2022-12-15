@@ -66,6 +66,30 @@ void declareParameters(rclcpp::Node* node) {
   topicWhiteListDescription.read_only = true;
   node->declare_parameter(PARAM_TOPIC_WHITELIST, std::vector<std::string>({".*"}),
                           topicWhiteListDescription);
+
+  auto bestEffortTopicsListDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  bestEffortTopicsListDescription.name = PARAM_BEST_EFFORT_TOPICS;
+  bestEffortTopicsListDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  bestEffortTopicsListDescription.description =
+    "List of regular expressions (ECMAScript) of topic names of which messages can be dropped in "
+    "case the client can't keep up with the server's sending rate.";
+  bestEffortTopicsListDescription.read_only = true;
+  node->declare_parameter(PARAM_BEST_EFFORT_TOPICS, std::vector<std::string>(),
+                          bestEffortTopicsListDescription);
+
+  auto bestEffortBuffSizeLimit = rcl_interfaces::msg::ParameterDescriptor{};
+  bestEffortBuffSizeLimit.name = PARAM_BEST_EFFORT_BUFF_SIZE_LIMIT;
+  bestEffortBuffSizeLimit.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+  bestEffortBuffSizeLimit.description =
+    "When a connection's send buffer reaches this limit best-effort published topics (or "
+    "topics that are treated as such) will be dropped to avoid a queue of old messages building "
+    "up.";
+  maxQosDepthDescription.integer_range.resize(1);
+  maxQosDepthDescription.integer_range[0].from_value = 0;
+  maxQosDepthDescription.integer_range[0].to_value = 100000;
+  bestEffortBuffSizeLimit.read_only = true;
+  node->declare_parameter(PARAM_BEST_EFFORT_BUFF_SIZE_LIMIT, DEFAULT_BEST_EFFORT_BUFF_SIZE_LIMIT_KB,
+                          bestEffortBuffSizeLimit);
 }
 
 std::vector<std::regex> parseRegexStrings(rclcpp::Node* node,

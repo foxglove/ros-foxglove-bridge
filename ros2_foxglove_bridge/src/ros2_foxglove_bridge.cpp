@@ -44,6 +44,16 @@ public:
     _maxQosDepth = this->get_parameter(PARAM_MAX_QOS_DEPTH).as_int();
     const auto topicWhiteList = this->get_parameter(PARAM_TOPIC_WHITELIST).as_string_array();
     _topicWhitelistPatterns = parseRegexStrings(this, topicWhiteList);
+    const auto bestEffortTopicPatterns =
+      this->get_parameter(PARAM_BEST_EFFORT_TOPICS).as_string_array();
+    _bestEffortTopicPatterns = parseRegexStrings(this, bestEffortTopicPatterns);
+    const size_t best_effort_buff_size_limit =
+      this->get_parameter(PARAM_BEST_EFFORT_BUFF_SIZE_LIMIT).as_int();
+
+    for (const auto& p : bestEffortTopicPatterns) {
+      RCLCPP_WARN(this->get_logger(), "Pattern: %s", p.c_str());
+    }
+
     _useSimTime = this->get_parameter("use_sim_time").as_bool();
 
     const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
@@ -56,10 +66,11 @@ public:
 
     if (useTLS) {
       _server = std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(
-        "foxglove_bridge", std::move(logHandler), serverCapabilities, certfile, keyfile);
+        "foxglove_bridge", std::move(logHandler), serverCapabilities, best_effort_buff_size_limit,
+        certfile, keyfile);
     } else {
       _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
-        "foxglove_bridge", std::move(logHandler), serverCapabilities);
+        "foxglove_bridge", std::move(logHandler), serverCapabilities, best_effort_buff_size_limit);
     }
     _server->setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2));
     _server->setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2));
@@ -253,6 +264,7 @@ private:
   std::unique_ptr<foxglove::ServerInterface> _server;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::vector<std::regex> _topicWhitelistPatterns;
+  std::vector<std::regex> _bestEffortTopicPatterns;
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
@@ -368,10 +380,18 @@ private:
                   subscriptionsByClient.size(), topic.c_str(), datatype.c_str(), channelId);
     }
 
+    const bool treatAsBestEffortTopic =
+      qos.reliability() == rclcpp::ReliabilityPolicy::BestEffort ||
+      std::find_if(_bestEffortTopicPatterns.begin(), _bestEffortTopicPatterns.end(),
+                   [&topic](const auto& regex) {
+                     return std::regex_match(topic, regex);
+                   }) != _bestEffortTopicPatterns.end();
+
     try {
       auto subscriber = this->create_generic_subscription(
         topic, datatype, qos,
-        std::bind(&FoxgloveBridge::rosMessageHandler, this, channel, clientHandle, _1),
+        std::bind(&FoxgloveBridge::rosMessageHandler, this, channel, clientHandle,
+                  treatAsBestEffortTopic, _1),
         subscriptionOptions);
       subscriptionsByClient.emplace(clientHandle, std::move(subscriber));
     } catch (const std::exception& ex) {
@@ -555,6 +575,7 @@ private:
   }
 
   void rosMessageHandler(const foxglove::Channel& channel, foxglove::ConnHandle clientHandle,
+                         bool isReliableSubscription,
                          std::shared_ptr<rclcpp::SerializedMessage> msg) {
     // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
     // to `/rosout` will cause a feedback loop
@@ -563,7 +584,8 @@ private:
     const auto payload =
       std::string_view{reinterpret_cast<const char*>(msg->get_rcl_serialized_message().buffer),
                        msg->get_rcl_serialized_message().buffer_length};
-    _server->sendMessage(clientHandle, channel.id, static_cast<uint64_t>(timestamp), payload);
+    _server->sendMessage(clientHandle, channel.id, static_cast<uint64_t>(timestamp), payload,
+                         isReliableSubscription);
   }
 };
 

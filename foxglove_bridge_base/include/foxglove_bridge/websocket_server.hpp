@@ -31,6 +31,7 @@ using OpCode = websocketpp::frame::opcode::value;
 static const websocketpp::log::level APP = websocketpp::log::alevel::app;
 static const websocketpp::log::level RECOVERABLE = websocketpp::log::elevel::rerror;
 
+constexpr size_t MAX_SEND_BUFF_SIZE_BYTES = 100000000;  // 100MB
 constexpr uint32_t Integer(const std::string_view str) {
   uint32_t result = 0x811C9DC5;  // FNV-1a 32-bit algorithm
   for (char c : str) {
@@ -141,7 +142,7 @@ public:
   virtual void setClientMessageHandler(ClientMessageHandler handler) = 0;
 
   virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
-                           std::string_view data) = 0;
+                           std::string_view data, bool bestEffort = false) = 0;
   virtual void broadcastTime(uint64_t timestamp) = 0;
 
   virtual std::optional<Tcp::endpoint> localEndpoint() = 0;
@@ -166,8 +167,9 @@ public:
   static bool USES_TLS;
 
   explicit Server(std::string name, LogCallback logger,
-                  const std::vector<std::string>& capabilities, const std::string& certfile = "",
-                  const std::string& keyfile = "");
+                  const std::vector<std::string>& capabilities,
+                  const size_t best_effort_buff_size_limit_kb = 1000UL,
+                  const std::string& certfile = "", const std::string& keyfile = "");
   virtual ~Server();
 
   Server(const Server&) = delete;
@@ -189,7 +191,7 @@ public:
   void setClientMessageHandler(ClientMessageHandler handler) override;
 
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
-                   std::string_view data) override;
+                   std::string_view data, bool bestEffort = false) override;
   void broadcastTime(uint64_t timestamp) override;
 
   std::optional<Tcp::endpoint> localEndpoint() override;
@@ -212,6 +214,7 @@ private:
   std::string _name;
   LogCallback _logger;
   std::vector<std::string> _capabilities;
+  size_t _best_effort_buff_size_limit_kb;
   std::string _certfile;
   std::string _keyfile;
   ServerType _server;
@@ -247,10 +250,12 @@ private:
 template <typename ServerConfiguration>
 inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger,
                                            const std::vector<std::string>& capabilities,
+                                           const size_t best_effort_buff_size_limit_kb,
                                            const std::string& certfile, const std::string& keyfile)
     : _name(std::move(name))
     , _logger(logger)
     , _capabilities(capabilities)
+    , _best_effort_buff_size_limit_kb(best_effort_buff_size_limit_kb)
     , _certfile(certfile)
     , _keyfile(keyfile) {
   // Redirect logging
@@ -794,7 +799,24 @@ inline void Server<ServerConfiguration>::broadcastChannels() {
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, ChannelId chanId,
-                                                     uint64_t timestamp, std::string_view data) {
+                                                     uint64_t timestamp, std::string_view data,
+                                                     bool bestEffort) {
+  std::error_code ec;
+  const auto con = _server.get_con_from_hdl(clientHandle, ec);
+  if (ec || !con) {
+    return;
+  }
+
+  const auto bufferSize = con->get_buffered_amount();
+  if (bufferSize > MAX_SEND_BUFF_SIZE_BYTES) {
+    _server.get_elog().write(RECOVERABLE,
+                             std::string("Dropping message as send buffer exceeds max. limit"));
+    return;
+  } else if (bestEffort && bufferSize > _best_effort_buff_size_limit_kb) {
+    _logger(WebSocketLogLevel::Debug, "Dropping message from best-effort topic");
+    return;
+  }
+
   SubscriptionId subId = std::numeric_limits<SubscriptionId>::max();
 
   {

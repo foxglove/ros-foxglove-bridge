@@ -73,7 +73,7 @@ public:
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);
       if (useTLS) {
         _server = std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(
-          "foxglove_bridge", std::move(logHandler), serverCapabilities, certfile, keyfile);
+          "foxglove_bridge", std::move(logHandler), serverCapabilities, 1000UL, certfile, keyfile);
       } else {
         _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
           "foxglove_bridge", std::move(logHandler), serverCapabilities);
