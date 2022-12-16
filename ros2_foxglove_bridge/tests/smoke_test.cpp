@@ -85,7 +85,7 @@ TEST(SmokeTest, testPublishing) {
   auto msgFuture = msgPromise.get_future();
   auto node = rclcpp::Node::make_shared("tester");
   auto sub = node->create_subscription<std_msgs::msg::String>(
-    advertisement.topic, 10, [&msgPromise, &node](const std_msgs::msg::String::SharedPtr msg) {
+    advertisement.topic, 10, [&msgPromise](const std_msgs::msg::String::SharedPtr msg) {
       msgPromise.set_value(msg->data);
     });
   rclcpp::executors::SingleThreadedExecutor executor;

@@ -16,6 +16,13 @@
 
 namespace foxglove {
 
+inline void to_json(nlohmann::json& j, const ClientAdvertisement& p) {
+  j = nlohmann::json{{"id", p.channelId},
+                     {"topic", p.topic},
+                     {"encoding", p.encoding},
+                     {"schemaName", p.schemaName}};
+}
+
 using TextMessageHandler = std::function<void(const std::string&)>;
 using BinaryMessageHandler = std::function<void(const uint8_t*, size_t)>;
 using OpCode = websocketpp::frame::opcode::value;
@@ -196,12 +203,5 @@ protected:
   TextMessageHandler _textMessageHandler;
   BinaryMessageHandler _binaryMessageHandler;
 };
-
-inline void to_json(nlohmann::json& j, const ClientAdvertisement& p) {
-  j = nlohmann::json{{"id", p.channelId},
-                     {"topic", p.topic},
-                     {"encoding", p.encoding},
-                     {"schemaName", p.schemaName}};
-}
 
 }  // namespace foxglove
