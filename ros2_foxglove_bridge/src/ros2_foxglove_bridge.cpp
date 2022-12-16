@@ -159,6 +159,7 @@ public:
     _rosgraphPollThread =
       std::make_unique<std::thread>(std::bind(&FoxgloveBridge::rosgraphPollThread, this));
 
+    _subscriptionCallbackGroup = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
     _clientPublishCallbackGroup =
       this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
@@ -331,8 +332,8 @@ private:
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
-  std::unordered_map<foxglove::ChannelId, rclcpp::CallbackGroup::SharedPtr> _channelCallbackGroups;
   PublicationsByClient _clientAdvertisedTopics;
+  rclcpp::CallbackGroup::SharedPtr _subscriptionCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _clientPublishCallbackGroup;
   std::mutex _subscriptionsMutex;
   std::mutex _clientAdvertisementsMutex;
@@ -377,13 +378,9 @@ private:
                    topic.c_str(), datatype.c_str());
     };
 
-    const auto& [callbackGroup, isNewlyInserted] = _channelCallbackGroups.insert(
-      {channelId, this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive)});
-    (void)isNewlyInserted;
-
     rclcpp::SubscriptionOptions subscriptionOptions;
     subscriptionOptions.event_callbacks = eventCallbacks;
-    subscriptionOptions.callback_group = callbackGroup->second;
+    subscriptionOptions.callback_group = _subscriptionCallbackGroup;
 
     // Select an appropriate subscription QOS profile. This is similar to how ros2 topic echo
     // does it:
