@@ -21,33 +21,40 @@ ROS packages will be made available soon for ROS 1 Melodic and Noetic, and ROS 2
 
 In the meantime, you can try foxglove_bridge now by building from source or running a pre-built Docker container.
 
-__ROS 1 Source Build__
+### Building from source
+
+#### Fetch source and install dependencies
 
 ```bash
 cd <path/to/your/ros_ws>
 git clone https://github.com/foxglove/ros-foxglove-bridge.git src/ros-foxglove-bridge
+rosdep update
+rosdep install -i --from-path src -y
+```
+
+#### ROS 1
+```
 catkin_make
 source install/local_setup.bash
 rosrun foxglove_bridge foxglove_bridge
 ```
 
-__ROS 2 Source Build__
-
-```bash
-cd <path/to/your/ros_ws>
-git clone https://github.com/foxglove/ros-foxglove-bridge.git src/ros-foxglove-bridge
+#### ROS 2
+```
 colcon build
 source install/local_setup.bash
 ros2 run foxglove_bridge foxglove_bridge
 ```
 
-__ROS 1 Docker__
+### Docker
+
+#### ROS 1
 
 ```bash
 docker run --rm -it -v /opt/ros:/opt/ros --net=host ghcr.io/foxglove/noetic-ros1-bridge
 ```
 
-__ROS 2 Docker__
+#### ROS 2
 
 ```bash
 docker run --rm -it -v /opt/ros:/opt/ros --net=host ghcr.io/foxglove/galactic-ros2-bridge
