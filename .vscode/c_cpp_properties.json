@@ -5,15 +5,13 @@
       "name": "Linux",
       "includePath": [
         "${workspaceFolder}/**",
-        "/opt/ros/galactic/include/**",
-        "/opt/ros/noetic/include/**",
+        "/opt/ros/humble/include/**",
         "/usr/include/**"
       ],
       "browse": {
         "path": [
           "${workspaceFolder}",
-          "/opt/ros/galactic/include",
-          "/opt/ros/noetic/include",
+          "/opt/ros/humble/include",
           "/usr/include"
         ]
       },
