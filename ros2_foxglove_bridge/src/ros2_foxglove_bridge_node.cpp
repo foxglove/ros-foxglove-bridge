@@ -25,7 +25,6 @@ int main(int argc, char* argv[]) {
 
   rclcpp_components::ComponentManager componentManager(executor, "ComponentManager");
   const auto componentResources = componentManager.get_component_resources("foxglove_bridge");
-  RCLCPP_INFO(componentManager.get_logger(), std::to_string(numThreads).c_str());
 
   if (componentResources.empty()) {
     RCLCPP_INFO(componentManager.get_logger(), "No loadable resources found");

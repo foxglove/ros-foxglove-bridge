@@ -34,7 +34,7 @@ static const websocketpp::log::level RECOVERABLE = websocketpp::log::elevel::rer
 constexpr uint32_t Integer(const std::string_view str) {
   uint32_t result = 0x811C9DC5;  // FNV-1a 32-bit algorithm
   for (char c : str) {
-    result = (c ^ result) * 0x01000193;
+    result = (static_cast<uint32_t>(c) ^ result) * 0x01000193;
   }
   return result;
 }
@@ -127,6 +127,7 @@ class ServerInterface {
   using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
 
 public:
+  virtual ~ServerInterface() {}
   virtual void start(const std::string& host, uint16_t port) = 0;
   virtual void stop() = 0;
 
@@ -700,9 +701,9 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, const uint8_t* msg,
                                                              size_t length) {
-  const uint64_t timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                               std::chrono::high_resolution_clock::now().time_since_epoch())
-                               .count();
+  const auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           std::chrono::high_resolution_clock::now().time_since_epoch())
+                           .count();
 
   if (length < 1) {
     sendStatus(hdl, StatusLevel::Error, "Received an empty binary message");
@@ -737,8 +738,12 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
       if (_clientMessageHandler) {
         const auto& advertisement = channelIt->second;
         const uint32_t sequence = 0;
-        const ClientMessage clientMessage{timestamp,     timestamp, sequence,
-                                          advertisement, length,    msg};
+        const ClientMessage clientMessage{static_cast<uint64_t>(timestamp),
+                                          static_cast<uint64_t>(timestamp),
+                                          sequence,
+                                          advertisement,
+                                          length,
+                                          msg};
         _clientMessageHandler(clientMessage, hdl);
       }
     } break;

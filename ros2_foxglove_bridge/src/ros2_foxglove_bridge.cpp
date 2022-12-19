@@ -153,7 +153,7 @@ public:
       this->set_parameter(rclcpp::Parameter{"port", listeningPort});
     }
 
-    _maxQosDepth = this->get_parameter("max_qos_depth").as_int();
+    _maxQosDepth = static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
 
     // Start the thread polling for rosgraph changes
     _rosgraphPollThread =
