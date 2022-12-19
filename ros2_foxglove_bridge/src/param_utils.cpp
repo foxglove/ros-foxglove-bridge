@@ -79,6 +79,15 @@ void declareParameters(rclcpp::Node* node) {
   topicWhiteListDescription.read_only = true;
   node->declare_parameter(PARAM_TOPIC_WHITELIST, std::vector<std::string>({".*"}),
                           topicWhiteListDescription);
+
+  auto paramWhiteListDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  paramWhiteListDescription.name = PARAM_PARAMETER_WHITELIST;
+  paramWhiteListDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  paramWhiteListDescription.description =
+    "List of regular expressions (ECMAScript) of whitelisted parameter names.";
+  paramWhiteListDescription.read_only = true;
+  node->declare_parameter(PARAM_PARAMETER_WHITELIST, std::vector<std::string>({".*"}),
+                          paramWhiteListDescription);
 }
 
 std::vector<std::regex> parseRegexStrings(rclcpp::Node* node,

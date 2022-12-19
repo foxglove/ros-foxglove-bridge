@@ -75,8 +75,10 @@ static foxglove::Parameter fromRosParam(const rclcpp::Parameter& p) {
 
 namespace foxglove_bridge {
 
-ParameterInterface::ParameterInterface(rclcpp::Node* node)
+ParameterInterface::ParameterInterface(rclcpp::Node* node,
+                                       std::vector<std::regex> paramWhitelistPatterns)
     : _node(node)
+    , _paramWhitelistPatterns(paramWhitelistPatterns)
     , _callbackGroup(node->create_callback_group(rclcpp::CallbackGroupType::Reentrant)) {}
 
 ParameterList ParameterInterface::getParams(const std::vector<std::string>& paramNames,
@@ -135,6 +137,10 @@ void ParameterInterface::setParams(const ParameterList& parameters,
 
   rclcpp::ParameterMap paramsByNode;
   for (const auto& param : parameters) {
+    if (!isWhitelistedParam(param.getName())) {
+      return;
+    }
+
     const auto rosParam = toRosParam(param);
     const auto& [nodeName, paramName] = getNodeAndParamName(rosParam.get_name());
     paramsByNode[nodeName].emplace_back(paramName, rosParam.get_parameter_value());
@@ -165,8 +171,11 @@ void ParameterInterface::subscribeParams(const std::vector<std::string>& paramNa
 
   std::unordered_set<std::string> nodesToSubscribe;
   for (const auto& paramName : paramNames) {
-    const auto& [nodeName, paramN] = getNodeAndParamName(paramName);
+    if (!isWhitelistedParam(paramName)) {
+      return;
+    }
 
+    const auto& [nodeName, paramN] = getNodeAndParamName(paramName);
     auto [subscribedParamsit, wasNewlyCreated] = _subscribedParamsByNode.try_emplace(nodeName);
 
     auto& subscribedNodeParams = subscribedParamsit->second;
@@ -253,8 +262,10 @@ ParameterList ParameterInterface::getNodeParameters(
 
   ParameterList result;
   for (const auto& param : params) {
-    result.push_back(fromRosParam(rclcpp::Parameter(
-      prependNodeNameToParamName(param.get_name(), nodeName), param.get_parameter_value())));
+    const auto fullParamName = prependNodeNameToParamName(param.get_name(), nodeName);
+    if (isWhitelistedParam(fullParamName)) {
+      result.push_back(fromRosParam(rclcpp::Parameter(fullParamName, param.get_parameter_value())));
+    }
   }
   return result;
 }
@@ -280,6 +291,13 @@ void ParameterInterface::setNodeParameters(rclcpp::AsyncParametersClient::Shared
                   nodeName.c_str(), result.reason.c_str());
     }
   }
+}
+
+bool ParameterInterface::isWhitelistedParam(const std::string& paramName) {
+  return std::find_if(_paramWhitelistPatterns.begin(), _paramWhitelistPatterns.end(),
+                      [paramName](const auto& regex) {
+                        return std::regex_match(paramName, regex);
+                      }) != _paramWhitelistPatterns.end();
 }
 
 }  // namespace foxglove_bridge
