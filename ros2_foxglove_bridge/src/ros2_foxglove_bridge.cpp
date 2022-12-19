@@ -82,7 +82,7 @@ public:
     _server->setClientMessageHandler(
       std::bind(&FoxgloveBridge::clientMessageHandler, this, _1, _2));
     _server->setParameterRequestHandler(
-      std::bind(&FoxgloveBridge::parameterRequestHandler, this, _1, _2));
+      std::bind(&FoxgloveBridge::parameterRequestHandler, this, _1, _2, _3));
     _server->setParameterChangeHandler(
       std::bind(&FoxgloveBridge::parameterChangeHandler, this, _1, _2));
     _server->setParameterSubscriptionHandler(
@@ -562,7 +562,7 @@ private:
   }
 
   void parameterRequestHandler(const std::vector<std::string>& parameters,
-                               foxglove::ConnHandle hdl) {
+                               const std::string& requestId, foxglove::ConnHandle hdl) {
     RCLCPP_INFO(this->get_logger(), "Received a parameter request, %zu parameters requested",
                 parameters.size());
 
@@ -570,7 +570,7 @@ private:
 
     RCLCPP_INFO(this->get_logger(), "sending back, %zu parameters", params.size());
 
-    _server->publishParameterValues(hdl, params);
+    _server->publishParameterValues(hdl, params, requestId);
   }
 
   void parameterSubscriptionHandler(const std::vector<std::string>& parameters,

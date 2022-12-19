@@ -42,7 +42,8 @@ public:
   virtual void advertise(const std::vector<ClientAdvertisement>& channels) = 0;
   virtual void unadvertise(const std::vector<ClientChannelId>& channelIds) = 0;
   virtual void publish(ClientChannelId channelId, const uint8_t* buffer, size_t size) = 0;
-  virtual void getParameters(const std::vector<std::string>& parameterNames) = 0;
+  virtual void getParameters(const std::vector<std::string>& parameterNames,
+                             const std::string& requestId) = 0;
   virtual void setParameters(const std::vector<Parameter>& parameters) = 0;
   virtual void subscribeParameterUpdates(const std::vector<std::string>& parameterNames) = 0;
   virtual void unsubscribeParameterUpdates(const std::vector<std::string>& parameterNames) = 0;
@@ -180,8 +181,10 @@ public:
     sendBinary(payload.data(), payload.size());
   }
 
-  void getParameters(const std::vector<std::string>& parameterNames) override {
-    nlohmann::json jsonPayload{{"op", "getParameters"}, {"parameters", parameterNames}};
+  void getParameters(const std::vector<std::string>& parameterNames,
+                     const std::string& requestId) override {
+    nlohmann::json jsonPayload{
+      {"op", "getParameters"}, {"parameters", parameterNames}, {"id", requestId}};
     sendText(jsonPayload.dump());
   }
 

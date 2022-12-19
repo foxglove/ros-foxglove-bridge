@@ -142,7 +142,8 @@ class ServerInterface {
   using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
   using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
   using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
-  using ParameterRequestHandler = std::function<void(const std::vector<std::string>&, ConnHandle)>;
+  using ParameterRequestHandler =
+    std::function<void(const std::vector<std::string>&, const std::string&, ConnHandle)>;
   using ParameterChangeHandler = std::function<void(const std::vector<Parameter>&, ConnHandle)>;
   using ParameterSubscriptionHandler = std::function<void(
     const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
@@ -156,7 +157,8 @@ public:
   virtual void removeChannel(ChannelId chanId) = 0;
   virtual void broadcastChannels() = 0;
   virtual void publishParameterValues(ConnHandle clientHandle,
-                                      const std::vector<Parameter>& parameters) = 0;
+                                      const std::vector<Parameter>& parameters,
+                                      const std::string& requestId = std::string()) = 0;
 
   virtual void setSubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
   virtual void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
@@ -189,7 +191,8 @@ public:
   using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
   using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
   using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
-  using ParameterRequestHandler = std::function<void(const std::vector<std::string>&, ConnHandle)>;
+  using ParameterRequestHandler =
+    std::function<void(const std::vector<std::string>&, const std::string&, ConnHandle)>;
   using ParameterChangeHandler = std::function<void(const std::vector<Parameter>&, ConnHandle)>;
   using ParameterSubscriptionHandler = std::function<void(
     const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
@@ -213,8 +216,8 @@ public:
   ChannelId addChannel(ChannelWithoutId channel) override;
   void removeChannel(ChannelId chanId) override;
   void broadcastChannels() override;
-  void publishParameterValues(ConnHandle clientHandle,
-                              const std::vector<Parameter>& parameters) override;
+  void publishParameterValues(ConnHandle clientHandle, const std::vector<Parameter>& parameters,
+                              const std::string& requestId = std::string()) override;
 
   void setSubscribeHandler(SubscribeUnsubscribeHandler handler) override;
   void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) override;
@@ -758,7 +761,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
     case GET_PARAMETERS: {
       if (_parameterRequestHandler) {
         const auto paramNames = payload.at("parameters").get<std::vector<std::string>>();
-        _parameterRequestHandler(paramNames, hdl);
+        const auto requestId = payload.value("id", "");
+        _parameterRequestHandler(paramNames, requestId, hdl);
       }
     } break;
     case SET_PARAMETERS: {
@@ -886,8 +890,11 @@ inline void Server<ServerConfiguration>::broadcastChannels() {
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::publishParameterValues(
-  ConnHandle hdl, const std::vector<Parameter>& parameters) {
+  ConnHandle hdl, const std::vector<Parameter>& parameters, const std::string& requestId) {
   nlohmann::json jsonPayload{{"op", "parameterValues"}, {"parameters", parameters}};
+  if (!requestId.empty()) {
+    jsonPayload["id"] = requestId;
+  }
   sendJsonRaw(hdl, jsonPayload.dump());
 }
 

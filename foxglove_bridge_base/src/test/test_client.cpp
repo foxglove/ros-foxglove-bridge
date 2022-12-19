@@ -57,13 +57,16 @@ std::vector<uint8_t> connectClientAndReceiveMsg(const std::string& uri,
 }
 
 std::vector<Parameter> waitForParameters(std::shared_ptr<ClientInterface> client,
+                                         const std::string& requestId,
                                          const std::chrono::duration<double>& timeout) {
   std::promise<std::vector<Parameter>> paramPromise;
   auto paramFuture = paramPromise.get_future();
-  client->setTextMessageHandler([&paramPromise](const std::string& payload) {
+  client->setTextMessageHandler([&paramPromise, requestId](const std::string& payload) {
     const auto msg = nlohmann::json::parse(payload);
     const auto& op = msg["op"].get<std::string>();
-    if (op == "parameterValues") {
+    const auto id = msg.value("id", "");
+
+    if (op == "parameterValues" && (requestId.empty() || requestId == id)) {
       const auto parameters = msg["parameters"].get<std::vector<Parameter>>();
       paramPromise.set_value(std::move(parameters));
     }

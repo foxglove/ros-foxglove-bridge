@@ -156,17 +156,19 @@ TEST(SmokeTest, testPublishing) {
 }
 
 TEST_F(ParameterTest, testGetAllParams) {
-  _wsClient->getParameters({});
+  const std::string requestId = "req-testGetAllParams";
+  _wsClient->getParameters({}, requestId);
   std::vector<foxglove::Parameter> params;
-  ASSERT_NO_THROW(params = foxglove::waitForParameters(_wsClient));
+  ASSERT_NO_THROW(params = foxglove::waitForParameters(_wsClient, requestId));
   EXPECT_GE(params.size(), 2UL);
 }
 
 TEST_F(ParameterTest, testGetNonExistingParameters) {
+  const std::string requestId = "req-testGetNonExistingParameters";
   _wsClient->getParameters(
-    {"/foo_1.non_existing_parameter", "/foo_2.non_existing.nested_parameter"});
+    {"/foo_1.non_existing_parameter", "/foo_2.non_existing.nested_parameter"}, requestId);
   std::vector<foxglove::Parameter> params;
-  ASSERT_NO_THROW(params = foxglove::waitForParameters(_wsClient));
+  ASSERT_NO_THROW(params = foxglove::waitForParameters(_wsClient, requestId));
   EXPECT_TRUE(params.empty());
 }
 
@@ -174,9 +176,10 @@ TEST_F(ParameterTest, testGetParameters) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
   const auto p2 = NODE_2_NAME + "." + PARAM_2_NAME;
 
-  _wsClient->getParameters({p1, p2});
+  const std::string requestId = "req-testGetParameters";
+  _wsClient->getParameters({p1, p2}, requestId);
   std::vector<foxglove::Parameter> params;
-  ASSERT_NO_THROW(params = foxglove::waitForParameters(_wsClient));
+  ASSERT_NO_THROW(params = foxglove::waitForParameters(_wsClient, requestId));
   EXPECT_EQ(2UL, params.size());
   auto p1Iter = std::find_if(params.begin(), params.end(), [&p1](const auto& param) {
     return param.getName() == p1;
@@ -202,9 +205,10 @@ TEST_F(ParameterTest, testSetParameters) {
   };
 
   _wsClient->setParameters(parameters);
-  _wsClient->getParameters({p1, p2});
+  const std::string requestId = "req-testSetParameters";
+  _wsClient->getParameters({p1, p2}, requestId);
   std::vector<foxglove::Parameter> params;
-  ASSERT_NO_THROW(params = foxglove::waitForParameters(_wsClient));
+  ASSERT_NO_THROW(params = foxglove::waitForParameters(_wsClient, requestId));
   EXPECT_EQ(2UL, params.size());
   auto p1Iter = std::find_if(params.begin(), params.end(), [&p1](const auto& param) {
     return param.getName() == p1;
@@ -230,7 +234,7 @@ TEST_F(ParameterTest, testParameterSubscription) {
 
   _wsClient->unsubscribeParameterUpdates({p1});
   _wsClient->setParameters({foxglove::Parameter(p1, "bar")});
-  EXPECT_THROW((void)foxglove::waitForParameters(_wsClient, std::chrono::seconds(5)),
+  EXPECT_THROW((void)foxglove::waitForParameters(_wsClient, "", std::chrono::seconds(5)),
                std::runtime_error);
 }
 
@@ -247,8 +251,10 @@ TEST_F(ParameterTest, testGetParametersParallel) {
     futures.push_back(
       std::async(std::launch::async, [client]() -> std::vector<foxglove::Parameter> {
         if (std::future_status::ready == client->connect(URI).wait_for(std::chrono::seconds(5))) {
-          client->getParameters({});
-          const auto parameters = foxglove::waitForParameters(client, std::chrono::seconds(5));
+          const std::string requestId = "req-123";
+          client->getParameters({}, requestId);
+          const auto parameters =
+            foxglove::waitForParameters(client, requestId, std::chrono::seconds(5));
           return parameters;
         }
         return {};
