@@ -17,9 +17,9 @@ The foxglove_bridge uses the [Foxglove WebSocket protocol](https://github.com/fo
 
 ## Installation
 
-ROS packages will be made available soon for ROS 1 Melodic and Noetic, and ROS 2 Galactic, Humble, and Rolling. Earlier releases of ROS will not be supported due to API design and/or performance limitations.
+ROS packages are available for ROS 1 Melodic and Noetic, and ROS 2 Humble and Rolling. Earlier releases of ROS will not be supported due to API design and/or performance limitations.
 
-In the meantime, you can try foxglove_bridge now by building from source or running a pre-built Docker container.
+You can also try foxglove_bridge by building from source or running a pre-built Docker container.
 
 ### Building from source
 
@@ -57,7 +57,7 @@ docker run --rm -it -v /opt/ros:/opt/ros --net=host ghcr.io/foxglove/noetic-ros1
 #### ROS 2
 
 ```bash
-docker run --rm -it -v /opt/ros:/opt/ros --net=host ghcr.io/foxglove/galactic-ros2-bridge
+docker run --rm -it -v /opt/ros:/opt/ros --net=host ghcr.io/foxglove/humble-ros2-bridge
 ```
 
 ## Configuration

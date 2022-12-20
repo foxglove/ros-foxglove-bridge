@@ -18,7 +18,7 @@ COPY package.xml src/ros-foxglove-bridge/
 
 # Install rosdep dependencies
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
-    apt-get update && rosdep update && rosdep install -y \
+    apt-get update && rosdep update --include-eol-distros && rosdep install -y \
       --from-paths \
         src \
       --ignore-src \
