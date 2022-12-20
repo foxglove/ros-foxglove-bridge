@@ -28,11 +28,13 @@ class Parameter {
 public:
   Parameter();
   Parameter(const std::string& name, bool value);
+  Parameter(const std::string& name, int value);
   Parameter(const std::string& name, int64_t value);
   Parameter(const std::string& name, double value);
   Parameter(const std::string& name, std::string value);
   Parameter(const std::string& name, const char* value);
   Parameter(const std::string& name, const std::vector<bool>& value);
+  Parameter(const std::string& name, const std::vector<int>& value);
   Parameter(const std::string& name, const std::vector<int64_t>& value);
   Parameter(const std::string& name, const std::vector<double>& value);
   Parameter(const std::string& name, const std::vector<std::string>& value);

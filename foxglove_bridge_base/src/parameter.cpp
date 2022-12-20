@@ -12,6 +12,9 @@ Parameter::Parameter(const std::string& name, bool value)
     , _type(ParameterType::PARAMETER_BOOL)
     , _value(value) {}
 
+Parameter::Parameter(const std::string& name, int value)
+    : Parameter(name, static_cast<int64_t>(value)) {}
+
 Parameter::Parameter(const std::string& name, int64_t value)
     : _name(name)
     , _type(ParameterType::PARAMETER_INTEGER)
@@ -34,6 +37,11 @@ Parameter::Parameter(const std::string& name, const std::vector<bool>& value)
     : _name(name)
     , _type(ParameterType::PARAMETER_BOOL_ARRAY)
     , _value(value) {}
+
+Parameter::Parameter(const std::string& name, const std::vector<int>& value)
+    : _name(name)
+    , _type(ParameterType::PARAMETER_INTEGER_ARRAY)
+    , _value(std::vector<int64_t>(value.begin(), value.end())) {}
 
 Parameter::Parameter(const std::string& name, const std::vector<int64_t>& value)
     : _name(name)
