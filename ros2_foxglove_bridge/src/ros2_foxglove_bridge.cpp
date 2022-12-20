@@ -23,8 +23,6 @@ using SubscriptionsByClient = std::map<foxglove::ConnHandle, Subscription, std::
 using Publication = rclcpp::GenericPublisher::SharedPtr;
 using ClientPublications = std::unordered_map<foxglove::ClientChannelId, Publication>;
 using PublicationsByClient = std::map<foxglove::ConnHandle, ClientPublications, std::owner_less<>>;
-using SubscribedParametersByClient =
-  std::map<foxglove::ConnHandle, std::unordered_set<std::string>, std::owner_less<>>;
 
 namespace foxglove_bridge {
 
@@ -281,10 +279,8 @@ private:
   PublicationsByClient _clientAdvertisedTopics;
   rclcpp::CallbackGroup::SharedPtr _subscriptionCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _clientPublishCallbackGroup;
-  SubscribedParametersByClient _clientSubscribedParams;
   std::mutex _subscriptionsMutex;
   std::mutex _clientAdvertisementsMutex;
-  std::mutex _subscribedParametersMutex;
   std::unique_ptr<std::thread> _rosgraphPollThread;
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
@@ -567,41 +563,16 @@ private:
 
   void parameterSubscriptionHandler(const std::vector<std::string>& parameters,
                                     foxglove::ParameterSubscriptionOperation op,
-                                    foxglove::ConnHandle hdl) {
-    std::lock_guard<std::mutex> lock(_subscribedParametersMutex);
-
-    // Get client subscribed params or insert an empty map.
-    auto [clientSubscribedParamsIt, newlyInserted] =
-      _clientSubscribedParams.try_emplace(hdl, std::unordered_set<std::string>());
-
+                                    foxglove::ConnHandle) {
     if (op == foxglove::ParameterSubscriptionOperation::SUBSCRIBE) {
       _paramInterface->subscribeParams(parameters);
-      clientSubscribedParamsIt->second.insert(parameters.begin(), parameters.end());
     } else {
       _paramInterface->unsubscribeParams(parameters);
-      for (const auto& paramName : parameters) {
-        clientSubscribedParamsIt->second.erase(paramName);
-      }
     }
   }
 
   void parameterUpdates(const std::vector<foxglove::Parameter>& parameters) {
-    std::lock_guard<std::mutex> lock(_subscribedParametersMutex);
-
-    for (const auto& clientParamSubscriptions : _clientSubscribedParams) {
-      const auto hdl = clientParamSubscriptions.first;
-      const auto& paramSubscriptions = clientParamSubscriptions.second;
-
-      std::vector<foxglove::Parameter> paramsToSend;
-      std::copy_if(parameters.begin(), parameters.end(), std::back_inserter(paramsToSend),
-                   [paramSubscriptions](const auto& p) {
-                     return paramSubscriptions.find(p.getName()) != paramSubscriptions.end();
-                   });
-
-      if (!paramsToSend.empty()) {
-        _server->publishParameterValues(hdl, paramsToSend);
-      }
-    }
+    _server->updateParameterValues(parameters);
   }
 
   void logHandler(LogLevel level, char const* msg) {

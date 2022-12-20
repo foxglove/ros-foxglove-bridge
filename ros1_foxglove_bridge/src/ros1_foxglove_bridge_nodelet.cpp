@@ -35,8 +35,6 @@ using TopicAndDatatype = std::pair<std::string, std::string>;
 using SubscriptionsByClient = std::map<foxglove::ConnHandle, ros::Subscriber, std::owner_less<>>;
 using ClientPublications = std::unordered_map<foxglove::ClientChannelId, ros::Publisher>;
 using PublicationsByClient = std::map<foxglove::ConnHandle, ClientPublications, std::owner_less<>>;
-using SubscribedParametersByClient =
-  std::map<foxglove::ConnHandle, std::unordered_set<std::string>, std::owner_less<>>;
 
 class FoxgloveBridge : public nodelet::Nodelet {
 public:
@@ -527,14 +525,7 @@ private:
 
   void parameterSubscriptionHandler(const std::vector<std::string>& parameters,
                                     foxglove::ParameterSubscriptionOperation op,
-                                    foxglove::ConnHandle hdl) {
-    std::lock_guard<std::mutex> lock(_subscribedParametersMutex);
-
-    // Get client subscribed params or insert an empty map.
-    auto [clientSubscribedParamsIt, newlyInserted] =
-      _clientSubscribedParams.try_emplace(hdl, std::unordered_set<std::string>());
-    (void)newlyInserted;
-
+                                    foxglove::ConnHandle) {
     for (const auto& paramName : parameters) {
       if (!isWhitelisted(paramName, _paramWhitelistPatterns)) {
         ROS_WARN("Parameter '%s' is not whitelisted", paramName.c_str());
@@ -546,30 +537,14 @@ private:
       params[1] = xmlrpcServer.getServerURI();
       params[2] = ros::names::resolve(paramName);
 
-      std::string opVerb = "";
-      if (op == foxglove::ParameterSubscriptionOperation::SUBSCRIBE) {
-        opVerb = "subscribeParam";
-        clientSubscribedParamsIt->second.insert(paramName);
+      const auto opVerb = (op == foxglove::ParameterSubscriptionOperation::SUBSCRIBE)
+                            ? "subscribeParam"
+                            : "unsubscribeParam";
+
+      if (ros::master::execute(opVerb, params, result, payload, false)) {
+        ROS_DEBUG("%s '%s'", opVerb, paramName.c_str());
       } else {
-        opVerb = "unsubscribeParam";
-        clientSubscribedParamsIt->second.erase(paramName);
-      }
-
-      const auto nSubscriptions =
-        std::count_if(_clientSubscribedParams.begin(), _clientSubscribedParams.end(),
-                      [paramName](const auto& it) {
-                        return it.second.find(paramName) != it.second.end();
-                      });
-
-      const bool doRosMasterCall =
-        (nSubscriptions == 1UL && op == foxglove::ParameterSubscriptionOperation::SUBSCRIBE) ||
-        (nSubscriptions == 0UL && op == foxglove::ParameterSubscriptionOperation::UNSUBSCRIBE);
-
-      if (doRosMasterCall && ros::master::execute(opVerb, params, result, payload, false)) {
-        ROS_DEBUG("%s '%s'", opVerb.c_str(), paramName.c_str());
-      } else if (doRosMasterCall) {
-        ROS_WARN("Failed to %s '%s': %s", opVerb.c_str(), paramName.c_str(),
-                 result.toXml().c_str());
+        ROS_WARN("Failed to %s '%s': %s", opVerb, paramName.c_str(), result.toXml().c_str());
       }
     }
   }
@@ -586,21 +561,12 @@ private:
 
     const std::string paramName = ros::names::clean(params[1]);
     const XmlRpc::XmlRpcValue paramValue = params[2];
-    foxglove::Parameter param;
     try {
-      param = fromRosParam(paramName, paramValue);
+      const auto param = fromRosParam(paramName, paramValue);
+      _server->updateParameterValues({param});
     } catch (const std::exception& ex) {
       ROS_ERROR("Failed to convert parameter: %s", ex.what());
       return;
-    }
-
-    std::lock_guard<std::mutex> lock(_subscribedParametersMutex);
-    for (const auto& clientParamSubscriptions : _clientSubscribedParams) {
-      const auto hdl = clientParamSubscriptions.first;
-      const auto& paramSubscriptions = clientParamSubscriptions.second;
-      if (paramSubscriptions.find(paramName) != paramSubscriptions.end()) {
-        _server->publishParameterValues(hdl, {param});
-      }
     }
   }
 
@@ -643,10 +609,8 @@ private:
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
   PublicationsByClient _clientAdvertisedTopics;
-  SubscribedParametersByClient _clientSubscribedParams;
   std::mutex _subscriptionsMutex;
   std::shared_mutex _publicationsMutex;
-  std::mutex _subscribedParametersMutex;
   ros::Timer _updateTimer;
   size_t _maxUpdateMs = size_t(DEFAULT_MAX_UPDATE_MS);
   size_t _updateCount = 0;

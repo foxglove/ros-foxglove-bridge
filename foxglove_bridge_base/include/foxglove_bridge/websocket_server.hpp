@@ -159,6 +159,7 @@ public:
   virtual void publishParameterValues(ConnHandle clientHandle,
                                       const std::vector<Parameter>& parameters,
                                       const std::string& requestId = std::string()) = 0;
+  virtual void updateParameterValues(const std::vector<Parameter>& parameters) = 0;
 
   virtual void setSubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
   virtual void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
@@ -218,6 +219,7 @@ public:
   void broadcastChannels() override;
   void publishParameterValues(ConnHandle clientHandle, const std::vector<Parameter>& parameters,
                               const std::string& requestId = std::string()) override;
+  void updateParameterValues(const std::vector<Parameter>& parameters) override;
 
   void setSubscribeHandler(SubscribeUnsubscribeHandler handler) override;
   void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) override;
@@ -263,6 +265,8 @@ private:
   std::unordered_map<ChannelId, Channel> _channels;
   std::map<ConnHandle, std::unordered_map<ClientChannelId, ClientAdvertisement>, std::owner_less<>>
     _clientChannels;
+  std::map<ConnHandle, std::unordered_set<std::string>, std::owner_less<>>
+    _clientParamSubscriptions;
   SubscribeUnsubscribeHandler _subscribeHandler;
   SubscribeUnsubscribeHandler _unsubscribeHandler;
   ClientAdvertiseHandler _clientAdvertiseHandler;
@@ -270,8 +274,9 @@ private:
   ClientMessageHandler _clientMessageHandler;
   ParameterRequestHandler _parameterRequestHandler;
   ParameterChangeHandler _parameterChangeHandler;
-  ParameterSubscriptionHandler _ParameterSubscriptionHandler;
+  ParameterSubscriptionHandler _parameterSubscriptionHandler;
   std::shared_mutex _clientsChannelMutex;
+  std::mutex _clientParamSubscriptionsMutex;
 
   void setupTlsHandler() override;
   void socketInit(ConnHandle hdl);
@@ -286,6 +291,7 @@ private:
   void sendJsonRaw(ConnHandle hdl, const std::string& payload);
   void sendBinary(ConnHandle hdl, const std::vector<uint8_t>& payload);
   void sendStatus(ConnHandle clientHandle, const StatusLevel level, const std::string& message);
+  bool isParameterSubscribed(const std::string& paramName) const;
 };
 
 template <typename ServerConfiguration>
@@ -461,7 +467,7 @@ inline void Server<ServerConfiguration>::setParameterChangeHandler(ParameterChan
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::setParameterSubscriptionHandler(
   ParameterSubscriptionHandler handler) {
-  _ParameterSubscriptionHandler = std::move(handler);
+  _parameterSubscriptionHandler = std::move(handler);
 }
 
 template <typename ServerConfiguration>
@@ -772,15 +778,59 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
     } break;
     case SUBSCRIBE_PARAMETER_UPDATES: {
-      if (_ParameterSubscriptionHandler) {
-        const auto paramNames = payload.at("parameters").get<std::vector<std::string>>();
-        _ParameterSubscriptionHandler(paramNames, ParameterSubscriptionOperation::SUBSCRIBE, hdl);
+      if (!_parameterSubscriptionHandler) {
+        return;
+      }
+
+      const auto paramNames = payload.at("parameters").get<std::unordered_set<std::string>>();
+      std::vector<std::string> paramsToSubscribe;
+      {
+        // Only consider parameters that are not subscribed yet (by this or by other clients)
+        std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
+        std::copy_if(paramNames.begin(), paramNames.end(), std::back_inserter(paramsToSubscribe),
+                     [this](const std::string& paramName) {
+                       return !isParameterSubscribed(paramName);
+                     });
+
+        // Update the client's parameter subscriptions.
+        auto [clientSubscribedParamsIt, newlyInserted] =
+          _clientParamSubscriptions.try_emplace(hdl, std::unordered_set<std::string>());
+        (void)newlyInserted;
+        clientSubscribedParamsIt->second.insert(paramNames.begin(), paramNames.end());
+      }
+
+      if (!paramsToSubscribe.empty()) {
+        _parameterSubscriptionHandler(paramsToSubscribe, ParameterSubscriptionOperation::SUBSCRIBE,
+                                      hdl);
       }
     } break;
     case UNSUBSCRIBE_PARAMETER_UPDATES: {
-      if (_ParameterSubscriptionHandler) {
-        const auto paramNames = payload.at("parameters").get<std::vector<std::string>>();
-        _ParameterSubscriptionHandler(paramNames, ParameterSubscriptionOperation::UNSUBSCRIBE, hdl);
+      if (!_parameterSubscriptionHandler) {
+        return;
+      }
+
+      const auto paramNames = payload.at("parameters").get<std::unordered_set<std::string>>();
+      std::vector<std::string> paramsToUnsubscribe;
+      {
+        // Update the client's parameter subscriptions.
+        auto [clientSubscribedParamsIt, newlyInserted] =
+          _clientParamSubscriptions.try_emplace(hdl, std::unordered_set<std::string>());
+        (void)newlyInserted;
+        for (const auto& paramName : paramNames) {
+          clientSubscribedParamsIt->second.erase(paramName);
+        }
+
+        // Only consider parameters that are not subscribed anymore (by this or by other clients)
+        std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
+        std::copy_if(paramNames.begin(), paramNames.end(), std::back_inserter(paramsToUnsubscribe),
+                     [this](const std::string& paramName) {
+                       return !isParameterSubscribed(paramName);
+                     });
+      }
+
+      if (!paramsToUnsubscribe.empty()) {
+        _parameterSubscriptionHandler(paramsToUnsubscribe,
+                                      ParameterSubscriptionOperation::UNSUBSCRIBE, hdl);
       }
     } break;
     default: {
@@ -899,6 +949,26 @@ inline void Server<ServerConfiguration>::publishParameterValues(
 }
 
 template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::updateParameterValues(
+  const std::vector<Parameter>& parameters) {
+  std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
+  for (const auto& clientParamSubscriptions : _clientParamSubscriptions) {
+    std::vector<Parameter> paramsToSendToClient;
+
+    // Only consider parameters that are subscribed by the client
+    std::copy_if(parameters.begin(), parameters.end(), std::back_inserter(paramsToSendToClient),
+                 [clientParamSubscriptions](const Parameter& param) {
+                   return clientParamSubscriptions.second.find(param.getName()) !=
+                          clientParamSubscriptions.second.end();
+                 });
+
+    if (!paramsToSendToClient.empty()) {
+      publishParameterValues(clientParamSubscriptions.first, paramsToSendToClient);
+    }
+  }
+}
+
+template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, ChannelId chanId,
                                                      uint64_t timestamp, std::string_view data) {
   std::error_code ec;
@@ -971,6 +1041,15 @@ inline std::string Server<ServerConfiguration>::remoteEndpointString(ConnHandle 
   std::error_code ec;
   const auto con = _server.get_con_from_hdl(clientHandle, ec);
   return con ? con->get_remote_endpoint() : "(unknown)";
+}
+
+template <typename ServerConfiguration>
+inline bool Server<ServerConfiguration>::isParameterSubscribed(const std::string& paramName) const {
+  return std::find_if(_clientParamSubscriptions.begin(), _clientParamSubscriptions.end(),
+                      [paramName](const auto& paramSubscriptions) {
+                        return paramSubscriptions.second.find(paramName) !=
+                               paramSubscriptions.second.end();
+                      }) != _clientParamSubscriptions.end();
 }
 
 template <>
