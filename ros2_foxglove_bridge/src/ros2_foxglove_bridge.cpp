@@ -284,6 +284,7 @@ private:
   SubscribedParametersByClient _clientSubscribedParams;
   std::mutex _subscriptionsMutex;
   std::mutex _clientAdvertisementsMutex;
+  std::mutex _subscribedParametersMutex;
   std::unique_ptr<std::thread> _rosgraphPollThread;
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
@@ -554,31 +555,20 @@ private:
   }
 
   void parameterChangeHandler(const std::vector<foxglove::Parameter>& parameters,
-                              foxglove::ConnHandle hdl) {
-    (void)hdl;
-    RCLCPP_INFO(this->get_logger(), "Received a parameter change request to set %zu parameters",
-                parameters.size());
+                              foxglove::ConnHandle) {
     _paramInterface->setParams(parameters, std::chrono::seconds(5));
   }
 
   void parameterRequestHandler(const std::vector<std::string>& parameters,
                                const std::string& requestId, foxglove::ConnHandle hdl) {
-    RCLCPP_INFO(this->get_logger(), "Received a parameter request, %zu parameters requested",
-                parameters.size());
-
     const auto params = _paramInterface->getParams(parameters, std::chrono::seconds(5));
-
-    RCLCPP_INFO(this->get_logger(), "sending back, %zu parameters", params.size());
-
     _server->publishParameterValues(hdl, params, requestId);
   }
 
   void parameterSubscriptionHandler(const std::vector<std::string>& parameters,
                                     foxglove::ParameterSubscriptionOperation op,
                                     foxglove::ConnHandle hdl) {
-    RCLCPP_INFO(this->get_logger(),
-                "Received a parameter subscribe / unsubscribe request, %zu parameters",
-                parameters.size());
+    std::lock_guard<std::mutex> lock(_subscribedParametersMutex);
 
     // Get client subscribed params or insert an empty map.
     auto [clientSubscribedParamsIt, newlyInserted] =
@@ -596,8 +586,7 @@ private:
   }
 
   void parameterUpdates(const std::vector<foxglove::Parameter>& parameters) {
-    RCLCPP_INFO(this->get_logger(), "Received a parameter update with %zu changed parameters",
-                parameters.size());
+    std::lock_guard<std::mutex> lock(_subscribedParametersMutex);
 
     for (const auto& clientParamSubscriptions : _clientSubscribedParams) {
       const auto hdl = clientParamSubscriptions.first;
@@ -610,8 +599,6 @@ private:
                    });
 
       if (!paramsToSend.empty()) {
-        RCLCPP_INFO(this->get_logger(), "Updating client with %zu changed parameters",
-                    paramsToSend.size());
         _server->publishParameterValues(hdl, paramsToSend);
       }
     }
