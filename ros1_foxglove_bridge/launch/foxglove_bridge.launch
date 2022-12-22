@@ -1,0 +1,29 @@
+<launch>
+  <arg name="port"                      default="8765" />
+  <arg name="address"                   default="0.0.0.0" />
+  <arg name="tls"                       default="false" />
+  <arg name="certfile"                  default="" />
+  <arg name="keyfile"                   default="" />
+  <arg name="topic_whitelist"           default="['.*']" />
+  <arg name="max_update_ms"             default="5000" />
+
+  <arg name="nodelet_manager"           default="foxglove_nodelet_manager" />
+  <arg name="num_threads"               default="0" />
+
+  <node pkg="nodelet" type="nodelet" name="foxglove_nodelet_manager" args="manager"
+        if="$(eval nodelet_manager == 'foxglove_nodelet_manager')">
+    <param name="num_worker_threads"  type="int"        value="$(arg num_threads)" />
+  </node>
+
+  <node pkg="nodelet" type="nodelet" name="foxglove_bridge"
+        args="load foxglove_bridge/foxglove_bridge_nodelet $(arg nodelet_manager)">
+    <param name="port"                type="int"        value="$(arg port)" />
+    <param name="address"             type="string"     value="$(arg address)" />
+    <param name="tls"                 type="bool"       value="$(arg tls)" />
+    <param name="certfile"            type="string"     value="$(arg certfile)" />
+    <param name="keyfile"             type="string"     value="$(arg keyfile)" />
+    <param name="max_update_ms"       type="int"        value="$(arg max_update_ms)" />
+
+    <rosparam param="topic_whitelist" subst_value="True">$(arg topic_whitelist)</rosparam>
+  </node>
+</launch>
