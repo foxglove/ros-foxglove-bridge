@@ -31,6 +31,8 @@ using OpCode = websocketpp::frame::opcode::value;
 static const websocketpp::log::level APP = websocketpp::log::alevel::app;
 static const websocketpp::log::level RECOVERABLE = websocketpp::log::elevel::rerror;
 
+constexpr size_t DEFAULT_SEND_BUFFER_LIMIT_BYTES = 10000000UL;  // 10 MB
+
 constexpr uint32_t Integer(const std::string_view str) {
   uint32_t result = 0x811C9DC5;  // FNV-1a 32-bit algorithm
   for (char c : str) {
@@ -167,8 +169,9 @@ public:
   static bool USES_TLS;
 
   explicit Server(std::string name, LogCallback logger,
-                  const std::vector<std::string>& capabilities, const std::string& certfile = "",
-                  const std::string& keyfile = "");
+                  const std::vector<std::string>& capabilities,
+                  size_t send_buffer_limit_bytes = DEFAULT_SEND_BUFFER_LIMIT_BYTES,
+                  const std::string& certfile = "", const std::string& keyfile = "");
   virtual ~Server();
 
   Server(const Server&) = delete;
@@ -213,6 +216,7 @@ private:
   std::string _name;
   LogCallback _logger;
   std::vector<std::string> _capabilities;
+  size_t _send_buffer_limit_bytes;
   std::string _certfile;
   std::string _keyfile;
   ServerType _server;
@@ -248,10 +252,12 @@ private:
 template <typename ServerConfiguration>
 inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger,
                                            const std::vector<std::string>& capabilities,
+                                           size_t send_buffer_limit_bytes,
                                            const std::string& certfile, const std::string& keyfile)
     : _name(std::move(name))
     , _logger(logger)
     , _capabilities(capabilities)
+    , _send_buffer_limit_bytes(send_buffer_limit_bytes)
     , _certfile(certfile)
     , _keyfile(keyfile) {
   // Redirect logging
@@ -800,6 +806,20 @@ inline void Server<ServerConfiguration>::broadcastChannels() {
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, ChannelId chanId,
                                                      uint64_t timestamp, std::string_view data) {
+  std::error_code ec;
+  const auto con = _server.get_con_from_hdl(clientHandle, ec);
+  if (ec || !con) {
+    return;
+  }
+
+  const auto bufferSizeinBytes = con->get_buffered_amount();
+  if (bufferSizeinBytes >= _send_buffer_limit_bytes) {
+    _server.get_elog().write(RECOVERABLE,
+                             "Send buffer for client '" + remoteEndpointString(clientHandle) +
+                               "' is full, dropping message on channel " + std::to_string(chanId));
+    return;
+  }
+
   SubscriptionId subId = std::numeric_limits<SubscriptionId>::max();
 
   {
