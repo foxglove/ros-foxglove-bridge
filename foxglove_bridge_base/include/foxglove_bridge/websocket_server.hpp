@@ -29,6 +29,7 @@ using ConnHandle = websocketpp::connection_hdl;
 using OpCode = websocketpp::frame::opcode::value;
 
 static const websocketpp::log::level APP = websocketpp::log::alevel::app;
+static const websocketpp::log::level WARNING = websocketpp::log::elevel::warn;
 static const websocketpp::log::level RECOVERABLE = websocketpp::log::elevel::rerror;
 
 constexpr size_t DEFAULT_SEND_BUFFER_LIMIT_BYTES = 10000000UL;  // 10 MB
@@ -814,7 +815,7 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
 
   const auto bufferSizeinBytes = con->get_buffered_amount();
   if (bufferSizeinBytes >= _send_buffer_limit_bytes) {
-    _server.get_elog().write(RECOVERABLE,
+    _server.get_elog().write(WARNING,
                              "Send buffer for client '" + remoteEndpointString(clientHandle) +
                                "' is full, dropping message on channel " + std::to_string(chanId));
     return;
