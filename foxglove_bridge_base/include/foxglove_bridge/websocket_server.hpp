@@ -805,10 +805,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
                      });
 
         // Update the client's parameter subscriptions.
-        auto [clientSubscribedParamsIt, newlyInserted] =
-          _clientParamSubscriptions.try_emplace(hdl, std::unordered_set<std::string>());
-        (void)newlyInserted;
-        clientSubscribedParamsIt->second.insert(paramNames.begin(), paramNames.end());
+        auto& clientSubscribedParams = _clientParamSubscriptions[hdl];
+        clientSubscribedParams.insert(paramNames.begin(), paramNames.end());
       }
 
       if (!paramsToSubscribe.empty()) {
