@@ -99,6 +99,20 @@ public:
     this->declare_parameter<std::vector<std::string>>(
       topicWhiteListDescription.name, std::vector<std::string>({".*"}), topicWhiteListDescription);
 
+    auto sendBufferLimit = rcl_interfaces::msg::ParameterDescriptor{};
+    sendBufferLimit.name = "send_buffer_limit";
+    sendBufferLimit.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+    sendBufferLimit.description =
+      "Connection send buffer limit in bytes. Messages will be dropped when a connection's send "
+      "buffer reaches this limit to avoid a queue of outdated messages building up.";
+    sendBufferLimit.integer_range.resize(1);
+    sendBufferLimit.integer_range[0].from_value = 0;
+    sendBufferLimit.integer_range[0].to_value = std::numeric_limits<int64_t>::max();
+    sendBufferLimit.read_only = true;
+    this->declare_parameter(sendBufferLimit.name,
+                            static_cast<int64_t>(foxglove::DEFAULT_SEND_BUFFER_LIMIT_BYTES),
+                            sendBufferLimit);
+
     const auto regexPatterns =
       this->get_parameter(topicWhiteListDescription.name).as_string_array();
     _topicWhitelistPatterns.reserve(regexPatterns.size());
@@ -112,6 +126,8 @@ public:
       }
     }
 
+    const auto send_buffer_limit =
+      static_cast<size_t>(this->get_parameter("send_buffer_limit").as_int());
     const auto useTLS = this->get_parameter("tls").as_bool();
     const auto certfile = this->get_parameter("certfile").as_string();
     const auto keyfile = this->get_parameter("keyfile").as_string();
@@ -127,10 +143,11 @@ public:
 
     if (useTLS) {
       _server = std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(
-        "foxglove_bridge", std::move(logHandler), serverCapabilities, certfile, keyfile);
+        "foxglove_bridge", std::move(logHandler), serverCapabilities, send_buffer_limit, certfile,
+        keyfile);
     } else {
       _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
-        "foxglove_bridge", std::move(logHandler), serverCapabilities);
+        "foxglove_bridge", std::move(logHandler), serverCapabilities, send_buffer_limit);
     }
     _server->setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2));
     _server->setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2));
