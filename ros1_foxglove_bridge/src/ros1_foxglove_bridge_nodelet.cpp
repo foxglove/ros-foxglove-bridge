@@ -41,6 +41,8 @@ public:
     auto& nhp = getPrivateNodeHandle();
     const auto address = nhp.param<std::string>("address", DEFAULT_ADDRESS);
     const int port = nhp.param<int>("port", DEFAULT_PORT);
+    const auto send_buffer_limit = static_cast<size_t>(
+      nhp.param<int>("send_buffer_limit", foxglove::DEFAULT_SEND_BUFFER_LIMIT_BYTES));
     const auto useTLS = nhp.param<bool>("tls", false);
     const auto certfile = nhp.param<std::string>("certfile", "");
     const auto keyfile = nhp.param<std::string>("keyfile", "");
@@ -73,10 +75,11 @@ public:
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);
       if (useTLS) {
         _server = std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(
-          "foxglove_bridge", std::move(logHandler), serverCapabilities, certfile, keyfile);
+          "foxglove_bridge", std::move(logHandler), serverCapabilities, send_buffer_limit, certfile,
+          keyfile);
       } else {
         _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
-          "foxglove_bridge", std::move(logHandler), serverCapabilities);
+          "foxglove_bridge", std::move(logHandler), serverCapabilities, send_buffer_limit);
       }
 
       _server->setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this,
