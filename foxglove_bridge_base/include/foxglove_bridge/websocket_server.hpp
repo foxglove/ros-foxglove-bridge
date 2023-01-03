@@ -291,6 +291,8 @@ private:
   void sendJsonRaw(ConnHandle hdl, const std::string& payload);
   void sendBinary(ConnHandle hdl, const std::vector<uint8_t>& payload);
   void sendStatus(ConnHandle clientHandle, const StatusLevel level, const std::string& message);
+  void unsubscribeParamsWithoutSubscriptions(ConnHandle hdl,
+                                             const std::unordered_set<std::string>& paramNames);
   bool isParameterSubscribed(const std::string& paramName) const;
 };
 
@@ -424,7 +426,17 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
       _unsubscribeHandler(chanId, hdl);
     }
   }
-}
+
+  // Unsubscribe from parameters this client subscribed to
+  std::unordered_set<std::string> clientSubscribedParameters;
+  {
+    std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
+    clientSubscribedParameters = _clientParamSubscriptions[hdl];
+    _clientParamSubscriptions.erase(hdl);
+  }
+  unsubscribeParamsWithoutSubscriptions(hdl, clientSubscribedParameters);
+
+}  // namespace foxglove
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::setSubscribeHandler(SubscribeUnsubscribeHandler handler) {
@@ -810,28 +822,15 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
 
       const auto paramNames = payload.at("parameters").get<std::unordered_set<std::string>>();
-      std::vector<std::string> paramsToUnsubscribe;
       {
-        // Update the client's parameter subscriptions.
-        auto [clientSubscribedParamsIt, newlyInserted] =
-          _clientParamSubscriptions.try_emplace(hdl, std::unordered_set<std::string>());
-        (void)newlyInserted;
-        for (const auto& paramName : paramNames) {
-          clientSubscribedParamsIt->second.erase(paramName);
-        }
-
-        // Only consider parameters that are not subscribed anymore (by this or by other clients)
         std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
-        std::copy_if(paramNames.begin(), paramNames.end(), std::back_inserter(paramsToUnsubscribe),
-                     [this](const std::string& paramName) {
-                       return !isParameterSubscribed(paramName);
-                     });
+        auto& clientSubscribedParams = _clientParamSubscriptions[hdl];
+        for (const auto& paramName : paramNames) {
+          clientSubscribedParams.erase(paramName);
+        }
       }
 
-      if (!paramsToUnsubscribe.empty()) {
-        _parameterSubscriptionHandler(paramsToUnsubscribe,
-                                      ParameterSubscriptionOperation::UNSUBSCRIBE, hdl);
-      }
+      unsubscribeParamsWithoutSubscriptions(hdl, paramNames);
     } break;
     default: {
       sendStatus(hdl, StatusLevel::Error, "Unrecognized client opcode \"" + op + "\"");
@@ -1050,6 +1049,27 @@ inline bool Server<ServerConfiguration>::isParameterSubscribed(const std::string
                         return paramSubscriptions.second.find(paramName) !=
                                paramSubscriptions.second.end();
                       }) != _clientParamSubscriptions.end();
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::unsubscribeParamsWithoutSubscriptions(
+  ConnHandle hdl, const std::unordered_set<std::string>& paramNames) {
+  std::vector<std::string> paramsToUnsubscribe;
+  {
+    std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
+    std::copy_if(paramNames.begin(), paramNames.end(), std::back_inserter(paramsToUnsubscribe),
+                 [this](const std::string& paramName) {
+                   return !isParameterSubscribed(paramName);
+                 });
+  }
+
+  if (_parameterSubscriptionHandler && !paramsToUnsubscribe.empty()) {
+    for (const auto& param : paramsToUnsubscribe) {
+      _server.get_alog().write(APP, "Unsubscribing from parameter '" + param + "'.");
+    }
+    _parameterSubscriptionHandler(paramsToUnsubscribe, ParameterSubscriptionOperation::UNSUBSCRIBE,
+                                  hdl);
+  }
 }
 
 template <>
