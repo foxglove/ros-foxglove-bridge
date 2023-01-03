@@ -815,9 +815,6 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
 
   const auto bufferSizeinBytes = con->get_buffered_amount();
   if (bufferSizeinBytes >= _send_buffer_limit_bytes) {
-    _server.get_elog().write(WARNING,
-                             "Send buffer for client '" + remoteEndpointString(clientHandle) +
-                               "' is full, dropping message on channel " + std::to_string(chanId));
     return;
   }
 
