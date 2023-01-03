@@ -69,6 +69,8 @@ public:
     try {
       std::vector<std::string> serverCapabilities = {
         foxglove::CAPABILITY_CLIENT_PUBLISH,
+        foxglove::CAPABILITY_PARAMETERS,
+        foxglove::CAPABILITY_PARAMETERS_SUBSCRIBE,
       };
       if (_useSimTime) {
         serverCapabilities.push_back(foxglove::CAPABILITY_TIME);
