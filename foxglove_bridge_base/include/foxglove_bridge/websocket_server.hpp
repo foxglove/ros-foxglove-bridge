@@ -294,6 +294,7 @@ private:
   void unsubscribeParamsWithoutSubscriptions(ConnHandle hdl,
                                              const std::unordered_set<std::string>& paramNames);
   bool isParameterSubscribed(const std::string& paramName) const;
+  bool hasCapability(const std::string& capability) const;
 };
 
 template <typename ServerConfiguration>
@@ -777,20 +778,39 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
     } break;
     case GET_PARAMETERS: {
-      if (_parameterRequestHandler) {
-        const auto paramNames = payload.at("parameters").get<std::vector<std::string>>();
-        const auto requestId = payload.value("id", "");
-        _parameterRequestHandler(paramNames, requestId, hdl);
+      if (!hasCapability(CAPABILITY_PARAMETERS)) {
+        _server.get_elog().write(RECOVERABLE, "Operation '" + op +
+                                                "' not supported as server capability '" +
+                                                CAPABILITY_PARAMETERS + "' is missing");
+        return;
+      } else if (!_parameterRequestHandler) {
+        return;
       }
+
+      const auto paramNames = payload.at("parameters").get<std::vector<std::string>>();
+      const auto requestId = payload.value("id", "");
+      _parameterRequestHandler(paramNames, requestId, hdl);
     } break;
     case SET_PARAMETERS: {
-      if (_parameterChangeHandler) {
-        const auto parameters = payload.at("parameters").get<std::vector<Parameter>>();
-        _parameterChangeHandler(parameters, hdl);
+      if (!hasCapability(CAPABILITY_PARAMETERS)) {
+        _server.get_elog().write(RECOVERABLE, "Operation '" + op +
+                                                "' not supported as server capability '" +
+                                                CAPABILITY_PARAMETERS + "' is missing");
+        return;
+      } else if (!_parameterChangeHandler) {
+        return;
       }
+
+      const auto parameters = payload.at("parameters").get<std::vector<Parameter>>();
+      _parameterChangeHandler(parameters, hdl);
     } break;
     case SUBSCRIBE_PARAMETER_UPDATES: {
-      if (!_parameterSubscriptionHandler) {
+      if (!hasCapability(CAPABILITY_PARAMETERS_SUBSCRIBE)) {
+        _server.get_elog().write(RECOVERABLE, "Operation '" + op +
+                                                "' not supported as server capability '" +
+                                                CAPABILITY_PARAMETERS_SUBSCRIBE + " is missing'");
+        return;
+      } else if (!_parameterSubscriptionHandler) {
         return;
       }
 
@@ -815,7 +835,12 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
     } break;
     case UNSUBSCRIBE_PARAMETER_UPDATES: {
-      if (!_parameterSubscriptionHandler) {
+      if (!hasCapability(CAPABILITY_PARAMETERS_SUBSCRIBE)) {
+        _server.get_elog().write(RECOVERABLE, "Operation '" + op +
+                                                "' not supported as server capability '" +
+                                                CAPABILITY_PARAMETERS_SUBSCRIBE + " is missing'");
+        return;
+      } else if (!_parameterSubscriptionHandler) {
         return;
       }
 
@@ -1068,6 +1093,11 @@ inline void Server<ServerConfiguration>::unsubscribeParamsWithoutSubscriptions(
     _parameterSubscriptionHandler(paramsToUnsubscribe, ParameterSubscriptionOperation::UNSUBSCRIBE,
                                   hdl);
   }
+}
+
+template <typename ServerConfiguration>
+inline bool Server<ServerConfiguration>::hasCapability(const std::string& capability) const {
+  return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
 }
 
 template <>
