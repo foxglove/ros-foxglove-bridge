@@ -2,6 +2,10 @@
 
 #include <stdint.h>
 
+#include <nlohmann/json.hpp>
+
+#include "parameter.hpp"
+
 namespace foxglove {
 
 inline void WriteUint64LE(uint8_t* buf, uint64_t val) {
@@ -29,5 +33,8 @@ inline void WriteUint32LE(uint8_t* buf, uint32_t val) {
   reinterpret_cast<uint32_t*>(buf)[0] = val;
 #endif
 }
+
+void to_json(nlohmann::json& j, const Parameter& p);
+void from_json(const nlohmann::json& j, Parameter& p);
 
 }  // namespace foxglove

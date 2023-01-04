@@ -17,6 +17,7 @@
 #include <nlohmann/json.hpp>
 
 #include "common.hpp"
+#include "parameter.hpp"
 #include "serialization.hpp"
 #include "websocket_logging.hpp"
 #include "websocket_notls.hpp"
@@ -141,6 +142,11 @@ class ServerInterface {
   using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
   using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
   using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
+  using ParameterRequestHandler =
+    std::function<void(const std::vector<std::string>&, const std::string&, ConnHandle)>;
+  using ParameterChangeHandler = std::function<void(const std::vector<Parameter>&, ConnHandle)>;
+  using ParameterSubscriptionHandler = std::function<void(
+    const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
 
 public:
   virtual ~ServerInterface() {}
@@ -150,12 +156,19 @@ public:
   virtual ChannelId addChannel(ChannelWithoutId channel) = 0;
   virtual void removeChannel(ChannelId chanId) = 0;
   virtual void broadcastChannels() = 0;
+  virtual void publishParameterValues(ConnHandle clientHandle,
+                                      const std::vector<Parameter>& parameters,
+                                      const std::string& requestId = std::string()) = 0;
+  virtual void updateParameterValues(const std::vector<Parameter>& parameters) = 0;
 
   virtual void setSubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
   virtual void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
   virtual void setClientAdvertiseHandler(ClientAdvertiseHandler handler) = 0;
   virtual void setClientUnadvertiseHandler(ClientUnadvertiseHandler handler) = 0;
   virtual void setClientMessageHandler(ClientMessageHandler handler) = 0;
+  virtual void setParameterRequestHandler(ParameterRequestHandler handler) = 0;
+  virtual void setParameterChangeHandler(ParameterChangeHandler handler) = 0;
+  virtual void setParameterSubscriptionHandler(ParameterSubscriptionHandler handler) = 0;
 
   virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                            std::string_view data) = 0;
@@ -179,6 +192,11 @@ public:
   using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
   using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
   using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
+  using ParameterRequestHandler =
+    std::function<void(const std::vector<std::string>&, const std::string&, ConnHandle)>;
+  using ParameterChangeHandler = std::function<void(const std::vector<Parameter>&, ConnHandle)>;
+  using ParameterSubscriptionHandler = std::function<void(
+    const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
 
   static bool USES_TLS;
 
@@ -199,12 +217,18 @@ public:
   ChannelId addChannel(ChannelWithoutId channel) override;
   void removeChannel(ChannelId chanId) override;
   void broadcastChannels() override;
+  void publishParameterValues(ConnHandle clientHandle, const std::vector<Parameter>& parameters,
+                              const std::string& requestId = std::string()) override;
+  void updateParameterValues(const std::vector<Parameter>& parameters) override;
 
   void setSubscribeHandler(SubscribeUnsubscribeHandler handler) override;
   void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) override;
   void setClientAdvertiseHandler(ClientAdvertiseHandler handler) override;
   void setClientUnadvertiseHandler(ClientUnadvertiseHandler handler) override;
   void setClientMessageHandler(ClientMessageHandler handler) override;
+  void setParameterRequestHandler(ParameterRequestHandler handler) override;
+  void setParameterChangeHandler(ParameterChangeHandler handler) override;
+  void setParameterSubscriptionHandler(ParameterSubscriptionHandler handler) override;
 
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                    std::string_view data) override;
@@ -241,12 +265,18 @@ private:
   std::unordered_map<ChannelId, Channel> _channels;
   std::map<ConnHandle, std::unordered_map<ClientChannelId, ClientAdvertisement>, std::owner_less<>>
     _clientChannels;
+  std::map<ConnHandle, std::unordered_set<std::string>, std::owner_less<>>
+    _clientParamSubscriptions;
   SubscribeUnsubscribeHandler _subscribeHandler;
   SubscribeUnsubscribeHandler _unsubscribeHandler;
   ClientAdvertiseHandler _clientAdvertiseHandler;
   ClientUnadvertiseHandler _clientUnadvertiseHandler;
   ClientMessageHandler _clientMessageHandler;
+  ParameterRequestHandler _parameterRequestHandler;
+  ParameterChangeHandler _parameterChangeHandler;
+  ParameterSubscriptionHandler _parameterSubscriptionHandler;
   std::shared_mutex _clientsChannelMutex;
+  std::mutex _clientParamSubscriptionsMutex;
 
   void setupTlsHandler() override;
   void socketInit(ConnHandle hdl);
@@ -261,6 +291,10 @@ private:
   void sendJsonRaw(ConnHandle hdl, const std::string& payload);
   void sendBinary(ConnHandle hdl, const std::vector<uint8_t>& payload);
   void sendStatus(ConnHandle clientHandle, const StatusLevel level, const std::string& message);
+  void unsubscribeParamsWithoutSubscriptions(ConnHandle hdl,
+                                             const std::unordered_set<std::string>& paramNames);
+  bool isParameterSubscribed(const std::string& paramName) const;
+  bool hasCapability(const std::string& capability) const;
 };
 
 template <typename ServerConfiguration>
@@ -393,7 +427,17 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
       _unsubscribeHandler(chanId, hdl);
     }
   }
-}
+
+  // Unsubscribe from parameters this client subscribed to
+  std::unordered_set<std::string> clientSubscribedParameters;
+  {
+    std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
+    clientSubscribedParameters = _clientParamSubscriptions[hdl];
+    _clientParamSubscriptions.erase(hdl);
+  }
+  unsubscribeParamsWithoutSubscriptions(hdl, clientSubscribedParameters);
+
+}  // namespace foxglove
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::setSubscribeHandler(SubscribeUnsubscribeHandler handler) {
@@ -420,6 +464,23 @@ inline void Server<ServerConfiguration>::setClientUnadvertiseHandler(
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::setClientMessageHandler(ClientMessageHandler handler) {
   _clientMessageHandler = std::move(handler);
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::setParameterRequestHandler(
+  ParameterRequestHandler handler) {
+  _parameterRequestHandler = std::move(handler);
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::setParameterChangeHandler(ParameterChangeHandler handler) {
+  _parameterChangeHandler = std::move(handler);
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::setParameterSubscriptionHandler(
+  ParameterSubscriptionHandler handler) {
+  _parameterSubscriptionHandler = std::move(handler);
 }
 
 template <typename ServerConfiguration>
@@ -624,6 +685,10 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
   constexpr auto UNSUBSCRIBE = Integer("unsubscribe");
   constexpr auto ADVERTISE = Integer("advertise");
   constexpr auto UNADVERTISE = Integer("unadvertise");
+  constexpr auto GET_PARAMETERS = Integer("getParameters");
+  constexpr auto SET_PARAMETERS = Integer("setParameters");
+  constexpr auto SUBSCRIBE_PARAMETER_UPDATES = Integer("subscribeParameterUpdates");
+  constexpr auto UNSUBSCRIBE_PARAMETER_UPDATES = Integer("unsubscribeParameterUpdates");
 
   switch (Integer(op)) {
     case SUBSCRIBE: {
@@ -711,6 +776,84 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
           _clientUnadvertiseHandler(channelId, hdl);
         }
       }
+    } break;
+    case GET_PARAMETERS: {
+      if (!hasCapability(CAPABILITY_PARAMETERS)) {
+        _server.get_elog().write(RECOVERABLE, "Operation '" + op +
+                                                "' not supported as server capability '" +
+                                                CAPABILITY_PARAMETERS + "' is missing");
+        return;
+      } else if (!_parameterRequestHandler) {
+        return;
+      }
+
+      const auto paramNames = payload.at("parameters").get<std::vector<std::string>>();
+      const auto requestId = payload.value("id", "");
+      _parameterRequestHandler(paramNames, requestId, hdl);
+    } break;
+    case SET_PARAMETERS: {
+      if (!hasCapability(CAPABILITY_PARAMETERS)) {
+        _server.get_elog().write(RECOVERABLE, "Operation '" + op +
+                                                "' not supported as server capability '" +
+                                                CAPABILITY_PARAMETERS + "' is missing");
+        return;
+      } else if (!_parameterChangeHandler) {
+        return;
+      }
+
+      const auto parameters = payload.at("parameters").get<std::vector<Parameter>>();
+      _parameterChangeHandler(parameters, hdl);
+    } break;
+    case SUBSCRIBE_PARAMETER_UPDATES: {
+      if (!hasCapability(CAPABILITY_PARAMETERS_SUBSCRIBE)) {
+        _server.get_elog().write(RECOVERABLE, "Operation '" + op +
+                                                "' not supported as server capability '" +
+                                                CAPABILITY_PARAMETERS_SUBSCRIBE + " is missing'");
+        return;
+      } else if (!_parameterSubscriptionHandler) {
+        return;
+      }
+
+      const auto paramNames = payload.at("parameters").get<std::unordered_set<std::string>>();
+      std::vector<std::string> paramsToSubscribe;
+      {
+        // Only consider parameters that are not subscribed yet (by this or by other clients)
+        std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
+        std::copy_if(paramNames.begin(), paramNames.end(), std::back_inserter(paramsToSubscribe),
+                     [this](const std::string& paramName) {
+                       return !isParameterSubscribed(paramName);
+                     });
+
+        // Update the client's parameter subscriptions.
+        auto& clientSubscribedParams = _clientParamSubscriptions[hdl];
+        clientSubscribedParams.insert(paramNames.begin(), paramNames.end());
+      }
+
+      if (!paramsToSubscribe.empty()) {
+        _parameterSubscriptionHandler(paramsToSubscribe, ParameterSubscriptionOperation::SUBSCRIBE,
+                                      hdl);
+      }
+    } break;
+    case UNSUBSCRIBE_PARAMETER_UPDATES: {
+      if (!hasCapability(CAPABILITY_PARAMETERS_SUBSCRIBE)) {
+        _server.get_elog().write(RECOVERABLE, "Operation '" + op +
+                                                "' not supported as server capability '" +
+                                                CAPABILITY_PARAMETERS_SUBSCRIBE + " is missing'");
+        return;
+      } else if (!_parameterSubscriptionHandler) {
+        return;
+      }
+
+      const auto paramNames = payload.at("parameters").get<std::unordered_set<std::string>>();
+      {
+        std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
+        auto& clientSubscribedParams = _clientParamSubscriptions[hdl];
+        for (const auto& paramName : paramNames) {
+          clientSubscribedParams.erase(paramName);
+        }
+      }
+
+      unsubscribeParamsWithoutSubscriptions(hdl, paramNames);
     } break;
     default: {
       sendStatus(hdl, StatusLevel::Error, "Unrecognized client opcode \"" + op + "\"");
@@ -818,6 +961,36 @@ inline void Server<ServerConfiguration>::broadcastChannels() {
 }
 
 template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::publishParameterValues(
+  ConnHandle hdl, const std::vector<Parameter>& parameters, const std::string& requestId) {
+  nlohmann::json jsonPayload{{"op", "parameterValues"}, {"parameters", parameters}};
+  if (!requestId.empty()) {
+    jsonPayload["id"] = requestId;
+  }
+  sendJsonRaw(hdl, jsonPayload.dump());
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::updateParameterValues(
+  const std::vector<Parameter>& parameters) {
+  std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
+  for (const auto& clientParamSubscriptions : _clientParamSubscriptions) {
+    std::vector<Parameter> paramsToSendToClient;
+
+    // Only consider parameters that are subscribed by the client
+    std::copy_if(parameters.begin(), parameters.end(), std::back_inserter(paramsToSendToClient),
+                 [clientParamSubscriptions](const Parameter& param) {
+                   return clientParamSubscriptions.second.find(param.getName()) !=
+                          clientParamSubscriptions.second.end();
+                 });
+
+    if (!paramsToSendToClient.empty()) {
+      publishParameterValues(clientParamSubscriptions.first, paramsToSendToClient);
+    }
+  }
+}
+
+template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, ChannelId chanId,
                                                      uint64_t timestamp, std::string_view data) {
   std::error_code ec;
@@ -890,6 +1063,41 @@ inline std::string Server<ServerConfiguration>::remoteEndpointString(ConnHandle 
   std::error_code ec;
   const auto con = _server.get_con_from_hdl(clientHandle, ec);
   return con ? con->get_remote_endpoint() : "(unknown)";
+}
+
+template <typename ServerConfiguration>
+inline bool Server<ServerConfiguration>::isParameterSubscribed(const std::string& paramName) const {
+  return std::find_if(_clientParamSubscriptions.begin(), _clientParamSubscriptions.end(),
+                      [paramName](const auto& paramSubscriptions) {
+                        return paramSubscriptions.second.find(paramName) !=
+                               paramSubscriptions.second.end();
+                      }) != _clientParamSubscriptions.end();
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::unsubscribeParamsWithoutSubscriptions(
+  ConnHandle hdl, const std::unordered_set<std::string>& paramNames) {
+  std::vector<std::string> paramsToUnsubscribe;
+  {
+    std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
+    std::copy_if(paramNames.begin(), paramNames.end(), std::back_inserter(paramsToUnsubscribe),
+                 [this](const std::string& paramName) {
+                   return !isParameterSubscribed(paramName);
+                 });
+  }
+
+  if (_parameterSubscriptionHandler && !paramsToUnsubscribe.empty()) {
+    for (const auto& param : paramsToUnsubscribe) {
+      _server.get_alog().write(APP, "Unsubscribing from parameter '" + param + "'.");
+    }
+    _parameterSubscriptionHandler(paramsToUnsubscribe, ParameterSubscriptionOperation::UNSUBSCRIBE,
+                                  hdl);
+  }
+}
+
+template <typename ServerConfiguration>
+inline bool Server<ServerConfiguration>::hasCapability(const std::string& capability) const {
+  return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
 }
 
 template <>

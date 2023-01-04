@@ -11,11 +11,9 @@
 
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/message_definition_cache.hpp>
+#include <foxglove_bridge/param_utils.hpp>
+#include <foxglove_bridge/parameter_interface.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
-
-constexpr uint16_t DEFAULT_PORT = 8765;
-constexpr char DEFAULT_ADDRESS[] = "0.0.0.0";
-constexpr size_t DEFAULT_MAX_QOS_DEPTH = 10;
 
 using namespace std::chrono_literals;
 using namespace std::placeholders;
@@ -37,105 +35,29 @@ public:
     RCLCPP_INFO(this->get_logger(), "Starting %s with %s", this->get_name(),
                 foxglove::WebSocketUserAgent());
 
-    auto portDescription = rcl_interfaces::msg::ParameterDescriptor{};
-    portDescription.name = "port";
-    portDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
-    portDescription.description = "The TCP port to bind the WebSocket server to";
-    portDescription.read_only = true;
-    portDescription.additional_constraints =
-      "Must be a valid TCP port number, or 0 to use a random port";
-    portDescription.integer_range.resize(1);
-    portDescription.integer_range[0].from_value = 0;
-    portDescription.integer_range[0].to_value = 65535;
-    portDescription.integer_range[0].step = 1;
-    this->declare_parameter("port", DEFAULT_PORT, portDescription);
+    declareParameters(this);
 
-    auto addressDescription = rcl_interfaces::msg::ParameterDescriptor{};
-    addressDescription.name = "address";
-    addressDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
-    addressDescription.description = "The host address to bind the WebSocket server to";
-    addressDescription.read_only = true;
-    this->declare_parameter("address", DEFAULT_ADDRESS, addressDescription);
-
-    auto useTlsDescription = rcl_interfaces::msg::ParameterDescriptor{};
-    useTlsDescription.name = "tls";
-    useTlsDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_BOOL;
-    useTlsDescription.description = "Use Transport Layer Security for encrypted communication";
-    useTlsDescription.read_only = true;
-    this->declare_parameter("tls", false, useTlsDescription);
-
-    auto certfileDescription = rcl_interfaces::msg::ParameterDescriptor{};
-    certfileDescription.name = "certfile";
-    certfileDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
-    certfileDescription.description = "Path to the certificate to use for TLS";
-    certfileDescription.read_only = true;
-    this->declare_parameter("certfile", "", certfileDescription);
-
-    auto keyfileDescription = rcl_interfaces::msg::ParameterDescriptor{};
-    keyfileDescription.name = "keyfile";
-    keyfileDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
-    keyfileDescription.description = "Path to the private key to use for TLS";
-    keyfileDescription.read_only = true;
-    this->declare_parameter("keyfile", "", keyfileDescription);
-
-    auto maxQosDepthDescription = rcl_interfaces::msg::ParameterDescriptor{};
-    maxQosDepthDescription.name = "max_qos_depth";
-    maxQosDepthDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
-    maxQosDepthDescription.description = "Maximum depth used for the QoS profile of subscriptions.";
-    maxQosDepthDescription.read_only = true;
-    maxQosDepthDescription.additional_constraints = "Must be a non-negative integer";
-    maxQosDepthDescription.integer_range.resize(1);
-    maxQosDepthDescription.integer_range[0].from_value = 0;
-    maxQosDepthDescription.integer_range[0].to_value = INT32_MAX;
-    maxQosDepthDescription.integer_range[0].step = 1;
-    this->declare_parameter("max_qos_depth", int(DEFAULT_MAX_QOS_DEPTH), maxQosDepthDescription);
-
-    auto topicWhiteListDescription = rcl_interfaces::msg::ParameterDescriptor{};
-    topicWhiteListDescription.name = "topic_whitelist";
-    topicWhiteListDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
-    topicWhiteListDescription.description =
-      "List of regular expressions (ECMAScript) of whitelisted topic names.";
-    topicWhiteListDescription.read_only = true;
-    this->declare_parameter<std::vector<std::string>>(
-      topicWhiteListDescription.name, std::vector<std::string>({".*"}), topicWhiteListDescription);
-
-    auto sendBufferLimit = rcl_interfaces::msg::ParameterDescriptor{};
-    sendBufferLimit.name = "send_buffer_limit";
-    sendBufferLimit.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
-    sendBufferLimit.description =
-      "Connection send buffer limit in bytes. Messages will be dropped when a connection's send "
-      "buffer reaches this limit to avoid a queue of outdated messages building up.";
-    sendBufferLimit.integer_range.resize(1);
-    sendBufferLimit.integer_range[0].from_value = 0;
-    sendBufferLimit.integer_range[0].to_value = std::numeric_limits<int64_t>::max();
-    sendBufferLimit.read_only = true;
-    this->declare_parameter(sendBufferLimit.name,
-                            static_cast<int64_t>(foxglove::DEFAULT_SEND_BUFFER_LIMIT_BYTES),
-                            sendBufferLimit);
-
-    const auto regexPatterns =
-      this->get_parameter(topicWhiteListDescription.name).as_string_array();
-    _topicWhitelistPatterns.reserve(regexPatterns.size());
-    for (const auto& pattern : regexPatterns) {
-      try {
-        _topicWhitelistPatterns.push_back(
-          std::regex(pattern, std::regex_constants::ECMAScript | std::regex_constants::icase));
-      } catch (const std::exception& ex) {
-        RCLCPP_ERROR(this->get_logger(), "Ignoring invalid regular expression '%s': %s",
-                     pattern.c_str(), ex.what());
-      }
-    }
-
+    const auto port = static_cast<uint16_t>(this->get_parameter(PARAM_PORT).as_int());
+    const auto address = this->get_parameter(PARAM_ADDRESS).as_string();
     const auto send_buffer_limit =
-      static_cast<size_t>(this->get_parameter("send_buffer_limit").as_int());
-    const auto useTLS = this->get_parameter("tls").as_bool();
-    const auto certfile = this->get_parameter("certfile").as_string();
-    const auto keyfile = this->get_parameter("keyfile").as_string();
+      static_cast<size_t>(this->get_parameter(PARAM_SEND_BUFFER_LIMIT).as_int());
+    const auto useTLS = this->get_parameter(PARAM_USETLS).as_bool();
+    const auto certfile = this->get_parameter(PARAM_CERTFILE).as_string();
+    const auto keyfile = this->get_parameter(PARAM_KEYFILE).as_string();
+    _maxQosDepth = static_cast<size_t>(this->get_parameter(PARAM_MAX_QOS_DEPTH).as_int());
+    const auto topicWhiteList = this->get_parameter(PARAM_TOPIC_WHITELIST).as_string_array();
+    _topicWhitelistPatterns = parseRegexStrings(this, topicWhiteList);
+    const auto paramWhiteList = this->get_parameter(PARAM_PARAMETER_WHITELIST).as_string_array();
+    const auto paramWhitelistPatterns = parseRegexStrings(this, paramWhiteList);
     _useSimTime = this->get_parameter("use_sim_time").as_bool();
-    const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
 
+    _paramInterface = std::make_shared<ParameterInterface>(this, paramWhitelistPatterns);
+
+    const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
     std::vector<std::string> serverCapabilities = {
       foxglove::CAPABILITY_CLIENT_PUBLISH,
+      foxglove::CAPABILITY_PARAMETERS,
+      foxglove::CAPABILITY_PARAMETERS_SUBSCRIBE,
     };
     if (_useSimTime) {
       serverCapabilities.push_back(foxglove::CAPABILITY_TIME);
@@ -157,9 +79,15 @@ public:
       std::bind(&FoxgloveBridge::clientUnadvertiseHandler, this, _1, _2));
     _server->setClientMessageHandler(
       std::bind(&FoxgloveBridge::clientMessageHandler, this, _1, _2));
+    _server->setParameterRequestHandler(
+      std::bind(&FoxgloveBridge::parameterRequestHandler, this, _1, _2, _3));
+    _server->setParameterChangeHandler(
+      std::bind(&FoxgloveBridge::parameterChangeHandler, this, _1, _2));
+    _server->setParameterSubscriptionHandler(
+      std::bind(&FoxgloveBridge::parameterSubscriptionHandler, this, _1, _2, _3));
 
-    auto address = this->get_parameter("address").as_string();
-    uint16_t port = uint16_t(this->get_parameter("port").as_int());
+    _paramInterface->setParamUpdateCallback(std::bind(&FoxgloveBridge::parameterUpdates, this, _1));
+
     _server->start(address, port);
 
     // Get the actual port we bound to
@@ -167,10 +95,8 @@ public:
     if (port != listeningPort) {
       RCLCPP_DEBUG(this->get_logger(), "Reassigning \"port\" parameter from %d to %d", port,
                    listeningPort);
-      this->set_parameter(rclcpp::Parameter{"port", listeningPort});
+      this->set_parameter(rclcpp::Parameter{PARAM_PORT, listeningPort});
     }
-
-    _maxQosDepth = static_cast<size_t>(this->get_parameter("max_qos_depth").as_int());
 
     // Start the thread polling for rosgraph changes
     _rosgraphPollThread =
@@ -346,6 +272,7 @@ private:
   std::unique_ptr<foxglove::ServerInterface> _server;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::vector<std::regex> _topicWhitelistPatterns;
+  std::shared_ptr<ParameterInterface> _paramInterface;
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
@@ -621,6 +548,31 @@ private:
 
     // Publish the message
     publisher->publish(serializedMessage);
+  }
+
+  void parameterChangeHandler(const std::vector<foxglove::Parameter>& parameters,
+                              foxglove::ConnHandle) {
+    _paramInterface->setParams(parameters, std::chrono::seconds(5));
+  }
+
+  void parameterRequestHandler(const std::vector<std::string>& parameters,
+                               const std::string& requestId, foxglove::ConnHandle hdl) {
+    const auto params = _paramInterface->getParams(parameters, std::chrono::seconds(5));
+    _server->publishParameterValues(hdl, params, requestId);
+  }
+
+  void parameterSubscriptionHandler(const std::vector<std::string>& parameters,
+                                    foxglove::ParameterSubscriptionOperation op,
+                                    foxglove::ConnHandle) {
+    if (op == foxglove::ParameterSubscriptionOperation::SUBSCRIBE) {
+      _paramInterface->subscribeParams(parameters);
+    } else {
+      _paramInterface->unsubscribeParams(parameters);
+    }
+  }
+
+  void parameterUpdates(const std::vector<foxglove::Parameter>& parameters) {
+    _server->updateParameterValues(parameters);
   }
 
   void logHandler(LogLevel level, char const* msg) {
