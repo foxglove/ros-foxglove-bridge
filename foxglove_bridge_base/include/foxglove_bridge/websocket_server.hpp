@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -20,6 +21,20 @@
 #include "websocket_logging.hpp"
 #include "websocket_notls.hpp"
 #include "websocket_tls.hpp"
+
+// Debounce a function call (tied to the line number)
+// This macro takes in a function, the debounce time in milliseconds, and any
+// arguments to pass to the function.
+#define FOXGLOVE_DEBOUNCE(f, ms, ...)                                                     \
+  do {                                                                                    \
+    static auto last_call_##__LINE__ = std::chrono::system_clock::now();                  \
+    const auto now = std::chrono::system_clock::now();                                    \
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_call_##__LINE__) \
+          .count() > ms) {                                                                \
+      last_call_##__LINE__ = now;                                                         \
+      f(__VA_ARGS__);                                                                     \
+    }                                                                                     \
+  } while (false)
 
 namespace foxglove {
 
@@ -815,6 +830,11 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
 
   const auto bufferSizeinBytes = con->get_buffered_amount();
   if (bufferSizeinBytes >= _send_buffer_limit_bytes) {
+    FOXGLOVE_DEBOUNCE(
+      [this](websocketpp::log::level level, const std::string& msg) {
+        _server.get_elog().write(level, msg);
+      },
+      2500, WARNING, "Connection send buffer limit reached, messages will be dropped...");
     return;
   }
 
