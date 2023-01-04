@@ -64,6 +64,8 @@ endif()
 # Build the foxglove_bridge_base library
 add_library(foxglove_bridge_base SHARED
   foxglove_bridge_base/src/foxglove_bridge.cpp
+  foxglove_bridge_base/src/parameter.cpp
+  foxglove_bridge_base/src/serialization.cpp
   foxglove_bridge_base/src/test/test_client.cpp
 )
 target_include_directories(foxglove_bridge_base
@@ -101,8 +103,17 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
       DEPENDS Boost
     )
 
-    add_library(foxglove_bridge_nodelet ros1_foxglove_bridge/src/ros1_foxglove_bridge_nodelet.cpp)
-    target_include_directories(foxglove_bridge_nodelet SYSTEM PRIVATE ${catkin_INCLUDE_DIRS})
+    add_library(foxglove_bridge_nodelet
+      ros1_foxglove_bridge/src/ros1_foxglove_bridge_nodelet.cpp
+      ros1_foxglove_bridge/src/param_utils.cpp
+    )
+    target_include_directories(foxglove_bridge_nodelet
+      SYSTEM PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros1_foxglove_bridge/include>
+        $<INSTALL_INTERFACE:include>
+        ${catkin_INCLUDE_DIRS}
+    )
     target_link_libraries(foxglove_bridge_nodelet foxglove_bridge_base ${catkin_LIBRARIES})
 
     add_executable(foxglove_bridge ros1_foxglove_bridge/src/ros1_foxglove_bridge_node.cpp)
@@ -124,7 +135,9 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
 
     add_library(foxglove_bridge_component SHARED
       ros2_foxglove_bridge/src/message_definition_cache.cpp
+      ros2_foxglove_bridge/src/param_utils.cpp
       ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp
+      ros2_foxglove_bridge/src/parameter_interface.cpp
     )
     target_include_directories(foxglove_bridge_component
       PUBLIC
