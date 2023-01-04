@@ -2,6 +2,18 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.3.0 (2023-01-04)
+------------------
+* Add launch files, add install instructions to README (`#125 <https://github.com/foxglove/ros-foxglove-bridge/issues/125>`_)
+* Drop messages when connection send buffer limit has been reached (`#126 <https://github.com/foxglove/ros-foxglove-bridge/issues/126>`_)
+* Remove references to galactic support from README (`#117 <https://github.com/foxglove/ros-foxglove-bridge/issues/117>`_)
+* Add missing build instructions (`#123 <https://github.com/foxglove/ros-foxglove-bridge/issues/123>`_)
+* Use a single reentrant callback group for all subscriptions (`#122 <https://github.com/foxglove/ros-foxglove-bridge/issues/122>`_)
+* Fix clang compilation errors (`#119 <https://github.com/foxglove/ros-foxglove-bridge/issues/119>`_)
+* Publish binary time data when `use_sim_time` parameter is `true` (`#114 <https://github.com/foxglove/ros-foxglove-bridge/issues/114>`_)
+* Optimize Dockerfiles (`#110 <https://github.com/foxglove/ros-foxglove-bridge/issues/110>`_)
+* Contributors: Hans-Joachim Krauch, Ruffin
+
 0.2.2 (2022-12-12)
 ------------------
 * Fix messages not being received anymore after unadvertising a client publication (`#109 <https://github.com/foxglove/ros-foxglove-bridge/issues/109>`_)
