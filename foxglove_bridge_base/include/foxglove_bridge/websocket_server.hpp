@@ -787,7 +787,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         return;
       }
 
-      const auto paramNames = payload.at("parameters").get<std::vector<std::string>>();
+      const auto paramNames = payload.at("parameterNames").get<std::vector<std::string>>();
       const auto requestId = payload.value("id", "");
       _parameterRequestHandler(paramNames, requestId, hdl);
     } break;
@@ -814,7 +814,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         return;
       }
 
-      const auto paramNames = payload.at("parameters").get<std::unordered_set<std::string>>();
+      const auto paramNames = payload.at("parameterNames").get<std::unordered_set<std::string>>();
       std::vector<std::string> paramsToSubscribe;
       {
         // Only consider parameters that are not subscribed yet (by this or by other clients)
@@ -844,7 +844,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         return;
       }
 
-      const auto paramNames = payload.at("parameters").get<std::unordered_set<std::string>>();
+      const auto paramNames = payload.at("parameterNames").get<std::unordered_set<std::string>>();
       {
         std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
         auto& clientSubscribedParams = _clientParamSubscriptions[hdl];

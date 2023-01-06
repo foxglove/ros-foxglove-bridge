@@ -184,7 +184,7 @@ public:
   void getParameters(const std::vector<std::string>& parameterNames,
                      const std::string& requestId) override {
     nlohmann::json jsonPayload{
-      {"op", "getParameters"}, {"parameters", parameterNames}, {"id", requestId}};
+      {"op", "getParameters"}, {"parameterNames", parameterNames}, {"id", requestId}};
     sendText(jsonPayload.dump());
   }
 
@@ -194,13 +194,14 @@ public:
   }
 
   void subscribeParameterUpdates(const std::vector<std::string>& parameterNames) override {
-    nlohmann::json jsonPayload{{"op", "subscribeParameterUpdates"}, {"parameters", parameterNames}};
+    nlohmann::json jsonPayload{{"op", "subscribeParameterUpdates"},
+                               {"parameterNames", parameterNames}};
     sendText(jsonPayload.dump());
   }
 
   void unsubscribeParameterUpdates(const std::vector<std::string>& parameterNames) override {
     nlohmann::json jsonPayload{{"op", "unsubscribeParameterUpdates"},
-                               {"parameters", parameterNames}};
+                               {"parameterNames", parameterNames}};
     sendText(jsonPayload.dump());
   }
 
