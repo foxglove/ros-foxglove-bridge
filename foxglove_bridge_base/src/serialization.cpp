@@ -43,7 +43,8 @@ void from_json(const nlohmann::json& j, Parameter& p) {
   } else if (jsonType == nlohmann::detail::value_t::number_float) {
     p = Parameter(name, value.get<double>());
   } else if (jsonType == nlohmann::detail::value_t::array) {
-    if (j.empty()) {
+    if (value.empty()) {
+      // We do not know the type when an empty array is received.
       throw std::runtime_error("Setting empty arrays is currently unsupported.");
     }
 
