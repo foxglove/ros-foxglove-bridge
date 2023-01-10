@@ -102,7 +102,8 @@ public:
                                                     std::placeholders::_1, std::placeholders::_2,
                                                     std::placeholders::_3));
       _server->setParameterChangeHandler(std::bind(&FoxgloveBridge::parameterChangeHandler, this,
-                                                   std::placeholders::_1, std::placeholders::_2));
+                                                   std::placeholders::_1, std::placeholders::_2,
+                                                   std::placeholders::_3));
       _server->setParameterSubscriptionHandler(
         std::bind(&FoxgloveBridge::parameterSubscriptionHandler, this, std::placeholders::_1,
                   std::placeholders::_2, std::placeholders::_3));
@@ -466,7 +467,8 @@ private:
   }
 
   void parameterRequestHandler(const std::vector<std::string>& parameters,
-                               const std::string& requestId, foxglove::ConnHandle hdl) {
+                               const std::optional<std::string>& requestId,
+                               foxglove::ConnHandle hdl) {
     std::vector<std::string> parameterNames = parameters;
     if (parameterNames.empty()) {
       getMTNodeHandle().getParamNames(parameterNames);
@@ -492,7 +494,8 @@ private:
   }
 
   void parameterChangeHandler(const std::vector<foxglove::Parameter>& parameters,
-                              foxglove::ConnHandle) {
+                              const std::optional<std::string>& requestId,
+                              foxglove::ConnHandle hdl) {
     using foxglove::ParameterType;
     auto nh = this->getMTNodeHandle();
     for (const auto& param : parameters) {
@@ -522,6 +525,15 @@ private:
       } else if (paramType == ParameterType::PARAMETER_NOT_SET) {
         ROS_ERROR("Parameter '%s' is not set", paramName.c_str());
       }
+    }
+
+    // If a request Id was given, send potentially updated parameters back to client
+    if (requestId) {
+      std::vector<std::string> parameterNames(parameters.size());
+      for (size_t i = 0; i < parameters.size(); ++i) {
+        parameterNames[i] = parameters[i].getName();
+      }
+      parameterRequestHandler(parameterNames, requestId, hdl);
     }
   }
 

@@ -222,6 +222,20 @@ TEST_F(ParameterTest, testSetParameters) {
   EXPECT_EQ(newP2value, p2Iter->getValue<PARAM_2_TYPE>());
 }
 
+TEST_F(ParameterTest, testSetParametersWithReqId) {
+  const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
+  const PARAM_1_TYPE newP1value = "world";
+  const std::vector<foxglove::Parameter> parameters = {
+    foxglove::Parameter(p1, newP1value),
+  };
+
+  const std::string requestId = "req-testSetParameters";
+  _wsClient->setParameters(parameters, requestId);
+  std::vector<foxglove::Parameter> params;
+  ASSERT_NO_THROW(params = foxglove::waitForParameters(_wsClient, requestId));
+  EXPECT_EQ(1UL, params.size());
+}
+
 TEST_F(ParameterTest, testParameterSubscription) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
 

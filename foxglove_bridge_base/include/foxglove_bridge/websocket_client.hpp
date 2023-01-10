@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <future>
+#include <optional>
 #include <shared_mutex>
 #include <utility>
 #include <vector>
@@ -43,8 +44,9 @@ public:
   virtual void unadvertise(const std::vector<ClientChannelId>& channelIds) = 0;
   virtual void publish(ClientChannelId channelId, const uint8_t* buffer, size_t size) = 0;
   virtual void getParameters(const std::vector<std::string>& parameterNames,
-                             const std::string& requestId) = 0;
-  virtual void setParameters(const std::vector<Parameter>& parameters) = 0;
+                             const std::optional<std::string>& requestId) = 0;
+  virtual void setParameters(const std::vector<Parameter>& parameters,
+                             const std::optional<std::string>& requestId) = 0;
   virtual void subscribeParameterUpdates(const std::vector<std::string>& parameterNames) = 0;
   virtual void unsubscribeParameterUpdates(const std::vector<std::string>& parameterNames) = 0;
 
@@ -182,14 +184,20 @@ public:
   }
 
   void getParameters(const std::vector<std::string>& parameterNames,
-                     const std::string& requestId) override {
-    nlohmann::json jsonPayload{
-      {"op", "getParameters"}, {"parameterNames", parameterNames}, {"id", requestId}};
+                     const std::optional<std::string>& requestId = std::nullopt) override {
+    nlohmann::json jsonPayload{{"op", "getParameters"}, {"parameterNames", parameterNames}};
+    if (requestId) {
+      jsonPayload["id"] = requestId.value();
+    }
     sendText(jsonPayload.dump());
   }
 
-  void setParameters(const std::vector<Parameter>& parameters) override {
+  void setParameters(const std::vector<Parameter>& parameters,
+                     const std::optional<std::string>& requestId = std::nullopt) override {
     nlohmann::json jsonPayload{{"op", "setParameters"}, {"parameters", parameters}};
+    if (requestId) {
+      jsonPayload["id"] = requestId.value();
+    }
     sendText(jsonPayload.dump());
   }
 
