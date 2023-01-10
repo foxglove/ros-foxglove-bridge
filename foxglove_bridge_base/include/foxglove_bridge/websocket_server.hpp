@@ -136,19 +136,19 @@ constexpr const char* StatusLevelToString(StatusLevel level) {
   }
 }
 
-class ServerInterface {
-  using Tcp = websocketpp::lib::asio::ip::tcp;
-  using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
-  using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
-  using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
-  using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
-  using ParameterRequestHandler = std::function<void(
-    const std::vector<std::string>&, const std::optional<std::string>&, ConnHandle)>;
-  using ParameterChangeHandler = std::function<void(const std::vector<Parameter>&,
-                                                    const std::optional<std::string>&, ConnHandle)>;
-  using ParameterSubscriptionHandler = std::function<void(
-    const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
+using Tcp = websocketpp::lib::asio::ip::tcp;
+using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
+using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
+using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
+using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
+using ParameterRequestHandler = std::function<void(const std::vector<std::string>&,
+                                                   const std::optional<std::string>&, ConnHandle)>;
+using ParameterChangeHandler =
+  std::function<void(const std::vector<Parameter>&, const std::optional<std::string>&, ConnHandle)>;
+using ParameterSubscriptionHandler =
+  std::function<void(const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
 
+class ServerInterface {
 public:
   virtual ~ServerInterface() {}
   virtual void start(const std::string& host, uint16_t port) = 0;
@@ -188,17 +188,6 @@ public:
   using ServerType = websocketpp::server<ServerConfiguration>;
   using ConnectionType = websocketpp::connection<ServerConfiguration>;
   using MessagePtr = typename ServerType::message_ptr;
-  using Tcp = websocketpp::lib::asio::ip::tcp;
-  using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
-  using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
-  using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
-  using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
-  using ParameterRequestHandler = std::function<void(
-    const std::vector<std::string>&, const std::optional<std::string>&, ConnHandle)>;
-  using ParameterChangeHandler = std::function<void(const std::vector<Parameter>&,
-                                                    const std::optional<std::string>&, ConnHandle)>;
-  using ParameterSubscriptionHandler = std::function<void(
-    const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
 
   static bool USES_TLS;
 
