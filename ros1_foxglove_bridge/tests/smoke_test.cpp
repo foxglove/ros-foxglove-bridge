@@ -180,6 +180,19 @@ TEST_F(ParameterTest, testSetParameters) {
   EXPECT_EQ(newP2value, p2Iter->getValue<PARAM_2_TYPE>());
 }
 
+TEST_F(ParameterTest, testSetParametersWithReqId) {
+  const PARAM_1_TYPE newP1value = "world";
+  const std::vector<foxglove::Parameter> parameters = {
+    foxglove::Parameter(PARAM_1_NAME, newP1value),
+  };
+
+  const std::string requestId = "req-testSetParameters";
+  _wsClient->setParameters(parameters, requestId);
+  std::vector<foxglove::Parameter> params;
+  ASSERT_NO_THROW(params = foxglove::waitForParameters(_wsClient, requestId));
+  EXPECT_EQ(1UL, params.size());
+}
+
 TEST_F(ParameterTest, testParameterSubscription) {
   _wsClient->subscribeParameterUpdates({PARAM_1_NAME});
   _wsClient->setParameters({foxglove::Parameter(PARAM_1_NAME, "foo")});
