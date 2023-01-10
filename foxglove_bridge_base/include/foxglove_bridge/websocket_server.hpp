@@ -202,6 +202,7 @@ public:
 
   explicit Server(std::string name, LogCallback logger,
                   const std::vector<std::string>& capabilities,
+                  const std::vector<std::string>& supportedEncodings = {},
                   size_t send_buffer_limit_bytes = DEFAULT_SEND_BUFFER_LIMIT_BYTES,
                   const std::string& certfile = "", const std::string& keyfile = "");
   virtual ~Server();
@@ -254,6 +255,7 @@ private:
   std::string _name;
   LogCallback _logger;
   std::vector<std::string> _capabilities;
+  std::vector<std::string> _supportedEncodings;
   size_t _send_buffer_limit_bytes;
   std::string _certfile;
   std::string _keyfile;
@@ -300,11 +302,13 @@ private:
 template <typename ServerConfiguration>
 inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger,
                                            const std::vector<std::string>& capabilities,
+                                           const std::vector<std::string>& supportedEncodings,
                                            size_t send_buffer_limit_bytes,
                                            const std::string& certfile, const std::string& keyfile)
     : _name(std::move(name))
     , _logger(logger)
     , _capabilities(capabilities)
+    , _supportedEncodings(supportedEncodings)
     , _send_buffer_limit_bytes(send_buffer_limit_bytes)
     , _certfile(certfile)
     , _keyfile(keyfile) {
@@ -372,6 +376,7 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
                    {"op", "serverInfo"},
                    {"name", _name},
                    {"capabilities", _capabilities},
+                   {"supportedEncodings", _supportedEncodings},
                  })
               .dump());
 
