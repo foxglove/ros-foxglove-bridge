@@ -763,6 +763,11 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
           continue;
         }
         clientPublications.erase(channelIt);
+        if (const auto advertisedChannelIt = clientInfo.advertisedChannels.find(channelId) !=
+                                             clientInfo.advertisedChannels.end()) {
+          clientInfo.advertisedChannels.erase(advertisedChannelIt);
+        }
+
         if (_clientUnadvertiseHandler) {
           _clientUnadvertiseHandler(channelId, hdl);
         }
