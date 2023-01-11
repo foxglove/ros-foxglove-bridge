@@ -136,18 +136,19 @@ constexpr const char* StatusLevelToString(StatusLevel level) {
   }
 }
 
-class ServerInterface {
-  using Tcp = websocketpp::lib::asio::ip::tcp;
-  using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
-  using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
-  using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
-  using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
-  using ParameterRequestHandler =
-    std::function<void(const std::vector<std::string>&, const std::string&, ConnHandle)>;
-  using ParameterChangeHandler = std::function<void(const std::vector<Parameter>&, ConnHandle)>;
-  using ParameterSubscriptionHandler = std::function<void(
-    const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
+using Tcp = websocketpp::lib::asio::ip::tcp;
+using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
+using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
+using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
+using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
+using ParameterRequestHandler = std::function<void(const std::vector<std::string>&,
+                                                   const std::optional<std::string>&, ConnHandle)>;
+using ParameterChangeHandler =
+  std::function<void(const std::vector<Parameter>&, const std::optional<std::string>&, ConnHandle)>;
+using ParameterSubscriptionHandler =
+  std::function<void(const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
 
+class ServerInterface {
 public:
   virtual ~ServerInterface() {}
   virtual void start(const std::string& host, uint16_t port) = 0;
@@ -158,7 +159,7 @@ public:
   virtual void broadcastChannels() = 0;
   virtual void publishParameterValues(ConnHandle clientHandle,
                                       const std::vector<Parameter>& parameters,
-                                      const std::string& requestId = std::string()) = 0;
+                                      const std::optional<std::string>& requestId) = 0;
   virtual void updateParameterValues(const std::vector<Parameter>& parameters) = 0;
 
   virtual void setSubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
@@ -187,16 +188,6 @@ public:
   using ServerType = websocketpp::server<ServerConfiguration>;
   using ConnectionType = websocketpp::connection<ServerConfiguration>;
   using MessagePtr = typename ServerType::message_ptr;
-  using Tcp = websocketpp::lib::asio::ip::tcp;
-  using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
-  using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
-  using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
-  using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
-  using ParameterRequestHandler =
-    std::function<void(const std::vector<std::string>&, const std::string&, ConnHandle)>;
-  using ParameterChangeHandler = std::function<void(const std::vector<Parameter>&, ConnHandle)>;
-  using ParameterSubscriptionHandler = std::function<void(
-    const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
 
   static bool USES_TLS;
 
@@ -218,7 +209,7 @@ public:
   void removeChannel(ChannelId chanId) override;
   void broadcastChannels() override;
   void publishParameterValues(ConnHandle clientHandle, const std::vector<Parameter>& parameters,
-                              const std::string& requestId = std::string()) override;
+                              const std::optional<std::string>& requestId = std::nullopt) override;
   void updateParameterValues(const std::vector<Parameter>& parameters) override;
 
   void setSubscribeHandler(SubscribeUnsubscribeHandler handler) override;
@@ -788,7 +779,9 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
 
       const auto paramNames = payload.at("parameterNames").get<std::vector<std::string>>();
-      const auto requestId = payload.value("id", "");
+      const auto requestId = payload.find("id") == payload.end()
+                               ? std::nullopt
+                               : std::optional<std::string>(payload["id"].get<std::string>());
       _parameterRequestHandler(paramNames, requestId, hdl);
     } break;
     case SET_PARAMETERS: {
@@ -802,7 +795,10 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
 
       const auto parameters = payload.at("parameters").get<std::vector<Parameter>>();
-      _parameterChangeHandler(parameters, hdl);
+      const auto requestId = payload.find("id") == payload.end()
+                               ? std::nullopt
+                               : std::optional<std::string>(payload["id"].get<std::string>());
+      _parameterChangeHandler(parameters, requestId, hdl);
     } break;
     case SUBSCRIBE_PARAMETER_UPDATES: {
       if (!hasCapability(CAPABILITY_PARAMETERS_SUBSCRIBE)) {
@@ -962,10 +958,11 @@ inline void Server<ServerConfiguration>::broadcastChannels() {
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::publishParameterValues(
-  ConnHandle hdl, const std::vector<Parameter>& parameters, const std::string& requestId) {
+  ConnHandle hdl, const std::vector<Parameter>& parameters,
+  const std::optional<std::string>& requestId) {
   nlohmann::json jsonPayload{{"op", "parameterValues"}, {"parameters", parameters}};
-  if (!requestId.empty()) {
-    jsonPayload["id"] = requestId;
+  if (requestId) {
+    jsonPayload["id"] = requestId.value();
   }
   sendJsonRaw(hdl, jsonPayload.dump());
 }
