@@ -82,7 +82,7 @@ public:
     _server->setParameterRequestHandler(
       std::bind(&FoxgloveBridge::parameterRequestHandler, this, _1, _2, _3));
     _server->setParameterChangeHandler(
-      std::bind(&FoxgloveBridge::parameterChangeHandler, this, _1, _2));
+      std::bind(&FoxgloveBridge::parameterChangeHandler, this, _1, _2, _3));
     _server->setParameterSubscriptionHandler(
       std::bind(&FoxgloveBridge::parameterSubscriptionHandler, this, _1, _2, _3));
 
@@ -551,12 +551,23 @@ private:
   }
 
   void parameterChangeHandler(const std::vector<foxglove::Parameter>& parameters,
-                              foxglove::ConnHandle) {
+                              const std::optional<std::string>& requestId,
+                              foxglove::ConnHandle hdl) {
     _paramInterface->setParams(parameters, std::chrono::seconds(5));
+
+    // If a request Id was given, send potentially updated parameters back to client
+    if (requestId) {
+      std::vector<std::string> parameterNames(parameters.size());
+      for (size_t i = 0; i < parameters.size(); ++i) {
+        parameterNames[i] = parameters[i].getName();
+      }
+      parameterRequestHandler(parameterNames, requestId, hdl);
+    }
   }
 
   void parameterRequestHandler(const std::vector<std::string>& parameters,
-                               const std::string& requestId, foxglove::ConnHandle hdl) {
+                               const std::optional<std::string>& requestId,
+                               foxglove::ConnHandle hdl) {
     const auto params = _paramInterface->getParams(parameters, std::chrono::seconds(5));
     _server->publishParameterValues(hdl, params, requestId);
   }
