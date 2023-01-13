@@ -76,17 +76,19 @@ public:
         serverCapabilities.push_back(foxglove::CAPABILITY_TIME);
       }
       const std::vector<std::string> supportedEncodings = {ROS1_CHANNEL_ENCODING};
+      const std::unordered_map<std::string, std::string> metadata = {
+        {"ROS_DISTRO", std::getenv("ROS_DISTRO")}};
 
       const auto logHandler =
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);
       if (useTLS) {
         _server = std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(
           "foxglove_bridge", std::move(logHandler), serverCapabilities, supportedEncodings,
-          send_buffer_limit, certfile, keyfile);
+          metadata, send_buffer_limit, certfile, keyfile);
       } else {
         _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
           "foxglove_bridge", std::move(logHandler), serverCapabilities, supportedEncodings,
-          send_buffer_limit);
+          metadata, send_buffer_limit);
       }
 
       _server->setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this,

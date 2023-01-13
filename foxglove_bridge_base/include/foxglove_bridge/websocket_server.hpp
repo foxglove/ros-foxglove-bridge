@@ -194,6 +194,7 @@ public:
   explicit Server(std::string name, LogCallback logger,
                   const std::vector<std::string>& capabilities,
                   const std::vector<std::string>& supportedEncodings = {},
+                  const std::unordered_map<std::string, std::string>& metadata = {},
                   size_t send_buffer_limit_bytes = DEFAULT_SEND_BUFFER_LIMIT_BYTES,
                   const std::string& certfile = "", const std::string& keyfile = "");
   virtual ~Server();
@@ -247,6 +248,7 @@ private:
   LogCallback _logger;
   std::vector<std::string> _capabilities;
   std::vector<std::string> _supportedEncodings;
+  std::unordered_map<std::string, std::string> _metadata;
   size_t _send_buffer_limit_bytes;
   std::string _certfile;
   std::string _keyfile;
@@ -291,15 +293,16 @@ private:
 };
 
 template <typename ServerConfiguration>
-inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger,
-                                           const std::vector<std::string>& capabilities,
-                                           const std::vector<std::string>& supportedEncodings,
-                                           size_t send_buffer_limit_bytes,
-                                           const std::string& certfile, const std::string& keyfile)
+inline Server<ServerConfiguration>::Server(
+  std::string name, LogCallback logger, const std::vector<std::string>& capabilities,
+  const std::vector<std::string>& supportedEncodings,
+  const std::unordered_map<std::string, std::string>& metadata, size_t send_buffer_limit_bytes,
+  const std::string& certfile, const std::string& keyfile)
     : _name(std::move(name))
     , _logger(logger)
     , _capabilities(capabilities)
     , _supportedEncodings(supportedEncodings)
+    , _metadata(metadata)
     , _send_buffer_limit_bytes(send_buffer_limit_bytes)
     , _certfile(certfile)
     , _keyfile(keyfile) {
@@ -368,6 +371,7 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
                    {"name", _name},
                    {"capabilities", _capabilities},
                    {"supportedEncodings", _supportedEncodings},
+                   {"metadata", _metadata},
                  })
               .dump());
 
