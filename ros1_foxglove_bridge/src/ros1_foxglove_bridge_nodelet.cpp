@@ -513,7 +513,7 @@ private:
       if (paramType == ParameterType::PARAMETER_BOOL) {
         nh.setParam(paramName, param.getValue<bool>());
       } else if (paramType == ParameterType::PARAMETER_INTEGER) {
-        nh.setParam(paramName, param.getValue<int>());
+        nh.setParam(paramName, static_cast<int>(param.getValue<int64_t>()));
       } else if (paramType == ParameterType::PARAMETER_DOUBLE) {
         nh.setParam(paramName, param.getValue<double>());
       } else if (paramType == ParameterType::PARAMETER_STRING) {
@@ -521,7 +521,9 @@ private:
       } else if (paramType == ParameterType::PARAMETER_BOOL_ARRAY) {
         nh.setParam(paramName, param.getValue<std::vector<bool>>());
       } else if (paramType == ParameterType::PARAMETER_INTEGER_ARRAY) {
-        nh.setParam(paramName, param.getValue<std::vector<int>>());
+        const auto int64Vec = param.getValue<std::vector<int64_t>>();
+        std::vector<int> intVec(int64Vec.begin(), int64Vec.end());
+        nh.setParam(paramName, intVec);
       } else if (paramType == ParameterType::PARAMETER_DOUBLE_ARRAY) {
         nh.setParam(paramName, param.getValue<std::vector<double>>());
       } else if (paramType == ParameterType::PARAMETER_STRING_ARRAY) {
