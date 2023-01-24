@@ -289,8 +289,8 @@ void ParameterInterface::setNodeParameters(rclcpp::AsyncParametersClient::Shared
 
   auto future = paramClient->set_parameters(params);
   if (std::future_status::ready != future.wait_for(timeout)) {
-    throw std::runtime_error("Param client failed to set parameters for node '" + nodeName +
-                             "' within the given timeout");
+    throw std::runtime_error("Param client failed to set " + std::to_string(params.size()) +
+                             " parameter(s) for node '" + nodeName + "' within the given timeout");
   }
 
   const auto setParamResults = future.get();

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <chrono>
+#include <future>
 #include <string>
 #include <vector>
 
@@ -14,9 +14,8 @@ namespace foxglove {
 std::vector<uint8_t> connectClientAndReceiveMsg(const std::string& uri,
                                                 const std::string& topic_name);
 
-std::vector<Parameter> waitForParameters(
-  std::shared_ptr<ClientInterface> client, const std::string& requestId = std::string(),
-  const std::chrono::duration<double>& timeout = std::chrono::seconds(5));
+std::future<std::vector<Parameter>> waitForParameters(std::shared_ptr<ClientInterface> client,
+                                                      const std::string& requestId = std::string());
 
 extern template class Client<websocketpp::config::asio_client>;
 
