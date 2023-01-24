@@ -86,20 +86,26 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
   std::lock_guard<std::mutex> lock(_mutex);
 
   std::unordered_map<std::string, std::vector<std::string>> paramNamesByNodeName;
-  for (const auto& paramName : paramNames) {
-    const auto& [nodeName, paramN] = getNodeAndParamName(paramName);
-    paramNamesByNodeName[nodeName].push_back(paramN);
-  }
 
-  if (paramNamesByNodeName.empty()) {
-    const auto nodeNames = _node->get_node_names();
-    for (const auto& nodeName : nodeNames) {
+  if (!paramNames.empty()) {
+    // Break apart fully qualified {node_name}.{param_name} strings and build a
+    // mape of node names to the list of parameters for each node
+    for (const auto& fullParamName : paramNames) {
+      const auto& [nodeName, paramName] = getNodeAndParamName(fullParamName);
+      paramNamesByNodeName[nodeName].push_back(paramName);
+    }
+
+    RCLCPP_INFO(_node->get_logger(), "Getting %zu parameters from %zu nodes...", paramNames.size(),
+                paramNamesByNodeName.size());
+  } else {
+    // Make a map of node names to empty parameter lists
+    for (const auto& nodeName : _node->get_node_names()) {
       paramNamesByNodeName.insert({nodeName, {}});
     }
-  }
 
-  RCLCPP_INFO(_node->get_logger(), "Getting %zu paramters for %zu nodes...", paramNames.size(),
-              paramNamesByNodeName.size());
+    RCLCPP_INFO(_node->get_logger(), "Getting all parameters from %zu nodes...",
+                paramNamesByNodeName.size());
+  }
 
   std::vector<std::future<ParameterList>> getParametersFuture;
   for (const auto& [nodeName, nodeParamNames] : paramNamesByNodeName) {
@@ -124,7 +130,7 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
       const auto params = future.get();
       result.insert(result.begin(), params.begin(), params.end());
     } catch (const std::exception& e) {
-      RCLCPP_ERROR(_node->get_logger(), "Exception when getting paramters: %s", e.what());
+      RCLCPP_ERROR(_node->get_logger(), "Exception when getting parameters: %s", e.what());
     }
   }
 
@@ -161,7 +167,7 @@ void ParameterInterface::setParams(const ParameterList& parameters,
     try {
       future.get();
     } catch (const std::exception& e) {
-      RCLCPP_ERROR(_node->get_logger(), "Exception when setting paramters: %s", e.what());
+      RCLCPP_ERROR(_node->get_logger(), "Exception when setting parameters: %s", e.what());
     }
   }
 }
@@ -241,12 +247,13 @@ ParameterList ParameterInterface::getNodeParameters(
   const std::vector<std::string>& paramNames, const std::chrono::duration<double>& timeout) {
   const auto deadline = std::chrono::system_clock::now() + timeout;
 
-  if (!paramClient->service_is_ready() || !paramClient->wait_for_service(std::chrono::seconds(1))) {
-    throw std::runtime_error("Param client for node '" + nodeName + "' not ready");
+  if (!paramClient->service_is_ready()) {
+    throw std::runtime_error("Parameter service for node '" + nodeName + "' is not ready");
   }
 
   auto paramsToRequest = paramNames;
   if (paramsToRequest.empty()) {
+    // `paramNames` is empty, list all parameter names for this node
     auto future = paramClient->list_parameters({}, 0UL);
     if (std::future_status::ready != future.wait_until(deadline)) {
       throw std::runtime_error("Failed to retrieve parameter names for node '" + nodeName + "'");
@@ -254,9 +261,11 @@ ParameterList ParameterInterface::getNodeParameters(
     paramsToRequest = future.get().names;
   }
 
+  // Start parameter fetches and wait for them to complete
   auto getParamsFuture = paramClient->get_parameters(paramsToRequest);
   if (std::future_status::ready != getParamsFuture.wait_until(deadline)) {
-    throw std::runtime_error("Failed to get parameter values for node '" + nodeName + "'");
+    throw std::runtime_error("Timed out waiting for " + std::to_string(paramsToRequest.size()) +
+                             " parameter(s) from node '" + nodeName + "'");
   }
   const auto params = getParamsFuture.get();
 
@@ -274,8 +283,8 @@ void ParameterInterface::setNodeParameters(rclcpp::AsyncParametersClient::Shared
                                            const std::string& nodeName,
                                            const std::vector<rclcpp::Parameter>& params,
                                            const std::chrono::duration<double>& timeout) {
-  if (!paramClient->service_is_ready() || !paramClient->wait_for_service(std::chrono::seconds(1))) {
-    throw std::runtime_error("Param client for node '" + nodeName + "' not ready");
+  if (!paramClient->service_is_ready()) {
+    throw std::runtime_error("Parameter service for node '" + nodeName + "' is not ready");
   }
 
   auto future = paramClient->set_parameters(params);
@@ -287,7 +296,7 @@ void ParameterInterface::setNodeParameters(rclcpp::AsyncParametersClient::Shared
   const auto setParamResults = future.get();
   for (auto& result : setParamResults) {
     if (!result.successful) {
-      RCLCPP_WARN(_node->get_logger(), "Failed to set a paramter for node '%s': %s",
+      RCLCPP_WARN(_node->get_logger(), "Failed to set one or more parameters for node '%s': %s",
                   nodeName.c_str(), result.reason.c_str());
     }
   }
