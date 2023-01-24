@@ -44,23 +44,23 @@ clean:
 
 .PHONY: melodic-test
 melodic-test: melodic
-	docker run -t --rm foxglove_bridge_melodic catkin_make run_tests
+	docker run -t --rm foxglove_bridge_melodic bash -c "catkin_make run_tests && catkin_test_results"
 
 .PHONY: noetic-test
 noetic-test: noetic
-	docker run -t --rm foxglove_bridge_noetic catkin_make run_tests
+	docker run -t --rm foxglove_bridge_noetic bash -c "catkin_make run_tests && catkin_test_results"
 
 .PHONY: galactic-test
 galactic-test: galactic
-	docker run -t --rm foxglove_bridge_galactic colcon test --event-handlers console_cohesion+
+	docker run -t --rm foxglove_bridge_galactic colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
 
 .PHONY: humble-test
 humble-test: humble
-	docker run -t --rm foxglove_bridge_humble colcon test --event-handlers console_cohesion+
+	docker run -t --rm foxglove_bridge_humble colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
 
 .PHONY: rolling-test
 rolling-test: rolling
-	docker run -t --rm foxglove_bridge_rolling colcon test --event-handlers console_cohesion+
+	docker run -t --rm foxglove_bridge_rolling colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
 
 .PHONY: lint
 lint: rosdev
