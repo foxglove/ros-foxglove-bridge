@@ -245,8 +245,6 @@ void ParameterInterface::setParamUpdateCallback(ParamUpdateFunc paramUpdateFunc)
 ParameterList ParameterInterface::getNodeParameters(
   const rclcpp::AsyncParametersClient::SharedPtr paramClient, const std::string& nodeName,
   const std::vector<std::string>& paramNames, const std::chrono::duration<double>& timeout) {
-  const auto deadline = std::chrono::system_clock::now() + timeout;
-
   if (!paramClient->service_is_ready()) {
     throw std::runtime_error("Parameter service for node '" + nodeName + "' is not ready");
   }
@@ -255,7 +253,7 @@ ParameterList ParameterInterface::getNodeParameters(
   if (paramsToRequest.empty()) {
     // `paramNames` is empty, list all parameter names for this node
     auto future = paramClient->list_parameters({}, 0UL);
-    if (std::future_status::ready != future.wait_until(deadline)) {
+    if (std::future_status::ready != future.wait_for(timeout)) {
       throw std::runtime_error("Failed to retrieve parameter names for node '" + nodeName + "'");
     }
     paramsToRequest = future.get().names;
@@ -263,7 +261,7 @@ ParameterList ParameterInterface::getNodeParameters(
 
   // Start parameter fetches and wait for them to complete
   auto getParamsFuture = paramClient->get_parameters(paramsToRequest);
-  if (std::future_status::ready != getParamsFuture.wait_until(deadline)) {
+  if (std::future_status::ready != getParamsFuture.wait_for(timeout)) {
     throw std::runtime_error("Timed out waiting for " + std::to_string(paramsToRequest.size()) +
                              " parameter(s) from node '" + nodeName + "'");
   }
