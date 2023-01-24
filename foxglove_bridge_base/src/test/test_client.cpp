@@ -1,5 +1,4 @@
 #include <chrono>
-#include <future>
 
 #define ASIO_STANDALONE
 #include <websocketpp/config/asio_client.hpp>
@@ -9,6 +8,8 @@
 #include <foxglove_bridge/websocket_client.hpp>
 
 namespace foxglove {
+
+constexpr auto DEFAULT_TIMEOUT = std::chrono::seconds(5);
 
 std::vector<uint8_t> connectClientAndReceiveMsg(const std::string& uri,
                                                 const std::string& topic_name) {
@@ -29,9 +30,9 @@ std::vector<uint8_t> connectClientAndReceiveMsg(const std::string& uri,
   });
 
   // Connect the client and wait for the channel future
-  if (std::future_status::ready != wsClient.connect(uri).wait_for(std::chrono::seconds(5))) {
+  if (std::future_status::ready != wsClient.connect(uri).wait_for(DEFAULT_TIMEOUT)) {
     throw std::runtime_error("Client failed to connect");
-  } else if (std::future_status::ready != channelFuture.wait_for(std::chrono::seconds(5))) {
+  } else if (std::future_status::ready != channelFuture.wait_for(DEFAULT_TIMEOUT)) {
     throw std::runtime_error("Client failed to receive channel");
   }
 
@@ -50,33 +51,30 @@ std::vector<uint8_t> connectClientAndReceiveMsg(const std::string& uri,
   wsClient.subscribe({{1, channelId}});
 
   // Wait until we have received a binary message
-  if (std::future_status::ready != msgFuture.wait_for(std::chrono::seconds(5))) {
+  if (std::future_status::ready != msgFuture.wait_for(DEFAULT_TIMEOUT)) {
     throw std::runtime_error("Client failed to receive message");
   }
   return msgFuture.get();
 }
 
-std::vector<Parameter> waitForParameters(std::shared_ptr<ClientInterface> client,
-                                         const std::string& requestId,
-                                         const std::chrono::duration<double>& timeout) {
-  std::promise<std::vector<Parameter>> paramPromise;
-  auto paramFuture = paramPromise.get_future();
-  client->setTextMessageHandler([&paramPromise, requestId](const std::string& payload) {
-    const auto msg = nlohmann::json::parse(payload);
-    const auto& op = msg["op"].get<std::string>();
-    const auto id = msg.value("id", "");
+std::future<std::vector<Parameter>> waitForParameters(std::shared_ptr<ClientInterface> client,
+                                                      const std::string& requestId) {
+  auto promise = std::make_shared<std::promise<std::vector<Parameter>>>();
+  auto future = promise->get_future();
 
-    if (op == "parameterValues" && (requestId.empty() || requestId == id)) {
-      const auto parameters = msg["parameters"].get<std::vector<Parameter>>();
-      paramPromise.set_value(std::move(parameters));
-    }
-  });
+  client->setTextMessageHandler(
+    [promise = std::move(promise), requestId](const std::string& payload) {
+      const auto msg = nlohmann::json::parse(payload);
+      const auto& op = msg["op"].get<std::string>();
+      const auto id = msg.value("id", "");
 
-  // Wait until we have received parameters
-  if (std::future_status::ready != paramFuture.wait_for(timeout)) {
-    throw std::runtime_error("Client failed to receive parameters");
-  }
-  return paramFuture.get();
+      if (op == "parameterValues" && (requestId.empty() || requestId == id)) {
+        const auto parameters = msg["parameters"].get<std::vector<Parameter>>();
+        promise->set_value(std::move(parameters));
+      }
+    });
+
+  return future;
 }
 
 // Explicit template instantiation
