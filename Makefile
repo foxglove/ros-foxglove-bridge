@@ -2,35 +2,35 @@ default: ros2
 
 .PHONY: ros1
 ros1:
-	docker build -t foxglove_bridge_ros1 -f Dockerfile.ros1 .
+	docker build -t foxglove_bridge_ros1 --pull -f Dockerfile.ros1 .
 
 .PHONY: ros2
 ros2:
-	docker build -t foxglove_bridge_ros2 -f Dockerfile.ros2 .
+	docker build -t foxglove_bridge_ros2 --pull -f Dockerfile.ros2 .
 
 .PHONY: melodic
 melodic:
-	docker build -t foxglove_bridge_melodic -f Dockerfile.ros1 --build-arg ROS_DISTRIBUTION=melodic .
+	docker build -t foxglove_bridge_melodic --pull -f Dockerfile.ros1 --build-arg ROS_DISTRIBUTION=melodic .
 
 .PHONY: noetic
 noetic:
-	docker build -t foxglove_bridge_noetic -f Dockerfile.ros1 --build-arg ROS_DISTRIBUTION=noetic .
+	docker build -t foxglove_bridge_noetic --pull -f Dockerfile.ros1 --build-arg ROS_DISTRIBUTION=noetic .
 
 .PHONY: galactic
 galactic:
-	docker build -t foxglove_bridge_galactic -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=galactic .
+	docker build -t foxglove_bridge_galactic --pull -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=galactic .
 
 .PHONY: humble
 humble:
-	docker build -t foxglove_bridge_humble -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=humble .
+	docker build -t foxglove_bridge_humble --pull -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=humble .
 
 .PHONY: rolling
 rolling:
-	docker build -t foxglove_bridge_rolling -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=rolling .
+	docker build -t foxglove_bridge_rolling --pull -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=rolling .
 
 .PHONY: rosdev
 rosdev:
-	docker build -t foxglove_bridge_rosdev -f .devcontainer/Dockerfile .
+	docker build -t foxglove_bridge_rosdev --pull -f .devcontainer/Dockerfile .
 
 clean:
 	docker rmi -f foxglove_bridge_ros1
