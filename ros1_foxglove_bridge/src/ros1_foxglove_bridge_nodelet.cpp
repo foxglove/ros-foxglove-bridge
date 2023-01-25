@@ -487,7 +487,7 @@ private:
 
       try {
         XmlRpc::XmlRpcValue value;
-        getMTNodeHandle().getParamCached(paramName, value);
+        getMTNodeHandle().getParam(paramName, value);
         params.push_back(fromRosParam(paramName, value));
       } catch (const std::exception& ex) {
         ROS_ERROR("Invalid parameter: %s", ex.what());
