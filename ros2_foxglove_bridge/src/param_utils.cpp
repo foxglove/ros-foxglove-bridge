@@ -80,6 +80,15 @@ void declareParameters(rclcpp::Node* node) {
   node->declare_parameter(PARAM_TOPIC_WHITELIST, std::vector<std::string>({".*"}),
                           topicWhiteListDescription);
 
+  auto serviceWhiteListDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  serviceWhiteListDescription.name = PARAM_SERVICE_WHITELIST;
+  serviceWhiteListDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  serviceWhiteListDescription.description =
+    "List of regular expressions (ECMAScript) of whitelisted service names.";
+  serviceWhiteListDescription.read_only = true;
+  node->declare_parameter(PARAM_SERVICE_WHITELIST, std::vector<std::string>({".*"}),
+                          serviceWhiteListDescription);
+
   auto paramWhiteListDescription = rcl_interfaces::msg::ParameterDescriptor{};
   paramWhiteListDescription.name = PARAM_PARAMETER_WHITELIST;
   paramWhiteListDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;

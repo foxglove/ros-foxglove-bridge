@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 #include <rclcpp_components/component_manager.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_srvs/srv/set_bool.hpp>
 #include <websocketpp/config/asio_client.hpp>
 
 #include <foxglove_bridge/test/test_client.hpp>
@@ -67,6 +68,42 @@ protected:
   rclcpp::executors::SingleThreadedExecutor _executor;
   rclcpp::Node::SharedPtr _paramNode1;
   rclcpp::Node::SharedPtr _paramNode2;
+  std::thread _executorThread;
+  std::shared_ptr<foxglove::Client<websocketpp::config::asio_client>> _wsClient;
+};
+
+class ServiceTest : public ::testing::Test {
+public:
+  inline static const std::string SERVICE_NAME = "/foo_service";
+  inline static const std::vector<uint8_t> SERIALIZED_RESPONSE = {
+    0, 1, 0, 0, 1, 0, 0, 0, 6, 0, 0, 0, 104, 101, 108, 108, 111, 0};
+
+protected:
+  void SetUp() override {
+    _node = rclcpp::Node::make_shared("node");
+    _service = _node->create_service<std_srvs::srv::SetBool>(
+      SERVICE_NAME, [&](const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
+                        std::shared_ptr<std_srvs::srv::SetBool::Response> res) {
+        res->message = "hello";
+        res->success = true;
+        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "sending back response. was called with %d",
+                    req->data);
+      });
+
+    _executor.add_node(_node);
+    _executorThread = std::thread([this]() {
+      _executor.spin();
+    });
+  }
+
+  void TearDown() override {
+    _executor.cancel();
+    _executorThread.join();
+  }
+
+  rclcpp::executors::SingleThreadedExecutor _executor;
+  rclcpp::Node::SharedPtr _node;
+  rclcpp::ServiceBase::SharedPtr _service;
   std::thread _executorThread;
   std::shared_ptr<foxglove::Client<websocketpp::config::asio_client>> _wsClient;
 };
@@ -298,6 +335,44 @@ TEST_F(ParameterTest, testGetParametersParallel) {
     std::vector<foxglove::Parameter> parameters;
     EXPECT_NO_THROW(parameters = future.get());
     EXPECT_GE(parameters.size(), 2UL);
+  }
+}
+
+TEST_F(ServiceTest, testCallServiceParallel) {
+  // Connect a few clients (in parallel) and make sure that they can all call the service
+  auto clients = {
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+  };
+
+  auto serviceFuture = foxglove::waitForService(*clients.begin(), SERVICE_NAME);
+  for (auto client : clients) {
+    ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(std::chrono::seconds(5)));
+  }
+  ASSERT_EQ(std::future_status::ready, serviceFuture.wait_for(std::chrono::seconds(5)));
+  const foxglove::Service service = serviceFuture.get();
+
+  foxglove::ServiceRequest request;
+  request.serviceId = service.id;
+  request.callId = 123lu;
+  request.encoding = "cdr";
+  request.data = {1};
+
+  std::vector<std::future<foxglove::ServiceResponse>> futures;
+  for (auto client : clients) {
+    futures.push_back(foxglove::waitForServiceResponse(client));
+    client->sendServiceRequest(request);
+  }
+
+  for (auto& future : futures) {
+    ASSERT_EQ(std::future_status::ready, future.wait_for(std::chrono::seconds(5)));
+    foxglove::ServiceResponse response;
+    EXPECT_NO_THROW(response = future.get());
+    EXPECT_EQ(response.serviceId, request.serviceId);
+    EXPECT_EQ(response.callId, request.callId);
+    EXPECT_EQ(response.encoding, request.encoding);
+    EXPECT_EQ(response.data, SERIALIZED_RESPONSE);
   }
 }
 
