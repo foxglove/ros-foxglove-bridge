@@ -106,6 +106,7 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
     add_library(foxglove_bridge_nodelet
       ros1_foxglove_bridge/src/ros1_foxglove_bridge_nodelet.cpp
       ros1_foxglove_bridge/src/param_utils.cpp
+      ros1_foxglove_bridge/src/service_utils.cpp
     )
     target_include_directories(foxglove_bridge_nodelet
       SYSTEM PRIVATE
@@ -167,7 +168,7 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
   if (CATKIN_ENABLE_TESTING)
     message(STATUS "Building tests with catkin")
 
-    find_package(catkin REQUIRED COMPONENTS roscpp std_msgs)
+    find_package(catkin REQUIRED COMPONENTS roscpp std_msgs std_srvs)
     if(NOT "$ENV{ROS_DISTRO}" STREQUAL "melodic")
       find_package(GTest REQUIRED)
     endif()
