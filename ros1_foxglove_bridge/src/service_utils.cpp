@@ -9,7 +9,6 @@ namespace foxglove_bridge {
 std::future<std::string> retrieveServiceType(const std::string& serviceName) {
   auto link = ros::ServiceManager::instance()->createServiceServerLink(serviceName, false, "*", "*",
                                                                        {{"probe", "1"}});
-
   auto promise = std::make_shared<std::promise<std::string>>();
   auto future = promise->get_future();
 

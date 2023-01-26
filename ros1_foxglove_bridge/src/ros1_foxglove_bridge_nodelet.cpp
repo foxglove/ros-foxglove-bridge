@@ -18,6 +18,7 @@
 #include <rosgraph_msgs/Clock.h>
 
 #include <foxglove_bridge/foxglove_bridge.hpp>
+#include <foxglove_bridge/generic_service.hpp>
 #include <foxglove_bridge/param_utils.hpp>
 #include <foxglove_bridge/service_utils.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
@@ -741,7 +742,7 @@ private:
       return;
     }
 
-    GenericServiceType genReq, genRes;
+    GenericService genReq, genRes;
     genReq.type = genRes.type = serviceType;
     genReq.md5sum = genRes.md5sum = srvDescription->md5;
     genReq.data = request.data;
