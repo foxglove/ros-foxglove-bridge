@@ -10,10 +10,10 @@
 #define ASIO_STANDALONE
 
 #include <foxglove_bridge/foxglove_bridge.hpp>
+#include <foxglove_bridge/generic_client.hpp>
 #include <foxglove_bridge/message_definition_cache.hpp>
 #include <foxglove_bridge/param_utils.hpp>
 #include <foxglove_bridge/parameter_interface.hpp>
-#include <foxglove_bridge/service_utils.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
 
 using namespace std::chrono_literals;
@@ -740,12 +740,18 @@ private:
 
     auto clientIt = _serviceClients.find(request.serviceId);
     if (clientIt == _serviceClients.end()) {
-      auto clientOptions = rcl_client_get_default_options();
-      auto genClient = GenericClient::make_shared(
-        this->get_node_base_interface().get(), this->get_node_graph_interface(),
-        serviceIt->second.name, serviceIt->second.type, clientOptions);
-      clientIt = _serviceClients.emplace(request.serviceId, std::move(genClient)).first;
-      this->get_node_services_interface()->add_client(clientIt->second, _servicesCallbackGroup);
+      try {
+        auto clientOptions = rcl_client_get_default_options();
+        auto genClient = GenericClient::make_shared(
+          this->get_node_base_interface().get(), this->get_node_graph_interface(),
+          serviceIt->second.name, serviceIt->second.type, clientOptions);
+        clientIt = _serviceClients.emplace(request.serviceId, std::move(genClient)).first;
+        this->get_node_services_interface()->add_client(clientIt->second, _servicesCallbackGroup);
+      } catch (const std::exception& ex) {
+        RCLCPP_ERROR(get_logger(), "Failed to create service client for service %d (%s): %s",
+                     request.serviceId, serviceIt->second.name.c_str(), ex.what());
+        return;
+      }
     }
 
     auto client = clientIt->second;
@@ -760,20 +766,16 @@ private:
     std::memcpy(rclSerializedMsg.buffer, request.data.data(), request.data.size());
     rclSerializedMsg.buffer_length = request.data.size();
 
-    auto response_received_callback = [this, request,
-                                       clientHandle](GenericClient::SharedFuture future) {
+    auto responseReceivedCallback = [this, request,
+                                     clientHandle](GenericClient::SharedFuture future) {
       const auto serializedResponseMsg = future.get()->get_rcl_serialized_message();
-
-      foxglove::ServiceRequest response;
-      response.serviceId = request.serviceId;
-      response.callId = request.callId;
-      response.encoding = request.encoding;
-      response.data.resize(serializedResponseMsg.buffer_length);
+      foxglove::ServiceRequest response{request.serviceId, request.callId, request.encoding,
+                                        std::vector<uint8_t>(serializedResponseMsg.buffer_length)};
       std::memcpy(response.data.data(), serializedResponseMsg.buffer,
                   serializedResponseMsg.buffer_length);
       _server->sendServiceResponse(clientHandle, response);
     };
-    client->async_send_request(reqMessage, response_received_callback);
+    client->async_send_request(reqMessage, responseReceivedCallback);
   }
 };
 

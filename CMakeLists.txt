@@ -139,7 +139,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
       ros2_foxglove_bridge/src/param_utils.cpp
       ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp
       ros2_foxglove_bridge/src/parameter_interface.cpp
-      ros2_foxglove_bridge/src/service_utils.cpp
+      ros2_foxglove_bridge/src/generic_client.cpp
     )
     target_include_directories(foxglove_bridge_component
       PUBLIC

@@ -41,11 +41,12 @@ private:
 
   std::map<int64_t, std::tuple<SharedPromise, CallbackType, SharedFuture>> pending_requests_;
   std::mutex pending_requests_mutex_;
-  std::shared_ptr<rcpputils::SharedLibrary> srv_ts_lib_;
-  const rosidl_service_type_support_t* srv_ts_hdl_;
-  std::shared_ptr<rcpputils::SharedLibrary> req_ts_lib_;
-  std::shared_ptr<rcpputils::SharedLibrary> res_ts_lib_;
-  const rosidl_message_type_support_t* res_ts_hdl_;
+  std::shared_ptr<rcpputils::SharedLibrary> _typeSupportLib;
+  std::shared_ptr<rcpputils::SharedLibrary> _typeIntrospectionLib;
+  const rosidl_service_type_support_t* _serviceTypeSupportHdl;
+  const rosidl_message_type_support_t* _requestTypeSupportHdl;
+  const rosidl_message_type_support_t* _responseTypeSupportHdl;
+  const rosidl_service_type_support_t* _typeIntrospectionHdl;
 };
 
 }  // namespace foxglove_bridge
