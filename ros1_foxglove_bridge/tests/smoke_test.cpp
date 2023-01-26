@@ -49,16 +49,14 @@ protected:
 class ServiceTest : public ::testing::Test {
 public:
   inline static const std::string SERVICE_NAME = "/foo_service";
-  inline static const std::vector<uint8_t> SERIALIZED_RESPONSE = {1,   5,   0,   0,   0,
-                                                                  104, 101, 108, 108, 111};
 
 protected:
   void SetUp() override {
     _nh = ros::NodeHandle();
     _service = _nh.advertiseService<std_srvs::SetBool::Request, std_srvs::SetBool::Response>(
-      SERVICE_NAME, [&](auto&, auto& res) {
+      SERVICE_NAME, [&](auto& req, auto& res) {
         res.message = "hello";
-        res.success = true;
+        res.success = req.data;
         return true;
       });
   }
@@ -299,7 +297,9 @@ TEST_F(ServiceTest, testCallServiceParallel) {
   request.serviceId = service.id;
   request.callId = 123lu;
   request.encoding = "ros1";
-  request.data = {1};
+  request.data = {1};  // Serialized boolean "True"
+
+  const std::vector<uint8_t> expectedSerializedResponse = {1, 5, 0, 0, 0, 104, 101, 108, 108, 111};
 
   std::vector<std::future<foxglove::ServiceResponse>> futures;
   for (auto client : clients) {
@@ -314,7 +314,7 @@ TEST_F(ServiceTest, testCallServiceParallel) {
     EXPECT_EQ(response.serviceId, request.serviceId);
     EXPECT_EQ(response.callId, request.callId);
     EXPECT_EQ(response.encoding, request.encoding);
-    EXPECT_EQ(response.data, SERIALIZED_RESPONSE);
+    EXPECT_EQ(response.data, expectedSerializedResponse);
   }
 }
 
