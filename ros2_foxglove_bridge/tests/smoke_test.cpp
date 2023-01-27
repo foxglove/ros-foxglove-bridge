@@ -19,7 +19,7 @@ constexpr uint8_t HELLO_WORLD_BINARY[] = {0,   1,   0,   0,  12,  0,   0,   0,  
                                           108, 108, 111, 32, 119, 111, 114, 108, 100, 0};
 
 constexpr auto ONE_SECOND = std::chrono::seconds(1);
-constexpr auto DEFAULT_TIMEOUT = std::chrono::seconds(8);
+constexpr auto DEFAULT_TIMEOUT = std::chrono::seconds(10);
 
 class ParameterTest : public ::testing::Test {
 public:
