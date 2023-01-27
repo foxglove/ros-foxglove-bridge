@@ -283,6 +283,7 @@ private:
   ParameterSubscriptionHandler _parameterSubscriptionHandler;
   ServiceRequestHandler _serviceRequestHandler;
   std::shared_mutex _clientsChannelMutex;
+  std::shared_mutex _servicesMutex;
   std::mutex _clientParamSubscriptionsMutex;
 
   void setupTlsHandler() override;
@@ -954,10 +955,14 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
       }
 
       request.read(msg + 1, length - 1);
-      if (_services.find(request.serviceId) == _services.end()) {
-        sendStatus(hdl, StatusLevel::Error,
-                   "Service " + std::to_string(request.serviceId) + " is not advertised");
-        return;
+
+      {
+        std::shared_lock<std::shared_mutex> lock(_servicesMutex);
+        if (_services.find(request.serviceId) == _services.end()) {
+          sendStatus(hdl, StatusLevel::Error,
+                     "Service " + std::to_string(request.serviceId) + " is not advertised");
+          return;
+        }
       }
 
       if (_serviceRequestHandler) {
@@ -1052,6 +1057,7 @@ inline std::vector<ServiceId> Server<ServerConfiguration>::addServices(
     return {};
   }
 
+  std::unique_lock<std::shared_mutex> lock(_servicesMutex);
   std::vector<ServiceId> serviceIds;
   json newServices;
   for (const auto& service : services) {
@@ -1072,6 +1078,7 @@ inline std::vector<ServiceId> Server<ServerConfiguration>::addServices(
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::removeServices(const std::vector<ServiceId>& serviceIds) {
+  std::unique_lock<std::shared_mutex> lock(_servicesMutex);
   std::vector<ServiceId> removedServices;
   for (const auto& serviceId : serviceIds) {
     if (const auto it = _services.find(serviceId); it != _services.end()) {
