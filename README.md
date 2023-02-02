@@ -15,9 +15,36 @@ Live debugging of ROS systems has traditionally relied on running ROS tooling su
 
 The `foxglove_bridge` uses the [Foxglove WebSocket protocol](https://github.com/foxglove/ws-protocol), a similar protocol to rosbridge but with the ability to support additional schema formats such as ROS 2 `.msg` and ROS 2 `.idl`, parameters, graph introspection, and non-ROS systems. The bridge is written in C++ and designed for high performance with low overhead to minimize the impact to your robot stack.
 
-## Documentation
+## Installation and setup
 
 For information on how to install and configure your `foxglove_bridge`, check out the full docs on the [Foxglove website](https://foxglove.dev/docs/studio/connection/using-foxglove-bridge).
+
+## Build from source
+
+To build `foxglove_bridge` from source, you must first fetch your source and install dependencies:
+
+```bash
+$ cd <path/to/your/ros_ws>
+$ git clone https://github.com/foxglove/ros-foxglove-bridge.git src/ros-foxglove-bridge
+$ rosdep update
+$ rosdep install -i --from-path src -y
+```
+
+### ROS 1
+
+```bash
+$ catkin_make
+$ source install/local_setup.bash
+$ rosrun foxglove_bridge foxglove_bridge
+```
+
+### ROS 2
+
+```bash
+$ colcon build
+$ source install/local_setup.bash
+$ ros2 run foxglove_bridge foxglove_bridge
+```
 
 ## Clients
 
