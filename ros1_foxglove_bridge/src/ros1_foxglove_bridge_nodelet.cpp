@@ -529,7 +529,7 @@ private:
       } else if (paramType == ParameterType::PARAMETER_STRING_ARRAY) {
         nh.setParam(paramName, param.getValue<std::vector<std::string>>());
       } else if (paramType == ParameterType::PARAMETER_NOT_SET) {
-        ROS_ERROR("Parameter '%s' is not set", paramName.c_str());
+        nh.deleteParam(paramName);
       }
     }
 

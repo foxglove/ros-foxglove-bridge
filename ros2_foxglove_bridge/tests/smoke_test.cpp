@@ -27,6 +27,7 @@ public:
   inline static const std::string NODE_1_NAME = "node_1";
   inline static const std::string PARAM_1_NAME = "string_param";
   inline static const PARAM_1_TYPE PARAM_1_DEFAULT_VALUE = "hello";
+  inline static const std::string DELETABLE_PARAM_NAME = "deletable_param";
 
   using PARAM_2_TYPE = std::vector<int64_t>;
   inline static const std::string NODE_2_NAME = "node_2";
@@ -35,12 +36,15 @@ public:
 
 protected:
   void SetUp() override {
-    _paramNode1 = rclcpp::Node::make_shared(NODE_1_NAME);
+    auto nodeOptions = rclcpp::NodeOptions();
+    nodeOptions.allow_undeclared_parameters(true);
+    _paramNode1 = rclcpp::Node::make_shared(NODE_1_NAME, nodeOptions);
     auto p1Param = rcl_interfaces::msg::ParameterDescriptor{};
     p1Param.name = PARAM_1_NAME;
     p1Param.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
     p1Param.read_only = false;
     _paramNode1->declare_parameter(p1Param.name, PARAM_1_DEFAULT_VALUE, p1Param);
+    _paramNode1->set_parameter(rclcpp::Parameter(DELETABLE_PARAM_NAME, true));
 
     _paramNode2 = rclcpp::Node::make_shared(NODE_2_NAME);
     auto p2Param = rcl_interfaces::msg::ParameterDescriptor{};
@@ -247,6 +251,21 @@ TEST_F(ParameterTest, testSetParametersWithReqId) {
   std::vector<foxglove::Parameter> params = future.get();
 
   EXPECT_EQ(1UL, params.size());
+}
+
+TEST_F(ParameterTest, testUnsetParameter) {
+  const auto p1 = NODE_1_NAME + "." + DELETABLE_PARAM_NAME;
+  const std::vector<foxglove::Parameter> parameters = {
+    foxglove::Parameter(p1),
+  };
+
+  const std::string requestId = "req-testUnsetParameter";
+  auto future = foxglove::waitForParameters(_wsClient, requestId);
+  _wsClient->setParameters(parameters, requestId);
+  ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
+  std::vector<foxglove::Parameter> params = future.get();
+
+  EXPECT_EQ(0UL, params.size());
 }
 
 TEST_F(ParameterTest, testParameterSubscription) {

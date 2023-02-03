@@ -21,7 +21,7 @@ void to_json(nlohmann::json& j, const Parameter& p) {
   } else if (paramType == ParameterType::PARAMETER_STRING_ARRAY) {
     j["value"] = p.getValue<std::vector<std::string>>();
   } else if (paramType == ParameterType::PARAMETER_NOT_SET) {
-    throw std::runtime_error("Unintialized parameter");
+    // empty value.
   }
 
   j["name"] = p.getName();
@@ -29,6 +29,12 @@ void to_json(nlohmann::json& j, const Parameter& p) {
 
 void from_json(const nlohmann::json& j, Parameter& p) {
   const auto name = j["name"].get<std::string>();
+
+  if (j.find("value") == j.end()) {
+    p = Parameter(name);  // Value is not set (undefined).
+    return;
+  }
+
   const auto value = j["value"];
   const auto jsonType = j["value"].type();
 

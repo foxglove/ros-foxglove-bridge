@@ -974,7 +974,14 @@ template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::publishParameterValues(
   ConnHandle hdl, const std::vector<Parameter>& parameters,
   const std::optional<std::string>& requestId) {
-  nlohmann::json jsonPayload{{"op", "parameterValues"}, {"parameters", parameters}};
+  // Filter out parameters which are not set.
+  std::vector<Parameter> nonEmptyParameters;
+  std::copy_if(parameters.begin(), parameters.end(), std::back_inserter(nonEmptyParameters),
+               [](const auto& p) {
+                 return p.getType() != ParameterType::PARAMETER_NOT_SET;
+               });
+
+  nlohmann::json jsonPayload{{"op", "parameterValues"}, {"parameters", nonEmptyParameters}};
   if (requestId) {
     jsonPayload["id"] = requestId.value();
   }

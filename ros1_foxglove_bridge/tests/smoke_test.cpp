@@ -206,6 +206,20 @@ TEST_F(ParameterTest, testSetParametersWithReqId) {
   EXPECT_EQ(1UL, params.size());
 }
 
+TEST_F(ParameterTest, testUnsetParameter) {
+  const std::vector<foxglove::Parameter> parameters = {
+    foxglove::Parameter(PARAM_1_NAME),
+  };
+
+  const std::string requestId = "req-testUnsetParameter";
+  auto future = foxglove::waitForParameters(_wsClient, requestId);
+  _wsClient->setParameters(parameters, requestId);
+  ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
+  std::vector<foxglove::Parameter> params = future.get();
+
+  EXPECT_EQ(0UL, params.size());
+}
+
 TEST_F(ParameterTest, testParameterSubscription) {
   auto future = foxglove::waitForParameters(_wsClient);
 

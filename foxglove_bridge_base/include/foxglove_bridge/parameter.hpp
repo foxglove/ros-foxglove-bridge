@@ -27,6 +27,7 @@ enum class ParameterType {
 class Parameter {
 public:
   Parameter();
+  Parameter(const std::string& name);
   Parameter(const std::string& name, bool value);
   Parameter(const std::string& name, int value);
   Parameter(const std::string& name, int64_t value);
