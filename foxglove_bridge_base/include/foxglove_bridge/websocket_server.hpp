@@ -176,7 +176,7 @@ public:
   virtual void setServiceRequestHandler(ServiceRequestHandler handler) = 0;
 
   virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
-                           std::string_view data) = 0;
+                           const uint8_t* payload, size_t payload_size) = 0;
   virtual void broadcastTime(uint64_t timestamp) = 0;
   virtual void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) = 0;
 
@@ -232,7 +232,7 @@ public:
   void setServiceRequestHandler(ServiceRequestHandler handler) override;
 
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
-                   std::string_view data) override;
+                   const uint8_t* payload, size_t payload_size) override;
   void broadcastTime(uint64_t timestamp) override;
   void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) override;
 
@@ -1099,7 +1099,8 @@ inline void Server<ServerConfiguration>::removeServices(const std::vector<Servic
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, ChannelId chanId,
-                                                     uint64_t timestamp, std::string_view data) {
+                                                     uint64_t timestamp, const uint8_t* payload,
+                                                     size_t payload_size) {
   std::error_code ec;
   const auto con = _server.get_con_from_hdl(clientHandle, ec);
   if (ec || !con) {
@@ -1134,12 +1135,17 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
     subId = subs->second;
   }
 
-  std::vector<uint8_t> message(1 + 4 + 8 + data.size());
-  message[0] = uint8_t(BinaryOpcode::MESSAGE_DATA);
-  foxglove::WriteUint32LE(message.data() + 1, subId);
-  foxglove::WriteUint64LE(message.data() + 5, timestamp);
-  std::memcpy(message.data() + 1 + 4 + 8, data.data(), data.size());
-  sendBinary(clientHandle, message);
+  uint8_t msgHeader[1 + 4 + 8];
+  msgHeader[0] = uint8_t(BinaryOpcode::MESSAGE_DATA);
+  foxglove::WriteUint32LE(msgHeader + 1, subId);
+  foxglove::WriteUint64LE(msgHeader + 5, timestamp);
+
+  const size_t messageSize = sizeof(msgHeader) + payload_size;
+  auto message = con->get_message(OpCode::BINARY, messageSize);
+
+  message->set_payload(msgHeader, sizeof(msgHeader));
+  message->append_payload(payload, payload_size);
+  con->send(message);
 }
 
 template <typename ServerConfiguration>
