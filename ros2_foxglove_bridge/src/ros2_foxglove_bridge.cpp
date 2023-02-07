@@ -10,6 +10,7 @@
 #define ASIO_STANDALONE
 
 #include <foxglove_bridge/foxglove_bridge.hpp>
+#include <foxglove_bridge/generic_client.hpp>
 #include <foxglove_bridge/message_definition_cache.hpp>
 #include <foxglove_bridge/param_utils.hpp>
 #include <foxglove_bridge/parameter_interface.hpp>
@@ -47,6 +48,8 @@ public:
     _maxQosDepth = static_cast<size_t>(this->get_parameter(PARAM_MAX_QOS_DEPTH).as_int());
     const auto topicWhiteList = this->get_parameter(PARAM_TOPIC_WHITELIST).as_string_array();
     _topicWhitelistPatterns = parseRegexStrings(this, topicWhiteList);
+    const auto serviceWhiteList = this->get_parameter(PARAM_SERVICE_WHITELIST).as_string_array();
+    _serviceWhitelistPatterns = parseRegexStrings(this, serviceWhiteList);
     const auto paramWhiteList = this->get_parameter(PARAM_PARAMETER_WHITELIST).as_string_array();
     const auto paramWhitelistPatterns = parseRegexStrings(this, paramWhiteList);
     _useSimTime = this->get_parameter("use_sim_time").as_bool();
@@ -58,6 +61,7 @@ public:
       foxglove::CAPABILITY_CLIENT_PUBLISH,
       foxglove::CAPABILITY_PARAMETERS,
       foxglove::CAPABILITY_PARAMETERS_SUBSCRIBE,
+      foxglove::CAPABILITY_SERVICES,
     };
     if (_useSimTime) {
       serverCapabilities.push_back(foxglove::CAPABILITY_TIME);
@@ -89,6 +93,8 @@ public:
       std::bind(&FoxgloveBridge::parameterChangeHandler, this, _1, _2, _3));
     _server->setParameterSubscriptionHandler(
       std::bind(&FoxgloveBridge::parameterSubscriptionHandler, this, _1, _2, _3));
+    _server->setServiceRequestHandler(
+      std::bind(&FoxgloveBridge::serviceRequestHandler, this, _1, _2));
 
     _paramInterface->setParamUpdateCallback(std::bind(&FoxgloveBridge::parameterUpdates, this, _1));
 
@@ -109,6 +115,7 @@ public:
     _subscriptionCallbackGroup = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
     _clientPublishCallbackGroup =
       this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    _servicesCallbackGroup = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
     if (_useSimTime) {
       _clockSubscription = this->create_subscription<rosgraph_msgs::msg::Clock>(
@@ -132,6 +139,7 @@ public:
 
   void rosgraphPollThread() {
     updateAdvertisedTopics();
+    updateAdvertisedServices();
 
     auto graphEvent = this->get_graph_event();
     while (rclcpp::ok()) {
@@ -140,6 +148,7 @@ public:
       if (triggered) {
         RCLCPP_DEBUG(this->get_logger(), "rosgraph change detected");
         updateAdvertisedTopics();
+        updateAdvertisedServices();
         // Graph changes tend to come in batches, so wait a bit before checking again
         std::this_thread::sleep_for(500ms);
       }
@@ -265,6 +274,97 @@ public:
     }
   }
 
+  void updateAdvertisedServices() {
+    if (!rclcpp::ok()) {
+      return;
+    }
+
+    // Get the current list of visible services and datatypes from the ROS graph
+    const auto serviceNamesAndTypes =
+      this->get_node_graph_interface()->get_service_names_and_types();
+
+    std::lock_guard<std::mutex> lock(_servicesMutex);
+
+    // Remove advertisements for services that have been removed
+    std::vector<foxglove::ServiceId> servicesToRemove;
+    for (const auto& service : _advertisedServices) {
+      const auto it = std::find_if(serviceNamesAndTypes.begin(), serviceNamesAndTypes.end(),
+                                   [service](const auto& serviceNameAndTypes) {
+                                     return serviceNameAndTypes.first == service.second.name;
+                                   });
+      if (it == serviceNamesAndTypes.end()) {
+        servicesToRemove.push_back(service.first);
+      }
+    }
+    for (auto serviceId : servicesToRemove) {
+      _advertisedServices.erase(serviceId);
+    }
+    _server->removeServices(servicesToRemove);
+
+    // Advertise new services
+    std::vector<foxglove::ServiceWithoutId> newServices;
+    for (const auto& serviceNamesAndType : serviceNamesAndTypes) {
+      const auto& serviceName = serviceNamesAndType.first;
+      const auto& datatypes = serviceNamesAndType.second;
+
+      // Ignore the service if it's already advertised
+      if (std::find_if(_advertisedServices.begin(), _advertisedServices.end(),
+                       [serviceName](const auto& idWithService) {
+                         return idWithService.second.name == serviceName;
+                       }) != _advertisedServices.end()) {
+        continue;
+      }
+
+      // Ignore the service if it is not on the service whitelist
+      if (std::find_if(_serviceWhitelistPatterns.begin(), _serviceWhitelistPatterns.end(),
+                       [&serviceName](const auto& regex) {
+                         return std::regex_match(serviceName, regex);
+                       }) == _serviceWhitelistPatterns.end()) {
+        continue;
+      }
+
+      foxglove::ServiceWithoutId service;
+      service.name = serviceName;
+      service.type = datatypes.front();
+
+      try {
+        auto [format, reqSchema] = _messageDefinitionCache.get_full_text(service.type + "_Request");
+        auto resSchema = _messageDefinitionCache.get_full_text(service.type + "_Response").second;
+        switch (format) {
+          case foxglove::MessageDefinitionFormat::MSG:
+            service.requestSchema = reqSchema;
+            service.responseSchema = resSchema;
+            break;
+          case foxglove::MessageDefinitionFormat::IDL:
+            RCLCPP_WARN(this->get_logger(),
+                        "IDL message definition format cannot be communicated over ws-protocol. "
+                        "Service \"%s\" (%s) may not decode correctly in clients",
+                        service.name.c_str(), service.type.c_str());
+            service.requestSchema = reqSchema;
+            service.responseSchema = resSchema;
+            break;
+        }
+      } catch (const foxglove::DefinitionNotFoundError& err) {
+        RCLCPP_WARN(this->get_logger(), "Could not find definition for type %s: %s",
+                    service.type.c_str(), err.what());
+        // We still advertise the service, but with an emtpy schema
+        service.requestSchema = "";
+        service.responseSchema = "";
+      } catch (const std::exception& err) {
+        RCLCPP_WARN(this->get_logger(), "Failed to add service \"%s\" (%s): %s",
+                    service.name.c_str(), service.type.c_str(), err.what());
+        continue;
+      }
+
+      newServices.push_back(service);
+    }
+
+    const auto serviceIds = _server->addServices(newServices);
+    for (size_t i = 0; i < serviceIds.size(); ++i) {
+      _advertisedServices.emplace(serviceIds[i], newServices[i]);
+    }
+  }
+
 private:
   struct PairHash {
     template <class T1, class T2>
@@ -276,15 +376,20 @@ private:
   std::unique_ptr<foxglove::ServerInterface> _server;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::vector<std::regex> _topicWhitelistPatterns;
+  std::vector<std::regex> _serviceWhitelistPatterns;
   std::shared_ptr<ParameterInterface> _paramInterface;
   std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
+  std::unordered_map<foxglove::ServiceId, foxglove::ServiceWithoutId> _advertisedServices;
   std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
   PublicationsByClient _clientAdvertisedTopics;
+  std::unordered_map<foxglove::ServiceId, GenericClient::SharedPtr> _serviceClients;
   rclcpp::CallbackGroup::SharedPtr _subscriptionCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _clientPublishCallbackGroup;
+  rclcpp::CallbackGroup::SharedPtr _servicesCallbackGroup;
   std::mutex _subscriptionsMutex;
   std::mutex _clientAdvertisementsMutex;
+  std::mutex _servicesMutex;
   std::unique_ptr<std::thread> _rosgraphPollThread;
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
@@ -620,6 +725,57 @@ private:
       std::string_view{reinterpret_cast<const char*>(msg->get_rcl_serialized_message().buffer),
                        msg->get_rcl_serialized_message().buffer_length};
     _server->sendMessage(clientHandle, channel.id, static_cast<uint64_t>(timestamp), payload);
+  }
+
+  void serviceRequestHandler(const foxglove::ServiceRequest& request,
+                             foxglove::ConnHandle clientHandle) {
+    RCLCPP_DEBUG(this->get_logger(), "Received a request for service %d", request.serviceId);
+
+    std::lock_guard<std::mutex> lock(_servicesMutex);
+    const auto serviceIt = _advertisedServices.find(request.serviceId);
+    if (serviceIt == _advertisedServices.end()) {
+      RCLCPP_ERROR(this->get_logger(), "Service with id '%d' does not exist", request.serviceId);
+      return;
+    }
+
+    auto clientIt = _serviceClients.find(request.serviceId);
+    if (clientIt == _serviceClients.end()) {
+      try {
+        auto clientOptions = rcl_client_get_default_options();
+        auto genClient = GenericClient::make_shared(
+          this->get_node_base_interface().get(), this->get_node_graph_interface(),
+          serviceIt->second.name, serviceIt->second.type, clientOptions);
+        clientIt = _serviceClients.emplace(request.serviceId, std::move(genClient)).first;
+        this->get_node_services_interface()->add_client(clientIt->second, _servicesCallbackGroup);
+      } catch (const std::exception& ex) {
+        RCLCPP_ERROR(get_logger(), "Failed to create service client for service %d (%s): %s",
+                     request.serviceId, serviceIt->second.name.c_str(), ex.what());
+        return;
+      }
+    }
+
+    auto client = clientIt->second;
+    if (!client->wait_for_service(1s)) {
+      RCLCPP_ERROR(get_logger(), "Service %d (%s) is not available", request.serviceId,
+                   serviceIt->second.name.c_str());
+      return;
+    }
+
+    auto reqMessage = std::make_shared<rclcpp::SerializedMessage>(request.data.size());
+    auto& rclSerializedMsg = reqMessage->get_rcl_serialized_message();
+    std::memcpy(rclSerializedMsg.buffer, request.data.data(), request.data.size());
+    rclSerializedMsg.buffer_length = request.data.size();
+
+    auto responseReceivedCallback = [this, request,
+                                     clientHandle](GenericClient::SharedFuture future) {
+      const auto serializedResponseMsg = future.get()->get_rcl_serialized_message();
+      foxglove::ServiceRequest response{request.serviceId, request.callId, request.encoding,
+                                        std::vector<uint8_t>(serializedResponseMsg.buffer_length)};
+      std::memcpy(response.data.data(), serializedResponseMsg.buffer,
+                  serializedResponseMsg.buffer_length);
+      _server->sendServiceResponse(clientHandle, response);
+    };
+    client->async_send_request(reqMessage, responseReceivedCallback);
   }
 };
 

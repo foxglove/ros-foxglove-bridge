@@ -139,6 +139,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
       ros2_foxglove_bridge/src/param_utils.cpp
       ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp
       ros2_foxglove_bridge/src/parameter_interface.cpp
+      ros2_foxglove_bridge/src/generic_client.cpp
     )
     target_include_directories(foxglove_bridge_component
       PUBLIC
@@ -203,7 +204,7 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
     target_link_libraries(serialization_test foxglove_bridge_base)
 
     ament_add_gtest(smoke_test ros2_foxglove_bridge/tests/smoke_test.cpp)
-    ament_target_dependencies(smoke_test rclcpp rclcpp_components std_msgs)
+    ament_target_dependencies(smoke_test rclcpp rclcpp_components std_msgs std_srvs)
     target_link_libraries(smoke_test foxglove_bridge_base)
   endif()
 endif()

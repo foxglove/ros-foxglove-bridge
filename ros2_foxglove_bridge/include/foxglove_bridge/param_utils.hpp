@@ -16,6 +16,7 @@ constexpr char PARAM_CERTFILE[] = "certfile";
 constexpr char PARAM_KEYFILE[] = "keyfile";
 constexpr char PARAM_MAX_QOS_DEPTH[] = "max_qos_depth";
 constexpr char PARAM_TOPIC_WHITELIST[] = "topic_whitelist";
+constexpr char PARAM_SERVICE_WHITELIST[] = "service_whitelist";
 constexpr char PARAM_PARAMETER_WHITELIST[] = "param_whitelist";
 
 constexpr int64_t DEFAULT_PORT = 8765;
