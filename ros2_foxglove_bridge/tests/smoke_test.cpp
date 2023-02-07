@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 #include <rclcpp_components/component_manager.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_srvs/srv/set_bool.hpp>
 #include <websocketpp/config/asio_client.hpp>
 
 #include <foxglove_bridge/test/test_client.hpp>
@@ -70,6 +71,58 @@ protected:
   std::thread _executorThread;
   std::shared_ptr<foxglove::Client<websocketpp::config::asio_client>> _wsClient;
 };
+
+class ServiceTest : public ::testing::Test {
+public:
+  inline static const std::string SERVICE_NAME = "/foo_service";
+
+protected:
+  void SetUp() override {
+    _node = rclcpp::Node::make_shared("node");
+    _service = _node->create_service<std_srvs::srv::SetBool>(
+      SERVICE_NAME, [&](std::shared_ptr<std_srvs::srv::SetBool::Request> req,
+                        std::shared_ptr<std_srvs::srv::SetBool::Response> res) {
+        res->message = "hello";
+        res->success = req->data;
+      });
+
+    _executor.add_node(_node);
+    _executorThread = std::thread([this]() {
+      _executor.spin();
+    });
+  }
+
+  void TearDown() override {
+    _executor.cancel();
+    _executorThread.join();
+  }
+
+  rclcpp::executors::SingleThreadedExecutor _executor;
+  rclcpp::Node::SharedPtr _node;
+  rclcpp::ServiceBase::SharedPtr _service;
+  std::thread _executorThread;
+  std::shared_ptr<foxglove::Client<websocketpp::config::asio_client>> _wsClient;
+};
+
+template <class T>
+std::shared_ptr<rclcpp::SerializedMessage> serializeMsg(const T* msg) {
+  using rosidl_typesupport_cpp::get_message_type_support_handle;
+  auto typeSupportHdl = get_message_type_support_handle<T>();
+  auto result = std::make_shared<rclcpp::SerializedMessage>();
+  rmw_ret_t ret = rmw_serialize(msg, typeSupportHdl, &result->get_rcl_serialized_message());
+  EXPECT_EQ(ret, RMW_RET_OK);
+  return result;
+}
+
+template <class T>
+std::shared_ptr<T> deserializeMsg(const rcl_serialized_message_t* msg) {
+  using rosidl_typesupport_cpp::get_message_type_support_handle;
+  auto typeSupportHdl = get_message_type_support_handle<T>();
+  auto result = std::make_shared<T>();
+  rmw_ret_t ret = rmw_deserialize(msg, typeSupportHdl, result.get());
+  EXPECT_EQ(ret, RMW_RET_OK);
+  return result;
+}
 
 TEST(SmokeTest, testConnection) {
   foxglove::Client<websocketpp::config::asio_client> wsClient;
@@ -298,6 +351,58 @@ TEST_F(ParameterTest, testGetParametersParallel) {
     std::vector<foxglove::Parameter> parameters;
     EXPECT_NO_THROW(parameters = future.get());
     EXPECT_GE(parameters.size(), 2UL);
+  }
+}
+
+TEST_F(ServiceTest, testCallServiceParallel) {
+  // Connect a few clients (in parallel) and make sure that they can all call the service
+  auto clients = {
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+  };
+
+  auto serviceFuture = foxglove::waitForService(*clients.begin(), SERVICE_NAME);
+  for (auto client : clients) {
+    ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(std::chrono::seconds(5)));
+  }
+  ASSERT_EQ(std::future_status::ready, serviceFuture.wait_for(std::chrono::seconds(5)));
+  const foxglove::Service service = serviceFuture.get();
+
+  std_srvs::srv::SetBool::Request requestMsg;
+  requestMsg.data = true;
+  const auto serializedRequest = serializeMsg(&requestMsg);
+  const auto& serRequestMsg = serializedRequest->get_rcl_serialized_message();
+
+  foxglove::ServiceRequest request;
+  request.serviceId = service.id;
+  request.callId = 123lu;
+  request.encoding = "cdr";
+  request.data.resize(serRequestMsg.buffer_length);
+  std::memcpy(request.data.data(), serRequestMsg.buffer, serRequestMsg.buffer_length);
+
+  std::vector<std::future<foxglove::ServiceResponse>> futures;
+  for (auto client : clients) {
+    futures.push_back(foxglove::waitForServiceResponse(client));
+    client->sendServiceRequest(request);
+  }
+
+  for (auto& future : futures) {
+    ASSERT_EQ(std::future_status::ready, future.wait_for(std::chrono::seconds(5)));
+    foxglove::ServiceResponse response;
+    EXPECT_NO_THROW(response = future.get());
+    EXPECT_EQ(response.serviceId, request.serviceId);
+    EXPECT_EQ(response.callId, request.callId);
+    EXPECT_EQ(response.encoding, request.encoding);
+
+    rclcpp::SerializedMessage serializedResponseMsg(response.data.size());
+    auto& serMsg = serializedResponseMsg.get_rcl_serialized_message();
+    std::memcpy(serMsg.buffer, response.data.data(), response.data.size());
+    serMsg.buffer_length = response.data.size();
+    const auto resMsg = deserializeMsg<std_srvs::srv::SetBool::Response>(&serMsg);
+
+    EXPECT_EQ(resMsg->message, "hello");
+    EXPECT_EQ(resMsg->success, requestMsg.data);
   }
 }
 
