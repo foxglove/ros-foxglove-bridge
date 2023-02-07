@@ -66,4 +66,59 @@ void from_json(const nlohmann::json& j, Parameter& p) {
   }
 }
 
+void to_json(nlohmann::json& j, const Service& service) {
+  j = {
+    {"id", service.id},
+    {"name", service.name},
+    {"type", service.type},
+    {"requestSchema", service.requestSchema},
+    {"responseSchema", service.responseSchema},
+  };
+}
+
+void from_json(const nlohmann::json& j, Service& p) {
+  p.id = j["id"].get<ServiceId>();
+  p.name = j["name"].get<std::string>();
+  p.type = j["type"].get<std::string>();
+  p.requestSchema = j["requestSchema"].get<std::string>();
+  p.responseSchema = j["responseSchema"].get<std::string>();
+}
+
+inline uint32_t ReadUint32LE(const uint8_t* buf) {
+#ifdef ARCH_IS_BIG_ENDIAN
+  uint32_t val = (bytes[0] << 24) + (bytes[1] << 16) + (bytes[2] << 8) + bytes[3];
+  return val;
+#else
+  return reinterpret_cast<const uint32_t*>(buf)[0];
+#endif
+}
+
+void ServiceResponse::read(const uint8_t* data, size_t dataLength) {
+  size_t offset = 0;
+  this->serviceId = ReadUint32LE(data + offset);
+  offset += 4;
+  this->callId = ReadUint32LE(data + offset);
+  offset += 4;
+  const size_t encondingLength = static_cast<size_t>(ReadUint32LE(data + offset));
+  offset += 4;
+  this->encoding = std::string(reinterpret_cast<const char*>(data + offset), encondingLength);
+  offset += encondingLength;
+  const auto payloadLength = dataLength - offset;
+  this->data.resize(payloadLength);
+  std::memcpy(this->data.data(), data + offset, payloadLength);
+}
+
+void ServiceResponse::write(uint8_t* data) const {
+  size_t offset = 0;
+  foxglove::WriteUint32LE(data + offset, this->serviceId);
+  offset += 4;
+  foxglove::WriteUint32LE(data + offset, this->callId);
+  offset += 4;
+  foxglove::WriteUint32LE(data + offset, static_cast<uint32_t>(this->encoding.size()));
+  offset += 4;
+  std::memcpy(data + offset, this->encoding.data(), this->encoding.size());
+  offset += this->encoding.size();
+  std::memcpy(data + offset, this->data.data(), this->data.size());
+}
+
 }  // namespace foxglove

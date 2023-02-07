@@ -77,6 +77,48 @@ std::future<std::vector<Parameter>> waitForParameters(std::shared_ptr<ClientInte
   return future;
 }
 
+std::future<ServiceResponse> waitForServiceResponse(std::shared_ptr<ClientInterface> client) {
+  auto promise = std::make_shared<std::promise<ServiceResponse>>();
+  auto future = promise->get_future();
+
+  client->setBinaryMessageHandler(
+    [promise = std::move(promise)](const uint8_t* data, size_t dataLength) mutable {
+      if (static_cast<BinaryOpcode>(data[0]) != BinaryOpcode::SERVICE_CALL_RESPONSE) {
+        return;
+      }
+
+      std::cerr << "Received a response of size " << std::to_string(dataLength) << std::endl;
+      foxglove::ServiceResponse response;
+      response.read(data + 1, dataLength - 1);
+      promise->set_value(response);
+    });
+  return future;
+}
+
+std::future<Service> waitForService(std::shared_ptr<ClientInterface> client,
+                                    const std::string& serviceName) {
+  auto promise = std::make_shared<std::promise<Service>>();
+  auto future = promise->get_future();
+
+  client->setTextMessageHandler(
+    [promise = std::move(promise), serviceName](const std::string& payload) mutable {
+      const auto msg = nlohmann::json::parse(payload);
+      const auto& op = msg["op"].get<std::string>();
+
+      if (op == "advertiseServices") {
+        const auto services = msg["services"].get<std::vector<Service>>();
+        for (const auto& service : services) {
+          if (service.name == serviceName) {
+            promise->set_value(service);
+            break;
+          }
+        }
+      }
+    });
+
+  return future;
+}
+
 // Explicit template instantiation
 template class Client<websocketpp::config::asio_client>;
 

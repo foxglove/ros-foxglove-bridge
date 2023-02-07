@@ -43,6 +43,7 @@ public:
   virtual void advertise(const std::vector<ClientAdvertisement>& channels) = 0;
   virtual void unadvertise(const std::vector<ClientChannelId>& channelIds) = 0;
   virtual void publish(ClientChannelId channelId, const uint8_t* buffer, size_t size) = 0;
+  virtual void sendServiceRequest(const ServiceRequest& request) = 0;
   virtual void getParameters(const std::vector<std::string>& parameterNames,
                              const std::optional<std::string>& requestId) = 0;
   virtual void setParameters(const std::vector<Parameter>& parameters,
@@ -180,6 +181,13 @@ public:
     payload[0] = uint8_t(ClientBinaryOpcode::MESSAGE_DATA);
     foxglove::WriteUint32LE(payload.data() + 1, channelId);
     std::memcpy(payload.data() + 1 + 4, buffer, size);
+    sendBinary(payload.data(), payload.size());
+  }
+
+  void sendServiceRequest(const ServiceRequest& request) override {
+    std::vector<uint8_t> payload(1 + request.size());
+    payload[0] = uint8_t(ClientBinaryOpcode::SERVICE_CALL_REQUEST);
+    request.write(payload.data() + 1);
     sendBinary(payload.data(), payload.size());
   }
 

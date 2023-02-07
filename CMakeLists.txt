@@ -106,6 +106,7 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
     add_library(foxglove_bridge_nodelet
       ros1_foxglove_bridge/src/ros1_foxglove_bridge_nodelet.cpp
       ros1_foxglove_bridge/src/param_utils.cpp
+      ros1_foxglove_bridge/src/service_utils.cpp
     )
     target_include_directories(foxglove_bridge_nodelet
       SYSTEM PRIVATE
@@ -167,7 +168,7 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
   if (CATKIN_ENABLE_TESTING)
     message(STATUS "Building tests with catkin")
 
-    find_package(catkin REQUIRED COMPONENTS roscpp std_msgs)
+    find_package(catkin REQUIRED COMPONENTS roscpp std_msgs std_srvs)
     if(NOT "$ENV{ROS_DISTRO}" STREQUAL "melodic")
       find_package(GTest REQUIRED)
     endif()
@@ -175,6 +176,9 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
 
     catkin_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
     target_link_libraries(version_test foxglove_bridge_base)
+
+    catkin_add_gtest(serialization_test foxglove_bridge_base/tests/serialization_test.cpp)
+    target_link_libraries(serialization_test foxglove_bridge_base)
 
     add_rostest_gtest(smoke_test ros1_foxglove_bridge/tests/smoke.test ros1_foxglove_bridge/tests/smoke_test.cpp)
     target_include_directories(smoke_test SYSTEM PRIVATE
@@ -194,6 +198,9 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
 
     ament_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
     target_link_libraries(version_test foxglove_bridge_base)
+
+    ament_add_gtest(serialization_test foxglove_bridge_base/tests/serialization_test.cpp)
+    target_link_libraries(serialization_test foxglove_bridge_base)
 
     ament_add_gtest(smoke_test ros2_foxglove_bridge/tests/smoke_test.cpp)
     ament_target_dependencies(smoke_test rclcpp rclcpp_components std_msgs)

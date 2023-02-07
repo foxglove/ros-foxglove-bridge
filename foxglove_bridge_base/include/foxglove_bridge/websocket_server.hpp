@@ -147,6 +147,7 @@ using ParameterChangeHandler =
   std::function<void(const std::vector<Parameter>&, const std::optional<std::string>&, ConnHandle)>;
 using ParameterSubscriptionHandler =
   std::function<void(const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
+using ServiceRequestHandler = std::function<void(const ServiceRequest&, ConnHandle)>;
 
 class ServerInterface {
 public:
@@ -161,6 +162,8 @@ public:
                                       const std::vector<Parameter>& parameters,
                                       const std::optional<std::string>& requestId) = 0;
   virtual void updateParameterValues(const std::vector<Parameter>& parameters) = 0;
+  virtual std::vector<ServiceId> addServices(const std::vector<ServiceWithoutId>& services) = 0;
+  virtual void removeServices(const std::vector<ServiceId>& serviceIds) = 0;
 
   virtual void setSubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
   virtual void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
@@ -170,10 +173,12 @@ public:
   virtual void setParameterRequestHandler(ParameterRequestHandler handler) = 0;
   virtual void setParameterChangeHandler(ParameterChangeHandler handler) = 0;
   virtual void setParameterSubscriptionHandler(ParameterSubscriptionHandler handler) = 0;
+  virtual void setServiceRequestHandler(ServiceRequestHandler handler) = 0;
 
   virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                            std::string_view data) = 0;
   virtual void broadcastTime(uint64_t timestamp) = 0;
+  virtual void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) = 0;
 
   virtual std::optional<Tcp::endpoint> localEndpoint() = 0;
   virtual std::string remoteEndpointString(ConnHandle clientHandle) = 0;
@@ -213,6 +218,8 @@ public:
   void publishParameterValues(ConnHandle clientHandle, const std::vector<Parameter>& parameters,
                               const std::optional<std::string>& requestId = std::nullopt) override;
   void updateParameterValues(const std::vector<Parameter>& parameters) override;
+  std::vector<ServiceId> addServices(const std::vector<ServiceWithoutId>& services) override;
+  void removeServices(const std::vector<ServiceId>& serviceIds) override;
 
   void setSubscribeHandler(SubscribeUnsubscribeHandler handler) override;
   void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) override;
@@ -222,10 +229,12 @@ public:
   void setParameterRequestHandler(ParameterRequestHandler handler) override;
   void setParameterChangeHandler(ParameterChangeHandler handler) override;
   void setParameterSubscriptionHandler(ParameterSubscriptionHandler handler) override;
+  void setServiceRequestHandler(ServiceRequestHandler handler) override;
 
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                    std::string_view data) override;
   void broadcastTime(uint64_t timestamp) override;
+  void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) override;
 
   std::optional<Tcp::endpoint> localEndpoint() override;
   std::string remoteEndpointString(ConnHandle clientHandle) override;
@@ -262,6 +271,8 @@ private:
     _clientChannels;
   std::map<ConnHandle, std::unordered_set<std::string>, std::owner_less<>>
     _clientParamSubscriptions;
+  ServiceId _nextServiceId = 0;
+  std::unordered_map<ServiceId, ServiceWithoutId> _services;
   SubscribeUnsubscribeHandler _subscribeHandler;
   SubscribeUnsubscribeHandler _unsubscribeHandler;
   ClientAdvertiseHandler _clientAdvertiseHandler;
@@ -270,7 +281,9 @@ private:
   ParameterRequestHandler _parameterRequestHandler;
   ParameterChangeHandler _parameterChangeHandler;
   ParameterSubscriptionHandler _parameterSubscriptionHandler;
+  ServiceRequestHandler _serviceRequestHandler;
   std::shared_mutex _clientsChannelMutex;
+  std::shared_mutex _servicesMutex;
   std::mutex _clientParamSubscriptionsMutex;
 
   void setupTlsHandler() override;
@@ -375,7 +388,7 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
                  })
               .dump());
 
-  json channels;
+  std::vector<Channel> channels;
   for (const auto& [id, channel] : _channels) {
     (void)id;
     channels.push_back(channel);
@@ -383,6 +396,15 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
   sendJson(hdl, {
                   {"op", "advertise"},
                   {"channels", std::move(channels)},
+                });
+
+  std::vector<Service> services;
+  for (const auto& [id, service] : _services) {
+    services.push_back(Service(service, id));
+  }
+  sendJson(hdl, {
+                  {"op", "advertiseServices"},
+                  {"services", std::move(services)},
                 });
 }
 
@@ -481,6 +503,11 @@ template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::setParameterSubscriptionHandler(
   ParameterSubscriptionHandler handler) {
   _parameterSubscriptionHandler = std::move(handler);
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::setServiceRequestHandler(ServiceRequestHandler handler) {
+  _serviceRequestHandler = std::move(handler);
 }
 
 template <typename ServerConfiguration>
@@ -883,16 +910,6 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
     return;
   }
 
-  std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
-
-  auto clientPublicationsIt = _clientChannels.find(hdl);
-  if (clientPublicationsIt == _clientChannels.end()) {
-    sendStatus(hdl, StatusLevel::Error, "Client has no advertised channels");
-    return;
-  }
-
-  auto& clientPublications = clientPublicationsIt->second;
-
   const auto op = static_cast<ClientBinaryOpcode>(msg[0]);
   switch (op) {
     case ClientBinaryOpcode::MESSAGE_DATA: {
@@ -901,6 +918,15 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
         return;
       }
       const ClientChannelId channelId = *reinterpret_cast<const ClientChannelId*>(msg + 1);
+      std::unique_lock<std::shared_mutex> lock(_clientsChannelMutex);
+
+      auto clientPublicationsIt = _clientChannels.find(hdl);
+      if (clientPublicationsIt == _clientChannels.end()) {
+        sendStatus(hdl, StatusLevel::Error, "Client has no advertised channels");
+        return;
+      }
+
+      auto& clientPublications = clientPublicationsIt->second;
       const auto& channelIt = clientPublications.find(channelId);
       if (channelIt == clientPublications.end()) {
         sendStatus(hdl, StatusLevel::Error,
@@ -918,6 +944,29 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
                                           length,
                                           msg};
         _clientMessageHandler(clientMessage, hdl);
+      }
+    } break;
+    case ClientBinaryOpcode::SERVICE_CALL_REQUEST: {
+      ServiceRequest request;
+      if (length < request.size()) {
+        sendStatus(hdl, StatusLevel::Error,
+                   "Invalid service call request length " + std::to_string(length));
+        return;
+      }
+
+      request.read(msg + 1, length - 1);
+
+      {
+        std::shared_lock<std::shared_mutex> lock(_servicesMutex);
+        if (_services.find(request.serviceId) == _services.end()) {
+          sendStatus(hdl, StatusLevel::Error,
+                     "Service " + std::to_string(request.serviceId) + " is not advertised");
+          return;
+        }
+      }
+
+      if (_serviceRequestHandler) {
+        _serviceRequestHandler(request, hdl);
       }
     } break;
     default: {
@@ -1002,6 +1051,53 @@ inline void Server<ServerConfiguration>::updateParameterValues(
 }
 
 template <typename ServerConfiguration>
+inline std::vector<ServiceId> Server<ServerConfiguration>::addServices(
+  const std::vector<ServiceWithoutId>& services) {
+  if (services.empty()) {
+    return {};
+  }
+
+  std::unique_lock<std::shared_mutex> lock(_servicesMutex);
+  std::vector<ServiceId> serviceIds;
+  json newServices;
+  for (const auto& service : services) {
+    const ServiceId serviceId = ++_nextServiceId;
+    _services.emplace(serviceId, service);
+    serviceIds.push_back(serviceId);
+    newServices.push_back(Service(service, serviceId));
+  }
+
+  const auto msg = json{{"op", "advertiseServices"}, {"services", std::move(newServices)}}.dump();
+  for (const auto& [hdl, clientInfo] : _clients) {
+    (void)clientInfo;
+    sendJsonRaw(hdl, msg);
+  }
+
+  return serviceIds;
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::removeServices(const std::vector<ServiceId>& serviceIds) {
+  std::unique_lock<std::shared_mutex> lock(_servicesMutex);
+  std::vector<ServiceId> removedServices;
+  for (const auto& serviceId : serviceIds) {
+    if (const auto it = _services.find(serviceId); it != _services.end()) {
+      _services.erase(it);
+      removedServices.push_back(serviceId);
+    }
+  }
+
+  if (!removedServices.empty()) {
+    const auto msg =
+      json{{"op", "unadvertiseServices"}, {"serviceIds", std::move(removedServices)}}.dump();
+    for (const auto& [hdl, clientInfo] : _clients) {
+      (void)clientInfo;
+      sendJsonRaw(hdl, msg);
+    }
+  }
+}
+
+template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, ChannelId chanId,
                                                      uint64_t timestamp, std::string_view data) {
   std::error_code ec;
@@ -1057,6 +1153,15 @@ inline void Server<ServerConfiguration>::broadcastTime(uint64_t timestamp) {
     (void)clientInfo;
     sendBinary(hdl, message);
   }
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::sendServiceResponse(ConnHandle clientHandle,
+                                                             const ServiceResponse& response) {
+  std::vector<uint8_t> payload(1 + response.size());
+  payload[0] = uint8_t(BinaryOpcode::SERVICE_CALL_RESPONSE);
+  response.write(payload.data() + 1);
+  sendBinary(clientHandle, payload);
 }
 
 template <typename ServerConfiguration>
