@@ -4,6 +4,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "common.hpp"
 #include "parameter.hpp"
 
 namespace foxglove {
@@ -36,5 +37,7 @@ inline void WriteUint32LE(uint8_t* buf, uint32_t val) {
 
 void to_json(nlohmann::json& j, const Parameter& p);
 void from_json(const nlohmann::json& j, Parameter& p);
+void to_json(nlohmann::json& j, const Service& p);
+void from_json(const nlohmann::json& j, Service& p);
 
 }  // namespace foxglove

@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 #include <ros/ros.h>
 #include <std_msgs/builtin_string.h>
+#include <std_srvs/SetBool.h>
 #include <websocketpp/config/asio_client.hpp>
 
 #include <foxglove_bridge/test/test_client.hpp>
@@ -43,6 +44,26 @@ protected:
 
   ros::NodeHandle _nh;
   std::shared_ptr<foxglove::Client<websocketpp::config::asio_client>> _wsClient;
+};
+
+class ServiceTest : public ::testing::Test {
+public:
+  inline static const std::string SERVICE_NAME = "/foo_service";
+
+protected:
+  void SetUp() override {
+    _nh = ros::NodeHandle();
+    _service = _nh.advertiseService<std_srvs::SetBool::Request, std_srvs::SetBool::Response>(
+      SERVICE_NAME, [&](auto& req, auto& res) {
+        res.message = "hello";
+        res.success = req.data;
+        return true;
+      });
+  }
+
+private:
+  ros::NodeHandle _nh;
+  ros::ServiceServer _service;
 };
 
 TEST(SmokeTest, testConnection) {
@@ -254,6 +275,46 @@ TEST_F(ParameterTest, testGetParametersParallel) {
     std::vector<foxglove::Parameter> parameters;
     EXPECT_NO_THROW(parameters = future.get());
     EXPECT_GE(parameters.size(), 2UL);
+  }
+}
+
+TEST_F(ServiceTest, testCallServiceParallel) {
+  // Connect a few clients (in parallel) and make sure that they can all call the service
+  auto clients = {
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+  };
+
+  auto serviceFuture = foxglove::waitForService(*clients.begin(), SERVICE_NAME);
+  for (auto client : clients) {
+    ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(std::chrono::seconds(5)));
+  }
+  ASSERT_EQ(std::future_status::ready, serviceFuture.wait_for(std::chrono::seconds(5)));
+  const foxglove::Service service = serviceFuture.get();
+
+  foxglove::ServiceRequest request;
+  request.serviceId = service.id;
+  request.callId = 123lu;
+  request.encoding = "ros1";
+  request.data = {1};  // Serialized boolean "True"
+
+  const std::vector<uint8_t> expectedSerializedResponse = {1, 5, 0, 0, 0, 104, 101, 108, 108, 111};
+
+  std::vector<std::future<foxglove::ServiceResponse>> futures;
+  for (auto client : clients) {
+    futures.push_back(foxglove::waitForServiceResponse(client));
+    client->sendServiceRequest(request);
+  }
+
+  for (auto& future : futures) {
+    ASSERT_EQ(std::future_status::ready, future.wait_for(std::chrono::seconds(5)));
+    foxglove::ServiceResponse response;
+    EXPECT_NO_THROW(response = future.get());
+    EXPECT_EQ(response.serviceId, request.serviceId);
+    EXPECT_EQ(response.callId, request.callId);
+    EXPECT_EQ(response.encoding, request.encoding);
+    EXPECT_EQ(response.data, expectedSerializedResponse);
   }
 }
 
