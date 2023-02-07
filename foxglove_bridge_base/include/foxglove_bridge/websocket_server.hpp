@@ -195,6 +195,7 @@ struct ServerOptions {
   std::string certfile = "";
   std::string keyfile = "";
   std::string sessionId;
+  bool useCompression = false;
 };
 
 template <typename ServerConfiguration>
@@ -1135,6 +1136,7 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
 
   const size_t messageSize = msgHeader.size() + payloadSize;
   auto message = con->get_message(OpCode::BINARY, messageSize);
+  message->set_compressed(_options.useCompression);
 
   message->set_payload(msgHeader.data(), msgHeader.size());
   message->append_payload(payload, payloadSize);

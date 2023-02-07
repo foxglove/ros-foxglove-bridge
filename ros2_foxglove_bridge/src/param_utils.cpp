@@ -97,6 +97,15 @@ void declareParameters(rclcpp::Node* node) {
   paramWhiteListDescription.read_only = true;
   node->declare_parameter(PARAM_PARAMETER_WHITELIST, std::vector<std::string>({".*"}),
                           paramWhiteListDescription);
+
+  auto useCompressionDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  useCompressionDescription.name = PARAM_USE_COMPRESSION;
+  useCompressionDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_BOOL;
+  useCompressionDescription.description =
+    "Use websocket compression (permessage-deflate). Suited for connections with smaller bandwith, "
+    "at the cost of additional CPU load.";
+  useCompressionDescription.read_only = true;
+  node->declare_parameter(PARAM_USE_COMPRESSION, false, useCompressionDescription);
 }
 
 std::vector<std::regex> parseRegexStrings(rclcpp::Node* node,
