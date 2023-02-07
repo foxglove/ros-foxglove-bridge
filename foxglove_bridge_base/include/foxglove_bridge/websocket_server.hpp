@@ -297,7 +297,7 @@ private:
 
   void sendJson(ConnHandle hdl, json&& payload);
   void sendJsonRaw(ConnHandle hdl, const std::string& payload);
-  void sendBinary(ConnHandle hdl, const std::vector<uint8_t>& payload);
+  void sendBinary(ConnHandle hdl, const uint8_t* payload, size_t payloadSize);
   void sendStatus(ConnHandle clientHandle, const StatusLevel level, const std::string& message);
   void unsubscribeParamsWithoutSubscriptions(ConnHandle hdl,
                                              const std::unordered_set<std::string>& paramNames);
@@ -648,10 +648,10 @@ inline void Server<ServerConfiguration>::sendJsonRaw(ConnHandle hdl, const std::
 }
 
 template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::sendBinary(ConnHandle hdl,
-                                                    const std::vector<uint8_t>& payload) {
+inline void Server<ServerConfiguration>::sendBinary(ConnHandle hdl, const uint8_t* payload,
+                                                    size_t payloadSize) {
   try {
-    _server.send(hdl, payload.data(), payload.size(), OpCode::BINARY);
+    _server.send(hdl, payload, payloadSize, OpCode::BINARY);
   } catch (std::exception const& e) {
     _server.get_elog().write(RECOVERABLE, e.what());
   }
@@ -1157,11 +1157,7 @@ inline void Server<ServerConfiguration>::broadcastTime(uint64_t timestamp) {
   std::shared_lock<std::shared_mutex> lock(_clientsChannelMutex);
   for (const auto& [hdl, clientInfo] : _clients) {
     (void)clientInfo;
-    try {
-      _server.send(hdl, message.data(), message.size(), OpCode::BINARY);
-    } catch (std::exception const& e) {
-      _server.get_elog().write(RECOVERABLE, e.what());
-    }
+    sendBinary(hdl, message.data(), message.size());
   }
 }
 
@@ -1171,7 +1167,7 @@ inline void Server<ServerConfiguration>::sendServiceResponse(ConnHandle clientHa
   std::vector<uint8_t> payload(1 + response.size());
   payload[0] = uint8_t(BinaryOpcode::SERVICE_CALL_RESPONSE);
   response.write(payload.data() + 1);
-  sendBinary(clientHandle, payload);
+  sendBinary(clientHandle, payload.data(), payload.size());
 }
 
 template <typename ServerConfiguration>
