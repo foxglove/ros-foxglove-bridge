@@ -1135,29 +1135,33 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
     subId = subs->second;
   }
 
-  uint8_t msgHeader[1 + 4 + 8];
+  std::array<uint8_t, 1 + 4 + 8> msgHeader;
   msgHeader[0] = uint8_t(BinaryOpcode::MESSAGE_DATA);
-  foxglove::WriteUint32LE(msgHeader + 1, subId);
-  foxglove::WriteUint64LE(msgHeader + 5, timestamp);
+  foxglove::WriteUint32LE(msgHeader.data() + 1, subId);
+  foxglove::WriteUint64LE(msgHeader.data() + 5, timestamp);
 
-  const size_t messageSize = sizeof(msgHeader) + payload_size;
+  const size_t messageSize = msgHeader.size() + payload_size;
   auto message = con->get_message(OpCode::BINARY, messageSize);
 
-  message->set_payload(msgHeader, sizeof(msgHeader));
+  message->set_payload(msgHeader.data(), msgHeader.size());
   message->append_payload(payload, payload_size);
   con->send(message);
 }
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::broadcastTime(uint64_t timestamp) {
-  std::vector<uint8_t> message(1 + 8);
+  std::array<uint8_t, 1 + 8> message;
   message[0] = uint8_t(BinaryOpcode::TIME_DATA);
   foxglove::WriteUint64LE(message.data() + 1, timestamp);
 
   std::shared_lock<std::shared_mutex> lock(_clientsChannelMutex);
   for (const auto& [hdl, clientInfo] : _clients) {
     (void)clientInfo;
-    sendBinary(hdl, message);
+    try {
+      _server.send(hdl, message.data(), message.size(), OpCode::BINARY);
+    } catch (std::exception const& e) {
+      _server.get_elog().write(RECOVERABLE, e.what());
+    }
   }
 }
 
