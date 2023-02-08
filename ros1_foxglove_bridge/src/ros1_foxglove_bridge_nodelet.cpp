@@ -526,7 +526,7 @@ private:
 
     // Advertise new services
     std::vector<foxglove::ServiceWithoutId> newServices;
-    for (const auto serviceName : serviceNames) {
+    for (const auto& serviceName : serviceNames) {
       if (std::find_if(_advertisedServices.begin(), _advertisedServices.end(),
                        [&serviceName](const auto& idWithService) {
                          return idWithService.second.name == serviceName;
