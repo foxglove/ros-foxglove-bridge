@@ -187,6 +187,16 @@ private:
   virtual void setupTlsHandler() = 0;
 };
 
+struct ServerOptions {
+  std::vector<std::string> capabilities;
+  std::vector<std::string> supportedEncodings;
+  std::unordered_map<std::string, std::string> metadata;
+  size_t sendBufferLimitBytes = DEFAULT_SEND_BUFFER_LIMIT_BYTES;
+  std::string certfile = "";
+  std::string keyfile = "";
+  std::string sessionId;
+};
+
 template <typename ServerConfiguration>
 class Server final : public ServerInterface {
 public:
@@ -196,12 +206,7 @@ public:
 
   static bool USES_TLS;
 
-  explicit Server(std::string name, LogCallback logger,
-                  const std::vector<std::string>& capabilities,
-                  const std::vector<std::string>& supportedEncodings = {},
-                  const std::unordered_map<std::string, std::string>& metadata = {},
-                  size_t send_buffer_limit_bytes = DEFAULT_SEND_BUFFER_LIMIT_BYTES,
-                  const std::string& certfile = "", const std::string& keyfile = "");
+  explicit Server(std::string name, LogCallback logger, const ServerOptions& options);
   virtual ~Server();
 
   Server(const Server&) = delete;
@@ -255,12 +260,7 @@ private:
 
   std::string _name;
   LogCallback _logger;
-  std::vector<std::string> _capabilities;
-  std::vector<std::string> _supportedEncodings;
-  std::unordered_map<std::string, std::string> _metadata;
-  size_t _send_buffer_limit_bytes;
-  std::string _certfile;
-  std::string _keyfile;
+  ServerOptions _options;
   ServerType _server;
   std::unique_ptr<std::thread> _serverThread;
 
@@ -306,19 +306,11 @@ private:
 };
 
 template <typename ServerConfiguration>
-inline Server<ServerConfiguration>::Server(
-  std::string name, LogCallback logger, const std::vector<std::string>& capabilities,
-  const std::vector<std::string>& supportedEncodings,
-  const std::unordered_map<std::string, std::string>& metadata, size_t send_buffer_limit_bytes,
-  const std::string& certfile, const std::string& keyfile)
+inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger,
+                                           const ServerOptions& options)
     : _name(std::move(name))
     , _logger(logger)
-    , _capabilities(capabilities)
-    , _supportedEncodings(supportedEncodings)
-    , _metadata(metadata)
-    , _send_buffer_limit_bytes(send_buffer_limit_bytes)
-    , _certfile(certfile)
-    , _keyfile(keyfile) {
+    , _options(options) {
   // Redirect logging
   _server.get_alog().set_callback(_logger);
   _server.get_elog().set_callback(_logger);
@@ -382,9 +374,10 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
   con->send(json({
                    {"op", "serverInfo"},
                    {"name", _name},
-                   {"capabilities", _capabilities},
-                   {"supportedEncodings", _supportedEncodings},
-                   {"metadata", _metadata},
+                   {"capabilities", _options.capabilities},
+                   {"supportedEncodings", _options.supportedEncodings},
+                   {"metadata", _options.metadata},
+                   {"sessionId", _options.sessionId},
                  })
               .dump());
 
@@ -1108,7 +1101,7 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
   }
 
   const auto bufferSizeinBytes = con->get_buffered_amount();
-  if (bufferSizeinBytes >= _send_buffer_limit_bytes) {
+  if (bufferSizeinBytes >= _options.sendBufferLimitBytes) {
     FOXGLOVE_DEBOUNCE(
       [this]() {
         _server.get_elog().write(
@@ -1219,7 +1212,8 @@ inline void Server<ServerConfiguration>::unsubscribeParamsWithoutSubscriptions(
 
 template <typename ServerConfiguration>
 inline bool Server<ServerConfiguration>::hasCapability(const std::string& capability) const {
-  return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
+  return std::find(_options.capabilities.begin(), _options.capabilities.end(), capability) !=
+         _options.capabilities.end();
 }
 
 template <>
@@ -1244,8 +1238,8 @@ inline void Server<WebSocketTls>::setupTlsHandler() {
     try {
       ctx->set_options(asio::ssl::context::default_workarounds | asio::ssl::context::no_tlsv1 |
                        asio::ssl::context::no_sslv2 | asio::ssl::context::no_sslv3);
-      ctx->use_certificate_chain_file(_certfile);
-      ctx->use_private_key_file(_keyfile, asio::ssl::context::pem);
+      ctx->use_certificate_chain_file(_options.certfile);
+      ctx->use_private_key_file(_options.keyfile, asio::ssl::context::pem);
 
       // Ciphers are taken from the websocketpp example echo tls server:
       // https://github.com/zaphoyd/websocketpp/blob/1b11fd301/examples/echo_server_tls/echo_server_tls.cpp#L119

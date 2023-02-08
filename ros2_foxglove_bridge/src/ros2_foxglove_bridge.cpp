@@ -57,27 +57,29 @@ public:
     _paramInterface = std::make_shared<ParameterInterface>(this, paramWhitelistPatterns);
 
     const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
-    std::vector<std::string> serverCapabilities = {
+    foxglove::ServerOptions serverOptions;
+    serverOptions.capabilities = {
       foxglove::CAPABILITY_CLIENT_PUBLISH,
       foxglove::CAPABILITY_PARAMETERS,
       foxglove::CAPABILITY_PARAMETERS_SUBSCRIBE,
       foxglove::CAPABILITY_SERVICES,
     };
     if (_useSimTime) {
-      serverCapabilities.push_back(foxglove::CAPABILITY_TIME);
+      serverOptions.capabilities.push_back(foxglove::CAPABILITY_TIME);
     }
-    const std::vector<std::string> supportedEncodings = {"cdr"};
-    const std::unordered_map<std::string, std::string> metadata = {
-      {"ROS_DISTRO", std::getenv("ROS_DISTRO")}};
+    serverOptions.supportedEncodings = {"cdr"};
+    serverOptions.metadata = {{"ROS_DISTRO", std::getenv("ROS_DISTRO")}};
+    serverOptions.sendBufferLimitBytes = send_buffer_limit;
+    serverOptions.sessionId = std::to_string(std::time(nullptr));
 
     if (useTLS) {
+      serverOptions.certfile = certfile;
+      serverOptions.keyfile = keyfile;
       _server = std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(
-        "foxglove_bridge", std::move(logHandler), serverCapabilities, supportedEncodings, metadata,
-        send_buffer_limit, certfile, keyfile);
+        "foxglove_bridge", std::move(logHandler), serverOptions);
     } else {
       _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
-        "foxglove_bridge", std::move(logHandler), serverCapabilities, supportedEncodings, metadata,
-        send_buffer_limit);
+        "foxglove_bridge", std::move(logHandler), serverOptions);
     }
     _server->setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2));
     _server->setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2));
