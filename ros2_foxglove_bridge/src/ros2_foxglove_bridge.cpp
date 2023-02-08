@@ -721,10 +721,9 @@ private:
     // to `/rosout` will cause a feedback loop
     const auto timestamp = this->now().nanoseconds();
     assert(timestamp >= 0 && "Timestamp is negative");
-    const auto payload =
-      std::string_view{reinterpret_cast<const char*>(msg->get_rcl_serialized_message().buffer),
-                       msg->get_rcl_serialized_message().buffer_length};
-    _server->sendMessage(clientHandle, channel.id, static_cast<uint64_t>(timestamp), payload);
+    const auto rclSerializedMsg = msg->get_rcl_serialized_message();
+    _server->sendMessage(clientHandle, channel.id, static_cast<uint64_t>(timestamp),
+                         rclSerializedMsg.buffer, rclSerializedMsg.buffer_length);
   }
 
   void serviceRequestHandler(const foxglove::ServiceRequest& request,

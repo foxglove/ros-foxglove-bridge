@@ -176,7 +176,7 @@ public:
   virtual void setServiceRequestHandler(ServiceRequestHandler handler) = 0;
 
   virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
-                           std::string_view data) = 0;
+                           const uint8_t* payload, size_t payloadSize) = 0;
   virtual void broadcastTime(uint64_t timestamp) = 0;
   virtual void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) = 0;
 
@@ -232,7 +232,7 @@ public:
   void setServiceRequestHandler(ServiceRequestHandler handler) override;
 
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
-                   std::string_view data) override;
+                   const uint8_t* payload, size_t payloadSize) override;
   void broadcastTime(uint64_t timestamp) override;
   void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) override;
 
@@ -297,7 +297,7 @@ private:
 
   void sendJson(ConnHandle hdl, json&& payload);
   void sendJsonRaw(ConnHandle hdl, const std::string& payload);
-  void sendBinary(ConnHandle hdl, const std::vector<uint8_t>& payload);
+  void sendBinary(ConnHandle hdl, const uint8_t* payload, size_t payloadSize);
   void sendStatus(ConnHandle clientHandle, const StatusLevel level, const std::string& message);
   void unsubscribeParamsWithoutSubscriptions(ConnHandle hdl,
                                              const std::unordered_set<std::string>& paramNames);
@@ -648,10 +648,10 @@ inline void Server<ServerConfiguration>::sendJsonRaw(ConnHandle hdl, const std::
 }
 
 template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::sendBinary(ConnHandle hdl,
-                                                    const std::vector<uint8_t>& payload) {
+inline void Server<ServerConfiguration>::sendBinary(ConnHandle hdl, const uint8_t* payload,
+                                                    size_t payloadSize) {
   try {
-    _server.send(hdl, payload.data(), payload.size(), OpCode::BINARY);
+    _server.send(hdl, payload, payloadSize, OpCode::BINARY);
   } catch (std::exception const& e) {
     _server.get_elog().write(RECOVERABLE, e.what());
   }
@@ -1099,7 +1099,8 @@ inline void Server<ServerConfiguration>::removeServices(const std::vector<Servic
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, ChannelId chanId,
-                                                     uint64_t timestamp, std::string_view data) {
+                                                     uint64_t timestamp, const uint8_t* payload,
+                                                     size_t payloadSize) {
   std::error_code ec;
   const auto con = _server.get_con_from_hdl(clientHandle, ec);
   if (ec || !con) {
@@ -1134,24 +1135,29 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
     subId = subs->second;
   }
 
-  std::vector<uint8_t> message(1 + 4 + 8 + data.size());
-  message[0] = uint8_t(BinaryOpcode::MESSAGE_DATA);
-  foxglove::WriteUint32LE(message.data() + 1, subId);
-  foxglove::WriteUint64LE(message.data() + 5, timestamp);
-  std::memcpy(message.data() + 1 + 4 + 8, data.data(), data.size());
-  sendBinary(clientHandle, message);
+  std::array<uint8_t, 1 + 4 + 8> msgHeader;
+  msgHeader[0] = uint8_t(BinaryOpcode::MESSAGE_DATA);
+  foxglove::WriteUint32LE(msgHeader.data() + 1, subId);
+  foxglove::WriteUint64LE(msgHeader.data() + 5, timestamp);
+
+  const size_t messageSize = msgHeader.size() + payloadSize;
+  auto message = con->get_message(OpCode::BINARY, messageSize);
+
+  message->set_payload(msgHeader.data(), msgHeader.size());
+  message->append_payload(payload, payloadSize);
+  con->send(message);
 }
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::broadcastTime(uint64_t timestamp) {
-  std::vector<uint8_t> message(1 + 8);
+  std::array<uint8_t, 1 + 8> message;
   message[0] = uint8_t(BinaryOpcode::TIME_DATA);
   foxglove::WriteUint64LE(message.data() + 1, timestamp);
 
   std::shared_lock<std::shared_mutex> lock(_clientsChannelMutex);
   for (const auto& [hdl, clientInfo] : _clients) {
     (void)clientInfo;
-    sendBinary(hdl, message);
+    sendBinary(hdl, message.data(), message.size());
   }
 }
 
@@ -1161,7 +1167,7 @@ inline void Server<ServerConfiguration>::sendServiceResponse(ConnHandle clientHa
   std::vector<uint8_t> payload(1 + response.size());
   payload[0] = uint8_t(BinaryOpcode::SERVICE_CALL_RESPONSE);
   response.write(payload.data() + 1);
-  sendBinary(clientHandle, payload);
+  sendBinary(clientHandle, payload.data(), payload.size());
 }
 
 template <typename ServerConfiguration>
