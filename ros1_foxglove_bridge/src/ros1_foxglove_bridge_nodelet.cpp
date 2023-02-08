@@ -712,9 +712,7 @@ private:
     const ros::MessageEvent<ros_babel_fish::BabelFishMessage const>& msgEvent) {
     const auto& msg = msgEvent.getConstMessage();
     const auto receiptTimeNs = msgEvent.getReceiptTime().toNSec();
-    _server->sendMessage(
-      clientHandle, channel.id, receiptTimeNs,
-      std::string_view(reinterpret_cast<const char*>(msg->buffer()), msg->size()));
+    _server->sendMessage(clientHandle, channel.id, receiptTimeNs, msg->buffer(), msg->size());
   }
 
   void serviceRequestHandler(const foxglove::ServiceRequest& request,
