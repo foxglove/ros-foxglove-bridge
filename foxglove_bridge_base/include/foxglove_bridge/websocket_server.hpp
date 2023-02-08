@@ -194,6 +194,7 @@ struct ServerOptions {
   size_t sendBufferLimitBytes = DEFAULT_SEND_BUFFER_LIMIT_BYTES;
   std::string certfile = "";
   std::string keyfile = "";
+  std::string sessionId;
 };
 
 template <typename ServerConfiguration>
@@ -376,6 +377,7 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
                    {"capabilities", _options.capabilities},
                    {"supportedEncodings", _options.supportedEncodings},
                    {"metadata", _options.metadata},
+                   {"sessionId", _options.sessionId},
                  })
               .dump());
 

@@ -53,6 +53,7 @@ public:
     const auto keyfile = nhp.param<std::string>("keyfile", "");
     _maxUpdateMs = static_cast<size_t>(nhp.param<int>("max_update_ms", DEFAULT_MAX_UPDATE_MS));
     _useSimTime = nhp.param<bool>("/use_sim_time", false);
+    const auto sessionId = nhp.param<std::string>("/run_id", std::to_string(std::time(0)));
 
     const auto topicWhitelistPatterns =
       nhp.param<std::vector<std::string>>("topic_whitelist", {".*"});
@@ -89,6 +90,7 @@ public:
       serverOptions.supportedEncodings = {ROS1_CHANNEL_ENCODING};
       serverOptions.metadata = {{"ROS_DISTRO", std::getenv("ROS_DISTRO")}};
       serverOptions.sendBufferLimitBytes = send_buffer_limit;
+      serverOptions.sessionId = sessionId;
 
       const auto logHandler =
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);
