@@ -70,7 +70,7 @@ public:
     serverOptions.supportedEncodings = {"cdr"};
     serverOptions.metadata = {{"ROS_DISTRO", std::getenv("ROS_DISTRO")}};
     serverOptions.sendBufferLimitBytes = send_buffer_limit;
-    serverOptions.sessionId = std::to_string(std::time(0));
+    serverOptions.sessionId = std::to_string(std::time(nullptr));
 
     if (useTLS) {
       serverOptions.certfile = certfile;
