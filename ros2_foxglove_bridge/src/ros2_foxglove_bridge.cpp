@@ -6,24 +6,24 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
-
-#define ASIO_STANDALONE
+#include <websocketpp/common/connection_hdl.hpp>
 
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/generic_client.hpp>
 #include <foxglove_bridge/message_definition_cache.hpp>
 #include <foxglove_bridge/param_utils.hpp>
 #include <foxglove_bridge/parameter_interface.hpp>
-#include <foxglove_bridge/websocket_server.hpp>
+#include <foxglove_bridge/server_factory.hpp>
 
 using namespace std::chrono_literals;
 using namespace std::placeholders;
+using ConnectionHandle = websocketpp::connection_hdl;
 using LogLevel = foxglove::WebSocketLogLevel;
 using Subscription = rclcpp::GenericSubscription::SharedPtr;
-using SubscriptionsByClient = std::map<foxglove::ConnHandle, Subscription, std::owner_less<>>;
+using SubscriptionsByClient = std::map<ConnectionHandle, Subscription, std::owner_less<>>;
 using Publication = rclcpp::GenericPublisher::SharedPtr;
 using ClientPublications = std::unordered_map<foxglove::ClientChannelId, Publication>;
-using PublicationsByClient = std::map<foxglove::ConnHandle, ClientPublications, std::owner_less<>>;
+using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std::owner_less<>>;
 
 namespace foxglove_bridge {
 
@@ -73,18 +73,14 @@ public:
     serverOptions.sendBufferLimitBytes = send_buffer_limit;
     serverOptions.sessionId = std::to_string(std::time(nullptr));
     serverOptions.useCompression = useCompression;
+    serverOptions.useTls = useTLS;
+    serverOptions.certfile = certfile;
+    serverOptions.keyfile = keyfile;
 
-    if (useTLS) {
-      serverOptions.certfile = certfile;
-      serverOptions.keyfile = keyfile;
-      _server = std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(
-        "foxglove_bridge", std::move(logHandler), serverOptions);
-    } else {
-      _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
-        "foxglove_bridge", std::move(logHandler), serverOptions);
-    }
+    _server = foxglove::ServerFactory::createServer<ConnectionHandle>("foxglove_bridge", logHandler,
+                                                                      serverOptions);
 
-    foxglove::ServerHandlers<foxglove::ConnHandle> hdlrs;
+    foxglove::ServerHandlers<ConnectionHandle> hdlrs;
     hdlrs.subscribeHandler = std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2);
     hdlrs.unsubscribeHandler = std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2);
     hdlrs.clientAdvertiseHandler = std::bind(&FoxgloveBridge::clientAdvertiseHandler, this, _1, _2);
@@ -377,7 +373,7 @@ private:
     }
   };
 
-  std::unique_ptr<foxglove::ServerInterface<foxglove::ConnHandle>> _server;
+  std::unique_ptr<foxglove::ServerInterface<ConnectionHandle>> _server;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;
@@ -399,7 +395,7 @@ private:
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
   bool _useSimTime = false;
 
-  void subscribeHandler(foxglove::ChannelId channelId, foxglove::ConnHandle clientHandle) {
+  void subscribeHandler(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
     auto it = _channelToTopicAndDatatype.find(channelId);
     if (it == _channelToTopicAndDatatype.end()) {
@@ -509,7 +505,7 @@ private:
     }
   }
 
-  void unsubscribeHandler(foxglove::ChannelId channelId, foxglove::ConnHandle clientHandle) {
+  void unsubscribeHandler(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
     auto it = _channelToTopicAndDatatype.find(channelId);
@@ -557,7 +553,7 @@ private:
   }
 
   void clientAdvertiseHandler(const foxglove::ClientAdvertisement& advertisement,
-                              foxglove::ConnHandle hdl) {
+                              ConnectionHandle hdl) {
     std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
 
     // Get client publications or insert an empty map.
@@ -590,7 +586,7 @@ private:
     clientPublications.emplace(advertisement.channelId, std::move(publisher));
   }
 
-  void clientUnadvertiseHandler(foxglove::ChannelId channelId, foxglove::ConnHandle hdl) {
+  void clientUnadvertiseHandler(foxglove::ChannelId channelId, ConnectionHandle hdl) {
     std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
 
     auto it = _clientAdvertisedTopics.find(hdl);
@@ -624,7 +620,7 @@ private:
     }
   }
 
-  void clientMessageHandler(const foxglove::ClientMessage& message, foxglove::ConnHandle hdl) {
+  void clientMessageHandler(const foxglove::ClientMessage& message, ConnectionHandle hdl) {
     // Get the publisher
     rclcpp::GenericPublisher::SharedPtr publisher;
     {
@@ -664,8 +660,7 @@ private:
   }
 
   void parameterChangeHandler(const std::vector<foxglove::Parameter>& parameters,
-                              const std::optional<std::string>& requestId,
-                              foxglove::ConnHandle hdl) {
+                              const std::optional<std::string>& requestId, ConnectionHandle hdl) {
     _paramInterface->setParams(parameters, std::chrono::seconds(5));
 
     // If a request Id was given, send potentially updated parameters back to client
@@ -679,15 +674,13 @@ private:
   }
 
   void parameterRequestHandler(const std::vector<std::string>& parameters,
-                               const std::optional<std::string>& requestId,
-                               foxglove::ConnHandle hdl) {
+                               const std::optional<std::string>& requestId, ConnectionHandle hdl) {
     const auto params = _paramInterface->getParams(parameters, std::chrono::seconds(5));
     _server->publishParameterValues(hdl, params, requestId);
   }
 
   void parameterSubscriptionHandler(const std::vector<std::string>& parameters,
-                                    foxglove::ParameterSubscriptionOperation op,
-                                    foxglove::ConnHandle) {
+                                    foxglove::ParameterSubscriptionOperation op, ConnectionHandle) {
     if (op == foxglove::ParameterSubscriptionOperation::SUBSCRIBE) {
       _paramInterface->subscribeParams(parameters);
     } else {
@@ -719,7 +712,7 @@ private:
     }
   }
 
-  void rosMessageHandler(const foxglove::Channel& channel, foxglove::ConnHandle clientHandle,
+  void rosMessageHandler(const foxglove::Channel& channel, ConnectionHandle clientHandle,
                          std::shared_ptr<rclcpp::SerializedMessage> msg) {
     // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
     // to `/rosout` will cause a feedback loop
@@ -731,7 +724,7 @@ private:
   }
 
   void serviceRequestHandler(const foxglove::ServiceRequest& request,
-                             foxglove::ConnHandle clientHandle) {
+                             ConnectionHandle clientHandle) {
     RCLCPP_DEBUG(this->get_logger(), "Received a request for service %d", request.serviceId);
 
     std::lock_guard<std::mutex> lock(_servicesMutex);

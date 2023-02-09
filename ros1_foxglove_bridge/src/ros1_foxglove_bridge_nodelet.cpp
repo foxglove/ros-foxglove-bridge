@@ -1,5 +1,3 @@
-#define ASIO_STANDALONE
-
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -16,10 +14,12 @@
 #include <ros_babel_fish/babel_fish_message.h>
 #include <ros_babel_fish/generation/providers/integrated_description_provider.h>
 #include <rosgraph_msgs/Clock.h>
+#include <websocketpp/common/connection_hdl.hpp>
 
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/generic_service.hpp>
 #include <foxglove_bridge/param_utils.hpp>
+#include <foxglove_bridge/server_factory.hpp>
 #include <foxglove_bridge/service_utils.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
 
@@ -34,10 +34,11 @@ constexpr double MIN_UPDATE_PERIOD_MS = 100.0;
 constexpr uint32_t PUBLICATION_QUEUE_LENGTH = 10;
 constexpr int SERVICE_TYPE_RETRIEVAL_TIMEOUT_MS = 250;
 
+using ConnectionHandle = websocketpp::connection_hdl;
 using TopicAndDatatype = std::pair<std::string, std::string>;
-using SubscriptionsByClient = std::map<foxglove::ConnHandle, ros::Subscriber, std::owner_less<>>;
+using SubscriptionsByClient = std::map<ConnectionHandle, ros::Subscriber, std::owner_less<>>;
 using ClientPublications = std::unordered_map<foxglove::ClientChannelId, ros::Publisher>;
-using PublicationsByClient = std::map<foxglove::ConnHandle, ClientPublications, std::owner_less<>>;
+using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std::owner_less<>>;
 
 class FoxgloveBridge : public nodelet::Nodelet {
 public:
@@ -92,21 +93,18 @@ public:
       serverOptions.metadata = {{"ROS_DISTRO", std::getenv("ROS_DISTRO")}};
       serverOptions.sendBufferLimitBytes = send_buffer_limit;
       serverOptions.sessionId = sessionId;
+      serverOptions.useTls = useTLS;
+      serverOptions.certfile = certfile;
+      serverOptions.keyfile = keyfile;
       serverOptions.useCompression = useCompression;
 
       const auto logHandler =
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);
-      if (useTLS) {
-        serverOptions.certfile = certfile;
-        serverOptions.keyfile = keyfile;
-        _server = std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(
-          "foxglove_bridge", std::move(logHandler), serverOptions);
-      } else {
-        _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
-          "foxglove_bridge", std::move(logHandler), serverOptions);
-      }
 
-      foxglove::ServerHandlers<foxglove::ConnHandle> hdlrs;
+      _server = foxglove::ServerFactory::createServer<ConnectionHandle>("foxglove_bridge",
+                                                                        logHandler, serverOptions);
+
+      foxglove::ServerHandlers<ConnectionHandle> hdlrs;
       hdlrs.subscribeHandler = std::bind(&FoxgloveBridge::subscribeHandler, this,
                                          std::placeholders::_1, std::placeholders::_2);
       hdlrs.unsubscribeHandler = std::bind(&FoxgloveBridge::unsubscribeHandler, this,
@@ -165,7 +163,7 @@ private:
     }
   };
 
-  void subscribeHandler(foxglove::ChannelId channelId, foxglove::ConnHandle clientHandle) {
+  void subscribeHandler(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
     auto it = _channelToTopicAndDatatype.find(channelId);
@@ -215,7 +213,7 @@ private:
     }
   }
 
-  void unsubscribeHandler(foxglove::ChannelId channelId, foxglove::ConnHandle clientHandle) {
+  void unsubscribeHandler(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
     auto it = _channelToTopicAndDatatype.find(channelId);
@@ -258,7 +256,7 @@ private:
   }
 
   void clientAdvertiseHandler(const foxglove::ClientAdvertisement& channel,
-                              foxglove::ConnHandle clientHandle) {
+                              ConnectionHandle clientHandle) {
     if (channel.encoding != ROS1_CHANNEL_ENCODING) {
       ROS_ERROR("Unsupported encoding. Only '%s' encoding is supported at the moment.",
                 ROS1_CHANNEL_ENCODING);
@@ -309,7 +307,7 @@ private:
   }
 
   void clientUnadvertiseHandler(foxglove::ClientChannelId channelId,
-                                foxglove::ConnHandle clientHandle) {
+                                ConnectionHandle clientHandle) {
     std::unique_lock<std::shared_mutex> lock(_publicationsMutex);
 
     auto clientPublicationsIt = _clientAdvertisedTopics.find(clientHandle);
@@ -344,7 +342,7 @@ private:
   }
 
   void clientMessageHandler(const foxglove::ClientMessage& clientMsg,
-                            foxglove::ConnHandle clientHandle) {
+                            ConnectionHandle clientHandle) {
     ros_babel_fish::BabelFishMessage::Ptr msg(new ros_babel_fish::BabelFishMessage);
     msg->read(clientMsg);
 
@@ -574,8 +572,7 @@ private:
   }
 
   void parameterRequestHandler(const std::vector<std::string>& parameters,
-                               const std::optional<std::string>& requestId,
-                               foxglove::ConnHandle hdl) {
+                               const std::optional<std::string>& requestId, ConnectionHandle hdl) {
     std::vector<std::string> parameterNames = parameters;
     if (parameterNames.empty()) {
       getMTNodeHandle().getParamNames(parameterNames);
@@ -601,8 +598,7 @@ private:
   }
 
   void parameterChangeHandler(const std::vector<foxglove::Parameter>& parameters,
-                              const std::optional<std::string>& requestId,
-                              foxglove::ConnHandle hdl) {
+                              const std::optional<std::string>& requestId, ConnectionHandle hdl) {
     using foxglove::ParameterType;
     auto nh = this->getMTNodeHandle();
     for (const auto& param : parameters) {
@@ -647,8 +643,7 @@ private:
   }
 
   void parameterSubscriptionHandler(const std::vector<std::string>& parameters,
-                                    foxglove::ParameterSubscriptionOperation op,
-                                    foxglove::ConnHandle) {
+                                    foxglove::ParameterSubscriptionOperation op, ConnectionHandle) {
     for (const auto& paramName : parameters) {
       if (!isWhitelisted(paramName, _paramWhitelistPatterns)) {
         ROS_WARN("Parameter '%s' is not whitelisted", paramName.c_str());
@@ -714,7 +709,7 @@ private:
   }
 
   void rosMessageHandler(
-    const foxglove::Channel& channel, foxglove::ConnHandle clientHandle,
+    const foxglove::Channel& channel, ConnectionHandle clientHandle,
     const ros::MessageEvent<ros_babel_fish::BabelFishMessage const>& msgEvent) {
     const auto& msg = msgEvent.getConstMessage();
     const auto receiptTimeNs = msgEvent.getReceiptTime().toNSec();
@@ -722,7 +717,7 @@ private:
   }
 
   void serviceRequestHandler(const foxglove::ServiceRequest& request,
-                             foxglove::ConnHandle clientHandle) {
+                             ConnectionHandle clientHandle) {
     std::shared_lock<std::shared_mutex> lock(_servicesMutex);
     const auto serviceIt = _advertisedServices.find(request.serviceId);
     if (serviceIt == _advertisedServices.end()) {
@@ -763,7 +758,7 @@ private:
     }
   }
 
-  std::unique_ptr<foxglove::ServerInterface<foxglove::ConnHandle>> _server;
+  std::unique_ptr<foxglove::ServerInterface<ConnectionHandle>> _server;
   ros_babel_fish::IntegratedDescriptionProvider _rosTypeInfoProvider;
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _paramWhitelistPatterns;

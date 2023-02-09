@@ -29,6 +29,14 @@ enum class ClientBinaryOpcode : uint8_t {
   SERVICE_CALL_REQUEST = 2,
 };
 
+enum class WebSocketLogLevel {
+  Debug,
+  Info,
+  Warn,
+  Error,
+  Critical,
+};
+
 struct ChannelWithoutId {
   std::string topic;
   std::string encoding;

@@ -1109,7 +1109,4 @@ inline void Server<WebSocketTls>::setupTlsHandler() {
   });
 }
 
-extern template class Server<WebSocketTls>;
-extern template class Server<WebSocketNoTls>;
-
 }  // namespace foxglove
