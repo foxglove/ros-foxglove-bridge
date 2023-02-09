@@ -84,7 +84,7 @@ public:
         "foxglove_bridge", std::move(logHandler), serverOptions);
     }
 
-    foxglove::ServerHandlers hdlrs;
+    foxglove::ServerHandlers<foxglove::ConnHandle> hdlrs;
     hdlrs.subscribeHandler = std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2);
     hdlrs.unsubscribeHandler = std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2);
     hdlrs.clientAdvertiseHandler = std::bind(&FoxgloveBridge::clientAdvertiseHandler, this, _1, _2);
@@ -377,7 +377,7 @@ private:
     }
   };
 
-  std::unique_ptr<foxglove::ServerInterface> _server;
+  std::unique_ptr<foxglove::ServerInterface<foxglove::ConnHandle>> _server;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;

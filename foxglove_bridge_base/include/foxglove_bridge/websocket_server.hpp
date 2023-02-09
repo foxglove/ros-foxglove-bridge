@@ -136,22 +136,26 @@ constexpr const char* StatusLevelToString(StatusLevel level) {
   }
 }
 
+template <typename ConnectionHandle>
 struct ServerHandlers {
-  std::function<void(ChannelId, ConnHandle)> subscribeHandler;
-  std::function<void(ChannelId, ConnHandle)> unsubscribeHandler;
-  std::function<void(const ClientAdvertisement&, ConnHandle)> clientAdvertiseHandler;
-  std::function<void(ClientChannelId, ConnHandle)> clientUnadvertiseHandler;
-  std::function<void(const ClientMessage&, ConnHandle)> clientMessageHandler;
+  std::function<void(ChannelId, ConnectionHandle)> subscribeHandler;
+  std::function<void(ChannelId, ConnectionHandle)> unsubscribeHandler;
+  std::function<void(const ClientAdvertisement&, ConnectionHandle)> clientAdvertiseHandler;
+  std::function<void(ClientChannelId, ConnectionHandle)> clientUnadvertiseHandler;
+  std::function<void(const ClientMessage&, ConnectionHandle)> clientMessageHandler;
   std::function<void(const std::vector<std::string>&, const std::optional<std::string>&,
-                     ConnHandle)>
+                     ConnectionHandle)>
     parameterRequestHandler;
-  std::function<void(const std::vector<Parameter>&, const std::optional<std::string>&, ConnHandle)>
+  std::function<void(const std::vector<Parameter>&, const std::optional<std::string>&,
+                     ConnectionHandle)>
     parameterChangeHandler;
-  std::function<void(const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>
+  std::function<void(const std::vector<std::string>&, ParameterSubscriptionOperation,
+                     ConnectionHandle)>
     parameterSubscriptionHandler;
-  std::function<void(const ServiceRequest&, ConnHandle)> serviceRequestHandler;
+  std::function<void(const ServiceRequest&, ConnectionHandle)> serviceRequestHandler;
 };
 
+template <typename ConnectionHandle>
 class ServerInterface {
 public:
   virtual ~ServerInterface() {}
@@ -161,22 +165,23 @@ public:
   virtual ChannelId addChannel(ChannelWithoutId channel) = 0;
   virtual void removeChannel(ChannelId chanId) = 0;
   virtual void broadcastChannels() = 0;
-  virtual void publishParameterValues(ConnHandle clientHandle,
+  virtual void publishParameterValues(ConnectionHandle clientHandle,
                                       const std::vector<Parameter>& parameters,
                                       const std::optional<std::string>& requestId) = 0;
   virtual void updateParameterValues(const std::vector<Parameter>& parameters) = 0;
   virtual std::vector<ServiceId> addServices(const std::vector<ServiceWithoutId>& services) = 0;
   virtual void removeServices(const std::vector<ServiceId>& serviceIds) = 0;
 
-  virtual void setHandlers(ServerHandlers&& handlers) = 0;
+  virtual void setHandlers(ServerHandlers<ConnectionHandle>&& handlers) = 0;
 
-  virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
+  virtual void sendMessage(ConnectionHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                            const uint8_t* payload, size_t payloadSize) = 0;
   virtual void broadcastTime(uint64_t timestamp) = 0;
-  virtual void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) = 0;
+  virtual void sendServiceResponse(ConnectionHandle clientHandle,
+                                   const ServiceResponse& response) = 0;
 
   virtual uint16_t getPort() = 0;
-  virtual std::string remoteEndpointString(ConnHandle clientHandle) = 0;
+  virtual std::string remoteEndpointString(ConnectionHandle clientHandle) = 0;
 };
 
 struct ServerOptions {
@@ -191,7 +196,7 @@ struct ServerOptions {
 };
 
 template <typename ServerConfiguration>
-class Server final : public ServerInterface {
+class Server final : public ServerInterface<ConnHandle> {
 public:
   using ServerType = websocketpp::server<ServerConfiguration>;
   using ConnectionType = websocketpp::connection<ServerConfiguration>;
@@ -220,7 +225,7 @@ public:
   std::vector<ServiceId> addServices(const std::vector<ServiceWithoutId>& services) override;
   void removeServices(const std::vector<ServiceId>& serviceIds) override;
 
-  void setHandlers(ServerHandlers&& handlers) override;
+  void setHandlers(ServerHandlers<ConnHandle>&& handlers) override;
 
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                    const uint8_t* payload, size_t payloadSize) override;
@@ -259,7 +264,7 @@ private:
     _clientParamSubscriptions;
   ServiceId _nextServiceId = 0;
   std::unordered_map<ServiceId, ServiceWithoutId> _services;
-  ServerHandlers _handlers;
+  ServerHandlers<ConnHandle> _handlers;
   std::shared_mutex _clientsMutex;
   std::shared_mutex _channelsMutex;
   std::shared_mutex _clientChannelsMutex;
@@ -447,7 +452,7 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
 }  // namespace foxglove
 
 template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setHandlers(ServerHandlers&& handlers) {
+inline void Server<ServerConfiguration>::setHandlers(ServerHandlers<ConnHandle>&& handlers) {
   _handlers = handlers;
 }
 

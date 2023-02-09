@@ -106,7 +106,7 @@ public:
           "foxglove_bridge", std::move(logHandler), serverOptions);
       }
 
-      foxglove::ServerHandlers hdlrs;
+      foxglove::ServerHandlers<foxglove::ConnHandle> hdlrs;
       hdlrs.subscribeHandler = std::bind(&FoxgloveBridge::subscribeHandler, this,
                                          std::placeholders::_1, std::placeholders::_2);
       hdlrs.unsubscribeHandler = std::bind(&FoxgloveBridge::unsubscribeHandler, this,
@@ -763,7 +763,7 @@ private:
     }
   }
 
-  std::unique_ptr<foxglove::ServerInterface> _server;
+  std::unique_ptr<foxglove::ServerInterface<foxglove::ConnHandle>> _server;
   ros_babel_fish::IntegratedDescriptionProvider _rosTypeInfoProvider;
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _paramWhitelistPatterns;
