@@ -56,67 +56,6 @@ constexpr uint32_t Integer(const std::string_view str) {
   return result;
 }
 
-struct ChannelWithoutId {
-  std::string topic;
-  std::string encoding;
-  std::string schemaName;
-  std::string schema;
-
-  bool operator==(const ChannelWithoutId& other) const {
-    return topic == other.topic && encoding == other.encoding && schemaName == other.schemaName &&
-           schema == other.schema;
-  }
-};
-
-struct Channel : ChannelWithoutId {
-  ChannelId id;
-
-  explicit Channel(ChannelId id, ChannelWithoutId ch)
-      : ChannelWithoutId(std::move(ch))
-      , id(id) {}
-
-  friend void to_json(json& j, const Channel& channel) {
-    j = {
-      {"id", channel.id},
-      {"topic", channel.topic},
-      {"encoding", channel.encoding},
-      {"schemaName", channel.schemaName},
-      {"schema", channel.schema},
-    };
-  }
-
-  bool operator==(const Channel& other) const {
-    return id == other.id && ChannelWithoutId::operator==(other);
-  }
-};
-
-struct ClientMessage {
-  uint64_t logTime;
-  uint64_t publishTime;
-  uint32_t sequence;
-  const ClientAdvertisement& advertisement;
-  size_t dataLength;
-  const uint8_t* data;
-
-  ClientMessage(uint64_t logTime, uint64_t publishTime, uint32_t sequence,
-                const ClientAdvertisement& advertisement, size_t dataLength, const uint8_t* data)
-      : logTime(logTime)
-      , publishTime(publishTime)
-      , sequence(sequence)
-      , advertisement(advertisement)
-      , dataLength(dataLength)
-      , data(data) {}
-
-  static const size_t MSG_PAYLOAD_OFFSET = 5;
-
-  const uint8_t* getData() const {
-    return data + MSG_PAYLOAD_OFFSET;
-  }
-  std::size_t getLength() const {
-    return dataLength - MSG_PAYLOAD_OFFSET;
-  }
-};
-
 enum class StatusLevel : uint8_t {
   Info = 0,
   Warning = 1,
