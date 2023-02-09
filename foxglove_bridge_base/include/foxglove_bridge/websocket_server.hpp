@@ -386,30 +386,30 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
                  })
               .dump());
 
+  std::vector<Channel> channels;
   {
     std::shared_lock<std::shared_mutex> lock(_channelsMutex);
-    std::vector<Channel> channels;
     for (const auto& [id, channel] : _channels) {
       (void)id;
       channels.push_back(channel);
     }
-    sendJson(hdl, {
-                    {"op", "advertise"},
-                    {"channels", std::move(channels)},
-                  });
   }
+  sendJson(hdl, {
+                  {"op", "advertise"},
+                  {"channels", std::move(channels)},
+                });
 
+  std::vector<Service> services;
   {
     std::shared_lock<std::shared_mutex> lock(_servicesMutex);
-    std::vector<Service> services;
     for (const auto& [id, service] : _services) {
       services.push_back(Service(service, id));
     }
-    sendJson(hdl, {
-                    {"op", "advertiseServices"},
-                    {"services", std::move(services)},
-                  });
   }
+  sendJson(hdl, {
+                  {"op", "advertiseServices"},
+                  {"services", std::move(services)},
+                });
 }
 
 template <typename ServerConfiguration>
