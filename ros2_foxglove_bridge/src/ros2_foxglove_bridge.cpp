@@ -105,7 +105,7 @@ public:
     _server->start(address, port);
 
     // Get the actual port we bound to
-    uint16_t listeningPort = _server->localEndpoint()->port();
+    uint16_t listeningPort = _server->getPort();
     if (port != listeningPort) {
       RCLCPP_DEBUG(this->get_logger(), "Reassigning \"port\" parameter from %d to %d", port,
                    listeningPort);

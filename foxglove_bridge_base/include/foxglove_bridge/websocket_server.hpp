@@ -136,7 +136,6 @@ constexpr const char* StatusLevelToString(StatusLevel level) {
   }
 }
 
-using Tcp = websocketpp::lib::asio::ip::tcp;
 using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
 using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
 using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
@@ -180,11 +179,8 @@ public:
   virtual void broadcastTime(uint64_t timestamp) = 0;
   virtual void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) = 0;
 
-  virtual std::optional<Tcp::endpoint> localEndpoint() = 0;
+  virtual uint16_t getPort() = 0;
   virtual std::string remoteEndpointString(ConnHandle clientHandle) = 0;
-
-private:
-  virtual void setupTlsHandler() = 0;
 };
 
 struct ServerOptions {
@@ -204,6 +200,7 @@ public:
   using ServerType = websocketpp::server<ServerConfiguration>;
   using ConnectionType = websocketpp::connection<ServerConfiguration>;
   using MessagePtr = typename ServerType::message_ptr;
+  using Tcp = websocketpp::lib::asio::ip::tcp;
 
   static bool USES_TLS;
 
@@ -242,7 +239,7 @@ public:
   void broadcastTime(uint64_t timestamp) override;
   void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) override;
 
-  std::optional<Tcp::endpoint> localEndpoint() override;
+  uint16_t getPort() override;
   std::string remoteEndpointString(ConnHandle clientHandle) override;
 
 private:
@@ -289,7 +286,7 @@ private:
   std::shared_mutex _servicesMutex;
   std::mutex _clientParamSubscriptionsMutex;
 
-  void setupTlsHandler() override;
+  void setupTlsHandler();
   void socketInit(ConnHandle hdl);
   bool validateConnection(ConnHandle hdl);
   void handleConnectionOpened(ConnHandle hdl);
@@ -1193,13 +1190,13 @@ inline void Server<ServerConfiguration>::sendServiceResponse(ConnHandle clientHa
 }
 
 template <typename ServerConfiguration>
-inline std::optional<asio::ip::tcp::endpoint> Server<ServerConfiguration>::localEndpoint() {
+inline uint16_t Server<ServerConfiguration>::getPort() {
   std::error_code ec;
   auto endpoint = _server.get_local_endpoint(ec);
   if (ec) {
-    return std::nullopt;
+    throw std::runtime_error("Server not listening on any port. Has it been started before?");
   }
-  return endpoint;
+  return endpoint.port();
 }
 
 template <typename ServerConfiguration>
