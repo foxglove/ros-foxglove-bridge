@@ -83,22 +83,22 @@ public:
       _server = std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(
         "foxglove_bridge", std::move(logHandler), serverOptions);
     }
-    _server->setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2));
-    _server->setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2));
-    _server->setClientAdvertiseHandler(
-      std::bind(&FoxgloveBridge::clientAdvertiseHandler, this, _1, _2));
-    _server->setClientUnadvertiseHandler(
-      std::bind(&FoxgloveBridge::clientUnadvertiseHandler, this, _1, _2));
-    _server->setClientMessageHandler(
-      std::bind(&FoxgloveBridge::clientMessageHandler, this, _1, _2));
-    _server->setParameterRequestHandler(
-      std::bind(&FoxgloveBridge::parameterRequestHandler, this, _1, _2, _3));
-    _server->setParameterChangeHandler(
-      std::bind(&FoxgloveBridge::parameterChangeHandler, this, _1, _2, _3));
-    _server->setParameterSubscriptionHandler(
-      std::bind(&FoxgloveBridge::parameterSubscriptionHandler, this, _1, _2, _3));
-    _server->setServiceRequestHandler(
-      std::bind(&FoxgloveBridge::serviceRequestHandler, this, _1, _2));
+
+    foxglove::ServerHandlers hdlrs;
+    hdlrs.subscribeHandler = std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2);
+    hdlrs.unsubscribeHandler = std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2);
+    hdlrs.clientAdvertiseHandler = std::bind(&FoxgloveBridge::clientAdvertiseHandler, this, _1, _2);
+    hdlrs.clientUnadvertiseHandler =
+      std::bind(&FoxgloveBridge::clientUnadvertiseHandler, this, _1, _2);
+    hdlrs.clientMessageHandler = std::bind(&FoxgloveBridge::clientMessageHandler, this, _1, _2);
+    hdlrs.parameterRequestHandler =
+      std::bind(&FoxgloveBridge::parameterRequestHandler, this, _1, _2, _3);
+    hdlrs.parameterChangeHandler =
+      std::bind(&FoxgloveBridge::parameterChangeHandler, this, _1, _2, _3);
+    hdlrs.parameterSubscriptionHandler =
+      std::bind(&FoxgloveBridge::parameterSubscriptionHandler, this, _1, _2, _3);
+    hdlrs.serviceRequestHandler = std::bind(&FoxgloveBridge::serviceRequestHandler, this, _1, _2);
+    _server->setHandlers(std::move(hdlrs));
 
     _paramInterface->setParamUpdateCallback(std::bind(&FoxgloveBridge::parameterUpdates, this, _1));
 

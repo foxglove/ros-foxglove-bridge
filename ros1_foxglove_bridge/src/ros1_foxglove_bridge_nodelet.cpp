@@ -106,28 +106,29 @@ public:
           "foxglove_bridge", std::move(logHandler), serverOptions);
       }
 
-      _server->setSubscribeHandler(std::bind(&FoxgloveBridge::subscribeHandler, this,
-                                             std::placeholders::_1, std::placeholders::_2));
-      _server->setUnsubscribeHandler(std::bind(&FoxgloveBridge::unsubscribeHandler, this,
-                                               std::placeholders::_1, std::placeholders::_2));
-      _server->setClientAdvertiseHandler(std::bind(&FoxgloveBridge::clientAdvertiseHandler, this,
-                                                   std::placeholders::_1, std::placeholders::_2));
-      _server->setClientUnadvertiseHandler(std::bind(&FoxgloveBridge::clientUnadvertiseHandler,
-                                                     this, std::placeholders::_1,
-                                                     std::placeholders::_2));
-      _server->setClientMessageHandler(std::bind(&FoxgloveBridge::clientMessageHandler, this,
-                                                 std::placeholders::_1, std::placeholders::_2));
-      _server->setParameterRequestHandler(std::bind(&FoxgloveBridge::parameterRequestHandler, this,
-                                                    std::placeholders::_1, std::placeholders::_2,
-                                                    std::placeholders::_3));
-      _server->setParameterChangeHandler(std::bind(&FoxgloveBridge::parameterChangeHandler, this,
-                                                   std::placeholders::_1, std::placeholders::_2,
-                                                   std::placeholders::_3));
-      _server->setParameterSubscriptionHandler(
+      foxglove::ServerHandlers hdlrs;
+      hdlrs.subscribeHandler = std::bind(&FoxgloveBridge::subscribeHandler, this,
+                                         std::placeholders::_1, std::placeholders::_2);
+      hdlrs.unsubscribeHandler = std::bind(&FoxgloveBridge::unsubscribeHandler, this,
+                                           std::placeholders::_1, std::placeholders::_2);
+      hdlrs.clientAdvertiseHandler = std::bind(&FoxgloveBridge::clientAdvertiseHandler, this,
+                                               std::placeholders::_1, std::placeholders::_2);
+      hdlrs.clientUnadvertiseHandler = std::bind(&FoxgloveBridge::clientUnadvertiseHandler, this,
+                                                 std::placeholders::_1, std::placeholders::_2);
+      hdlrs.clientMessageHandler = std::bind(&FoxgloveBridge::clientMessageHandler, this,
+                                             std::placeholders::_1, std::placeholders::_2);
+      hdlrs.parameterRequestHandler =
+        std::bind(&FoxgloveBridge::parameterRequestHandler, this, std::placeholders::_1,
+                  std::placeholders::_2, std::placeholders::_3);
+      hdlrs.parameterChangeHandler =
+        std::bind(&FoxgloveBridge::parameterChangeHandler, this, std::placeholders::_1,
+                  std::placeholders::_2, std::placeholders::_3);
+      hdlrs.parameterSubscriptionHandler =
         std::bind(&FoxgloveBridge::parameterSubscriptionHandler, this, std::placeholders::_1,
-                  std::placeholders::_2, std::placeholders::_3));
-      _server->setServiceRequestHandler(std::bind(&FoxgloveBridge::serviceRequestHandler, this,
-                                                  std::placeholders::_1, std::placeholders::_2));
+                  std::placeholders::_2, std::placeholders::_3);
+      hdlrs.serviceRequestHandler = std::bind(&FoxgloveBridge::serviceRequestHandler, this,
+                                              std::placeholders::_1, std::placeholders::_2);
+      _server->setHandlers(std::move(hdlrs));
 
       _server->start(address, static_cast<uint16_t>(port));
 

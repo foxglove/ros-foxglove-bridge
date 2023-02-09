@@ -136,17 +136,21 @@ constexpr const char* StatusLevelToString(StatusLevel level) {
   }
 }
 
-using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
-using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
-using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
-using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
-using ParameterRequestHandler = std::function<void(const std::vector<std::string>&,
-                                                   const std::optional<std::string>&, ConnHandle)>;
-using ParameterChangeHandler =
-  std::function<void(const std::vector<Parameter>&, const std::optional<std::string>&, ConnHandle)>;
-using ParameterSubscriptionHandler =
-  std::function<void(const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
-using ServiceRequestHandler = std::function<void(const ServiceRequest&, ConnHandle)>;
+struct ServerHandlers {
+  std::function<void(ChannelId, ConnHandle)> subscribeHandler;
+  std::function<void(ChannelId, ConnHandle)> unsubscribeHandler;
+  std::function<void(const ClientAdvertisement&, ConnHandle)> clientAdvertiseHandler;
+  std::function<void(ClientChannelId, ConnHandle)> clientUnadvertiseHandler;
+  std::function<void(const ClientMessage&, ConnHandle)> clientMessageHandler;
+  std::function<void(const std::vector<std::string>&, const std::optional<std::string>&,
+                     ConnHandle)>
+    parameterRequestHandler;
+  std::function<void(const std::vector<Parameter>&, const std::optional<std::string>&, ConnHandle)>
+    parameterChangeHandler;
+  std::function<void(const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>
+    parameterSubscriptionHandler;
+  std::function<void(const ServiceRequest&, ConnHandle)> serviceRequestHandler;
+};
 
 class ServerInterface {
 public:
@@ -164,15 +168,7 @@ public:
   virtual std::vector<ServiceId> addServices(const std::vector<ServiceWithoutId>& services) = 0;
   virtual void removeServices(const std::vector<ServiceId>& serviceIds) = 0;
 
-  virtual void setSubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
-  virtual void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
-  virtual void setClientAdvertiseHandler(ClientAdvertiseHandler handler) = 0;
-  virtual void setClientUnadvertiseHandler(ClientUnadvertiseHandler handler) = 0;
-  virtual void setClientMessageHandler(ClientMessageHandler handler) = 0;
-  virtual void setParameterRequestHandler(ParameterRequestHandler handler) = 0;
-  virtual void setParameterChangeHandler(ParameterChangeHandler handler) = 0;
-  virtual void setParameterSubscriptionHandler(ParameterSubscriptionHandler handler) = 0;
-  virtual void setServiceRequestHandler(ServiceRequestHandler handler) = 0;
+  virtual void setHandlers(ServerHandlers&& handlers) = 0;
 
   virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                            const uint8_t* payload, size_t payloadSize) = 0;
@@ -224,15 +220,7 @@ public:
   std::vector<ServiceId> addServices(const std::vector<ServiceWithoutId>& services) override;
   void removeServices(const std::vector<ServiceId>& serviceIds) override;
 
-  void setSubscribeHandler(SubscribeUnsubscribeHandler handler) override;
-  void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) override;
-  void setClientAdvertiseHandler(ClientAdvertiseHandler handler) override;
-  void setClientUnadvertiseHandler(ClientUnadvertiseHandler handler) override;
-  void setClientMessageHandler(ClientMessageHandler handler) override;
-  void setParameterRequestHandler(ParameterRequestHandler handler) override;
-  void setParameterChangeHandler(ParameterChangeHandler handler) override;
-  void setParameterSubscriptionHandler(ParameterSubscriptionHandler handler) override;
-  void setServiceRequestHandler(ServiceRequestHandler handler) override;
+  void setHandlers(ServerHandlers&& handlers) override;
 
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                    const uint8_t* payload, size_t payloadSize) override;
@@ -271,15 +259,7 @@ private:
     _clientParamSubscriptions;
   ServiceId _nextServiceId = 0;
   std::unordered_map<ServiceId, ServiceWithoutId> _services;
-  SubscribeUnsubscribeHandler _subscribeHandler;
-  SubscribeUnsubscribeHandler _unsubscribeHandler;
-  ClientAdvertiseHandler _clientAdvertiseHandler;
-  ClientUnadvertiseHandler _clientUnadvertiseHandler;
-  ClientMessageHandler _clientMessageHandler;
-  ParameterRequestHandler _parameterRequestHandler;
-  ParameterChangeHandler _parameterChangeHandler;
-  ParameterSubscriptionHandler _parameterSubscriptionHandler;
-  ServiceRequestHandler _serviceRequestHandler;
+  ServerHandlers _handlers;
   std::shared_mutex _clientsMutex;
   std::shared_mutex _channelsMutex;
   std::shared_mutex _clientChannelsMutex;
@@ -437,8 +417,8 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
   for (const auto clientChannelId : oldAdvertisedChannels) {
     _server.get_alog().write(APP, "Client " + clientName + " unadvertising channel " +
                                     std::to_string(clientChannelId) + " due to disconnect");
-    if (_clientUnadvertiseHandler) {
-      _clientUnadvertiseHandler(clientChannelId, hdl);
+    if (_handlers.clientUnadvertiseHandler) {
+      _handlers.clientUnadvertiseHandler(clientChannelId, hdl);
     }
   }
 
@@ -448,10 +428,10 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
   }
 
   // Unsubscribe all channels this client subscribed to
-  if (_unsubscribeHandler) {
+  if (_handlers.unsubscribeHandler) {
     for (const auto& [chanId, subs] : oldSubscriptionsByChannel) {
       (void)subs;
-      _unsubscribeHandler(chanId, hdl);
+      _handlers.unsubscribeHandler(chanId, hdl);
     }
   }
 
@@ -467,52 +447,8 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
 }  // namespace foxglove
 
 template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setSubscribeHandler(SubscribeUnsubscribeHandler handler) {
-  _subscribeHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setUnsubscribeHandler(
-  SubscribeUnsubscribeHandler handler) {
-  _unsubscribeHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setClientAdvertiseHandler(ClientAdvertiseHandler handler) {
-  _clientAdvertiseHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setClientUnadvertiseHandler(
-  ClientUnadvertiseHandler handler) {
-  _clientUnadvertiseHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setClientMessageHandler(ClientMessageHandler handler) {
-  _clientMessageHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setParameterRequestHandler(
-  ParameterRequestHandler handler) {
-  _parameterRequestHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setParameterChangeHandler(ParameterChangeHandler handler) {
-  _parameterChangeHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setParameterSubscriptionHandler(
-  ParameterSubscriptionHandler handler) {
-  _parameterSubscriptionHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setServiceRequestHandler(ServiceRequestHandler handler) {
-  _serviceRequestHandler = std::move(handler);
+inline void Server<ServerConfiguration>::setHandlers(ServerHandlers&& handlers) {
+  _handlers = handlers;
 }
 
 template <typename ServerConfiguration>
@@ -741,8 +677,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
           continue;
         }
         clientInfo.subscriptionsByChannel.emplace(channelId, subId);
-        if (_subscribeHandler) {
-          _subscribeHandler(channelId, hdl);
+        if (_handlers.subscribeHandler) {
+          _handlers.subscribeHandler(channelId, hdl);
         }
       }
     } break;
@@ -758,8 +694,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         }
         ChannelId chanId = sub->first;
         clientInfo.subscriptionsByChannel.erase(sub);
-        if (_unsubscribeHandler) {
-          _unsubscribeHandler(chanId, hdl);
+        if (_handlers.unsubscribeHandler) {
+          _handlers.unsubscribeHandler(chanId, hdl);
         }
       }
     } break;
@@ -784,8 +720,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         advertisement.schemaName = chan.at("schemaName").get<std::string>();
         clientPublications.emplace(channelId, advertisement);
         clientInfo.advertisedChannels.emplace(channelId);
-        if (_clientAdvertiseHandler) {
-          _clientAdvertiseHandler(advertisement, hdl);
+        if (_handlers.clientAdvertiseHandler) {
+          _handlers.clientAdvertiseHandler(advertisement, hdl);
         }
       }
     } break;
@@ -811,8 +747,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
           clientInfo.advertisedChannels.erase(advertisedChannelIt);
         }
 
-        if (_clientUnadvertiseHandler) {
-          _clientUnadvertiseHandler(channelId, hdl);
+        if (_handlers.clientUnadvertiseHandler) {
+          _handlers.clientUnadvertiseHandler(channelId, hdl);
         }
       }
     } break;
@@ -822,7 +758,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
                                                 "' not supported as server capability '" +
                                                 CAPABILITY_PARAMETERS + "' is missing");
         return;
-      } else if (!_parameterRequestHandler) {
+      } else if (!_handlers.parameterRequestHandler) {
         return;
       }
 
@@ -830,7 +766,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       const auto requestId = payload.find("id") == payload.end()
                                ? std::nullopt
                                : std::optional<std::string>(payload["id"].get<std::string>());
-      _parameterRequestHandler(paramNames, requestId, hdl);
+      _handlers.parameterRequestHandler(paramNames, requestId, hdl);
     } break;
     case SET_PARAMETERS: {
       if (!hasCapability(CAPABILITY_PARAMETERS)) {
@@ -838,7 +774,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
                                                 "' not supported as server capability '" +
                                                 CAPABILITY_PARAMETERS + "' is missing");
         return;
-      } else if (!_parameterChangeHandler) {
+      } else if (!_handlers.parameterChangeHandler) {
         return;
       }
 
@@ -846,7 +782,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       const auto requestId = payload.find("id") == payload.end()
                                ? std::nullopt
                                : std::optional<std::string>(payload["id"].get<std::string>());
-      _parameterChangeHandler(parameters, requestId, hdl);
+      _handlers.parameterChangeHandler(parameters, requestId, hdl);
     } break;
     case SUBSCRIBE_PARAMETER_UPDATES: {
       if (!hasCapability(CAPABILITY_PARAMETERS_SUBSCRIBE)) {
@@ -854,7 +790,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
                                                 "' not supported as server capability '" +
                                                 CAPABILITY_PARAMETERS_SUBSCRIBE + " is missing'");
         return;
-      } else if (!_parameterSubscriptionHandler) {
+      } else if (!_handlers.parameterSubscriptionHandler) {
         return;
       }
 
@@ -874,8 +810,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
 
       if (!paramsToSubscribe.empty()) {
-        _parameterSubscriptionHandler(paramsToSubscribe, ParameterSubscriptionOperation::SUBSCRIBE,
-                                      hdl);
+        _handlers.parameterSubscriptionHandler(paramsToSubscribe,
+                                               ParameterSubscriptionOperation::SUBSCRIBE, hdl);
       }
     } break;
     case UNSUBSCRIBE_PARAMETER_UPDATES: {
@@ -884,7 +820,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
                                                 "' not supported as server capability '" +
                                                 CAPABILITY_PARAMETERS_SUBSCRIBE + " is missing'");
         return;
-      } else if (!_parameterSubscriptionHandler) {
+      } else if (!_handlers.parameterSubscriptionHandler) {
         return;
       }
 
@@ -941,7 +877,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
         return;
       }
 
-      if (_clientMessageHandler) {
+      if (_handlers.clientMessageHandler) {
         const auto& advertisement = channelIt->second;
         const uint32_t sequence = 0;
         const ClientMessage clientMessage{static_cast<uint64_t>(timestamp),
@@ -950,7 +886,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
                                           advertisement,
                                           length,
                                           msg};
-        _clientMessageHandler(clientMessage, hdl);
+        _handlers.clientMessageHandler(clientMessage, hdl);
       }
     } break;
     case ClientBinaryOpcode::SERVICE_CALL_REQUEST: {
@@ -972,8 +908,8 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
         }
       }
 
-      if (_serviceRequestHandler) {
-        _serviceRequestHandler(request, hdl);
+      if (_handlers.serviceRequestHandler) {
+        _handlers.serviceRequestHandler(request, hdl);
       }
     } break;
     default: {
@@ -1227,12 +1163,12 @@ inline void Server<ServerConfiguration>::unsubscribeParamsWithoutSubscriptions(
                  });
   }
 
-  if (_parameterSubscriptionHandler && !paramsToUnsubscribe.empty()) {
+  if (_handlers.parameterSubscriptionHandler && !paramsToUnsubscribe.empty()) {
     for (const auto& param : paramsToUnsubscribe) {
       _server.get_alog().write(APP, "Unsubscribing from parameter '" + param + "'.");
     }
-    _parameterSubscriptionHandler(paramsToUnsubscribe, ParameterSubscriptionOperation::UNSUBSCRIBE,
-                                  hdl);
+    _handlers.parameterSubscriptionHandler(paramsToUnsubscribe,
+                                           ParameterSubscriptionOperation::UNSUBSCRIBE, hdl);
   }
 }
 
