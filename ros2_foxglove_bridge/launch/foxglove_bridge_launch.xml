@@ -5,8 +5,11 @@
   <arg name="certfile"                  default="" />
   <arg name="keyfile"                   default="" />
   <arg name="topic_whitelist"           default="'.*'" />
+  <arg name="param_whitelist"           default="'.*'" />
+  <arg name="service_whitelist"         default="'.*'" />
   <arg name="max_qos_depth"             default="10" />
   <arg name="num_threads"               default="0" />
+  <arg name="send_buffer_limit"         default="10000000" />
   <arg name="use_sim_time"              default="false" />
 
   <node pkg="foxglove_bridge" exec="foxglove_bridge">
@@ -16,8 +19,11 @@
     <param name="certfile"              value="$(var certfile)" />
     <param name="keyfile"               value="$(var keyfile)" />
     <param name="topic_whitelist"       value="$(var topic_whitelist)"      value-sep="," />
+    <param name="service_whitelist"     value="$(var service_whitelist)"    value-sep="," />
+    <param name="param_whitelist"       value="$(var param_whitelist)"      value-sep="," />
     <param name="max_qos_depth"         value="$(var max_qos_depth)" />
     <param name="num_threads"           value="$(var num_threads)" />
+    <param name="send_buffer_limit"     value="$(var send_buffer_limit)" />
     <param name="use_sim_time"          value="$(var use_sim_time)" />
   </node>
 </launch>
