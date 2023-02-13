@@ -1,6 +1,7 @@
 #pragma once
 
 #include <websocketpp/config/asio.hpp>
+#include <websocketpp/extensions/permessage_deflate/enabled.hpp>
 
 #include "./websocket_logging.hpp"
 
@@ -34,6 +35,11 @@ struct WebSocketTls : public websocketpp::config::core {
   };
 
   typedef websocketpp::transport::asio::endpoint<transport_config> transport_type;
+
+  struct permessage_deflate_config {};
+
+  typedef websocketpp::extensions::permessage_deflate::enabled<permessage_deflate_config>
+    permessage_deflate_type;
 };
 
 }  // namespace foxglove

@@ -20,6 +20,7 @@ find_package(nlohmann_json QUIET)
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 find_package(websocketpp REQUIRED)
+find_package(ZLIB REQUIRED)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)
@@ -76,6 +77,7 @@ target_include_directories(foxglove_bridge_base
 target_link_libraries(foxglove_bridge_base
   OpenSSL::Crypto
   OpenSSL::SSL
+  ZLIB::ZLIB
   ${CMAKE_THREAD_LIBS_INIT}
 )
 if(nlohmann_json_FOUND)

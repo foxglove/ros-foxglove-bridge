@@ -52,6 +52,7 @@ public:
     _serviceWhitelistPatterns = parseRegexStrings(this, serviceWhiteList);
     const auto paramWhiteList = this->get_parameter(PARAM_PARAMETER_WHITELIST).as_string_array();
     const auto paramWhitelistPatterns = parseRegexStrings(this, paramWhiteList);
+    const auto useCompression = this->get_parameter(PARAM_USE_COMPRESSION).as_bool();
     _useSimTime = this->get_parameter("use_sim_time").as_bool();
 
     _paramInterface = std::make_shared<ParameterInterface>(this, paramWhitelistPatterns);
@@ -71,6 +72,7 @@ public:
     serverOptions.metadata = {{"ROS_DISTRO", std::getenv("ROS_DISTRO")}};
     serverOptions.sendBufferLimitBytes = send_buffer_limit;
     serverOptions.sessionId = std::to_string(std::time(nullptr));
+    serverOptions.useCompression = useCompression;
 
     if (useTLS) {
       serverOptions.certfile = certfile;
