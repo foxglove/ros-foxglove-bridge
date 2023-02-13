@@ -52,6 +52,7 @@ public:
     const auto certfile = nhp.param<std::string>("certfile", "");
     const auto keyfile = nhp.param<std::string>("keyfile", "");
     _maxUpdateMs = static_cast<size_t>(nhp.param<int>("max_update_ms", DEFAULT_MAX_UPDATE_MS));
+    const auto useCompression = nhp.param<bool>("use_compression", false);
     _useSimTime = nhp.param<bool>("/use_sim_time", false);
     const auto sessionId = nhp.param<std::string>("/run_id", std::to_string(std::time(nullptr)));
 
@@ -91,6 +92,7 @@ public:
       serverOptions.metadata = {{"ROS_DISTRO", std::getenv("ROS_DISTRO")}};
       serverOptions.sendBufferLimitBytes = send_buffer_limit;
       serverOptions.sessionId = sessionId;
+      serverOptions.useCompression = useCompression;
 
       const auto logHandler =
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);
