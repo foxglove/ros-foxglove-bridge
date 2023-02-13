@@ -30,13 +30,33 @@ To run the bridge node, it is recommended to use the provided launch file:
 **ROS 1**
 
 ```bash
-$ roslaunch foxglove_bridge foxglove_bridge.launch --screen
+$ roslaunch --screen foxglove_bridge foxglove_bridge.launch port:=8765
+```
+
+```xml
+<launch>
+  <!-- Including in another launch file -->
+  <include file="$(find foxglove_bridge)/launch/foxglove_bridge.launch">
+    <arg name="port" value="8765" />
+    <!-- ... other arguments ... -->
+  </include>
+</launch>
 ```
 
 **ROS 2**
 
 ```bash
-$ ros2 launch foxglove_bridge foxglove_bridge_launch.xml
+$ ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
+```
+
+```xml
+<launch>
+  <!-- Including in another launch file -->
+  <include file="$(find-pkg-share foxglove_bridge)/launch/foxglove_bridge_launch.xml"/>
+    <arg name="port" value="8765"/>
+    <!-- ... other arguments ... -->
+  </include>
+</launch>
 ```
 
 ### Configuration
