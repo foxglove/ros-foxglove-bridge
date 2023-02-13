@@ -84,7 +84,7 @@ Parameters are provided to configure the behavior of the bridge. These parameter
 
 ### Building from source
 
-You can also try `foxglove_bridge` by building from source or running a pre-built Docker container.
+You can also try `foxglove_bridge` by building from source.
 
 #### Fetch source and install dependencies
 
@@ -107,20 +107,6 @@ rosrun foxglove_bridge foxglove_bridge
 colcon build
 source install/local_setup.bash
 ros2 run foxglove_bridge foxglove_bridge
-```
-
-### Docker
-
-#### ROS 1
-
-```bash
-docker run --rm -it -v /opt/ros:/opt/ros --net=host ghcr.io/foxglove/noetic-ros1-bridge
-```
-
-#### ROS 2
-
-```bash
-docker run --rm -it -v /opt/ros:/opt/ros --net=host ghcr.io/foxglove/humble-ros2-bridge
 ```
 
 ## Clients
