@@ -39,7 +39,7 @@ static rclcpp::Parameter toRosParam(const foxglove::Parameter& p) {
   } else if (paramType == ParameterType::PARAMETER_STRING_ARRAY) {
     return rclcpp::Parameter(p.getName(), p.getValue<std::vector<std::string>>());
   } else if (paramType == ParameterType::PARAMETER_NOT_SET) {
-    throw std::runtime_error("Unintialized parameter");
+    return rclcpp::Parameter(p.getName());
   }
 
   return rclcpp::Parameter();
@@ -49,7 +49,7 @@ static foxglove::Parameter fromRosParam(const rclcpp::Parameter& p) {
   const auto type = p.get_type();
 
   if (type == rclcpp::ParameterType::PARAMETER_NOT_SET) {
-    return foxglove::Parameter();
+    return foxglove::Parameter(p.get_name());
   } else if (type == rclcpp::ParameterType::PARAMETER_BOOL) {
     return foxglove::Parameter(p.get_name(), p.as_bool());
   } else if (type == rclcpp::ParameterType::PARAMETER_INTEGER) {
@@ -286,6 +286,24 @@ void ParameterInterface::setNodeParameters(rclcpp::AsyncParametersClient::Shared
   }
 
   auto future = paramClient->set_parameters(params);
+
+  std::vector<std::string> paramsToDelete;
+  for (const auto& p : params) {
+    if (p.get_type() == rclcpp::ParameterType::PARAMETER_NOT_SET) {
+      paramsToDelete.push_back(p.get_name());
+    }
+  }
+
+  if (!paramsToDelete.empty()) {
+    auto deleteFuture = paramClient->delete_parameters(paramsToDelete);
+    if (std::future_status::ready != deleteFuture.wait_for(timeout)) {
+      RCLCPP_WARN(
+        _node->get_logger(),
+        "Param client failed to delete %zu parameter(s) for node '%s' within the given timeout",
+        paramsToDelete.size(), nodeName.c_str());
+    }
+  }
+
   if (std::future_status::ready != future.wait_for(timeout)) {
     throw std::runtime_error("Param client failed to set " + std::to_string(params.size()) +
                              " parameter(s) for node '" + nodeName + "' within the given timeout");

@@ -7,6 +7,11 @@ Parameter::Parameter()
     , _type(ParameterType::PARAMETER_NOT_SET)
     , _value() {}
 
+Parameter::Parameter(const std::string& name)
+    : _name(name)
+    , _type(ParameterType::PARAMETER_NOT_SET)
+    , _value() {}
+
 Parameter::Parameter(const std::string& name, bool value)
     : _name(name)
     , _type(ParameterType::PARAMETER_BOOL)
