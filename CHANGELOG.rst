@@ -2,6 +2,33 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.4.0 (2023-02-15)
+------------------
+* Update README with suggestion to build from source, minor fixes
+* Do not build docker images, remove corresponding documentation (`#159 <https://github.com/foxglove/ros-foxglove-bridge/issues/159>`_)
+* Add option to use permessage-deflate compression (`#152 <https://github.com/foxglove/ros-foxglove-bridge/issues/152>`_)
+* Improve launch file documentation, add missing launch file arguments (`#158 <https://github.com/foxglove/ros-foxglove-bridge/issues/158>`_)
+* Allow unsetting (deleting) parameters (`#145 <https://github.com/foxglove/ros-foxglove-bridge/issues/145>`_)
+* Improve mutex usage (`#154 <https://github.com/foxglove/ros-foxglove-bridge/issues/154>`_)
+* Add sessionId to serverInfo (`#153 <https://github.com/foxglove/ros-foxglove-bridge/issues/153>`_)
+* Performance improvements (`#151 <https://github.com/foxglove/ros-foxglove-bridge/issues/151>`_)
+* Add ROS2 support for calling server-advertised services (`#142 <https://github.com/foxglove/ros-foxglove-bridge/issues/142>`_)
+* Add ROS1 support for calling server-advertised services (`#136 <https://github.com/foxglove/ros-foxglove-bridge/issues/136>`_)
+* ROS2 smoke test: Increase default timeout 8->10 seconds (`#143 <https://github.com/foxglove/ros-foxglove-bridge/issues/143>`_)
+* Fix flaky parameter test (noetic) (`#141 <https://github.com/foxglove/ros-foxglove-bridge/issues/141>`_)
+* Always --pull when building docker images in the makefile (`#140 <https://github.com/foxglove/ros-foxglove-bridge/issues/140>`_)
+* Fix failed tests not causing CI to fail (`#138 <https://github.com/foxglove/ros-foxglove-bridge/issues/138>`_)
+* Fix setting `int` / `int[]` parameters not working (ROS 1) (`#135 <https://github.com/foxglove/ros-foxglove-bridge/issues/135>`_)
+* Send ROS_DISTRO to clients via metadata field (`#134 <https://github.com/foxglove/ros-foxglove-bridge/issues/134>`_)
+* Communicate supported encodings for client-side publishing (`#131 <https://github.com/foxglove/ros-foxglove-bridge/issues/131>`_)
+* Fix client advertised channels not being updated on unadvertise (`#132 <https://github.com/foxglove/ros-foxglove-bridge/issues/132>`_)
+* Add support for optional request id for `setParameter` operation (`#133 <https://github.com/foxglove/ros-foxglove-bridge/issues/133>`_)
+* Fix exception when setting parameter to empty array (`#130 <https://github.com/foxglove/ros-foxglove-bridge/issues/130>`_)
+* Fix wrong parameter field names being used (`#129 <https://github.com/foxglove/ros-foxglove-bridge/issues/129>`_)
+* Add parameter support (`#112 <https://github.com/foxglove/ros-foxglove-bridge/issues/112>`_)
+* Add throttled logging when send buffer is full (`#128 <https://github.com/foxglove/ros-foxglove-bridge/issues/128>`_)
+* Contributors: Hans-Joachim Krauch, John Hurliman
+
 0.3.0 (2023-01-04)
 ------------------
 * Add launch files, add install instructions to README (`#125 <https://github.com/foxglove/ros-foxglove-bridge/issues/125>`_)
