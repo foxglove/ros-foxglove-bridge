@@ -84,7 +84,7 @@ Parameters are provided to configure the behavior of the bridge. These parameter
 ### Fetch source and install dependencies
 
 ```bash
-mkdir -p workspace/src
+cd <path/to/your/ros_ws>
 git clone https://github.com/foxglove/ros-foxglove-bridge.git src/ros-foxglove-bridge
 rosdep update
 rosdep install --ignore-src --default-yes --from-path src
