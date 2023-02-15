@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.4.0 (2023-02-15)
+------------------
 * Update README with suggestion to build from source, minor fixes
 * Do not build docker images, remove corresponding documentation (`#159 <https://github.com/foxglove/ros-foxglove-bridge/issues/159>`_)
 * Add option to use permessage-deflate compression (`#152 <https://github.com/foxglove/ros-foxglove-bridge/issues/152>`_)
