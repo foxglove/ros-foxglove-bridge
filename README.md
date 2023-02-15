@@ -17,6 +17,8 @@ The `foxglove_bridge` uses the [Foxglove WebSocket protocol](https://github.com/
 
 ## Installation
 
+**Note**: This project is under active development and binary releases of `foxglove_bridge` might be quite outdated. For the latest features and bug fixes, consider [building foxglove_bridge from source](#building-from-source).
+
 The `foxglove_bridge` package is available for ROS 1 Melodic and Noetic, and ROS 2 Humble and Rolling. Earlier releases of ROS will not be supported due to API design and/or performance limitations. The package can be installed with the following command:
 
 ```bash
@@ -77,36 +79,29 @@ Parameters are provided to configure the behavior of the bridge. These parameter
  * (ROS 2) __num_threads__: The number of threads to use for the ROS node executor. This controls the number of subscriptions that can be processed in parallel. 0 means one thread per CPU core. Defaults to `0`.
  * (ROS 2) __max_qos_depth__: Maximum depth used for the QoS profile of subscriptions. Defaults to `10`.
 
+## Building from source
 
-## Clients
-
-[Foxglove Studio](https://foxglove.dev/studio) connects to `foxglove_bridge` for live robotics visualization.
-
-### Building from source
-
-You can also try `foxglove_bridge` by building from source.
-
-#### Fetch source and install dependencies
+### Fetch source and install dependencies
 
 ```bash
 cd <path/to/your/ros_ws>
 git clone https://github.com/foxglove/ros-foxglove-bridge.git src/ros-foxglove-bridge
 rosdep update
-rosdep install -i --from-path src -y
+rosdep install --ignore-src --default-yes --from-path src
 ```
 
-#### ROS 1
+### ROS 1
 ```
 catkin_make
 source install/local_setup.bash
-rosrun foxglove_bridge foxglove_bridge
+roslaunch --screen foxglove_bridge foxglove_bridge.launch
 ```
 
-#### ROS 2
+### ROS 2
 ```
-colcon build
+colcon build --event-handlers console_direct+ --symlink-install
 source install/local_setup.bash
-ros2 run foxglove_bridge foxglove_bridge
+ros2 launch foxglove_bridge foxglove_bridge_launch.xml
 ```
 
 ## Clients
