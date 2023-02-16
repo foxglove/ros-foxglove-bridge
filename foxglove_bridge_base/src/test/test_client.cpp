@@ -87,7 +87,6 @@ std::future<ServiceResponse> waitForServiceResponse(std::shared_ptr<ClientInterf
         return;
       }
 
-      std::cerr << "Received a response of size " << std::to_string(dataLength) << std::endl;
       foxglove::ServiceResponse response;
       response.read(data + 1, dataLength - 1);
       promise->set_value(response);
