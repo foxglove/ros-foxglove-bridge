@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstring>
 #include <stdint.h>
 #include <string>
 #include <vector>
@@ -74,26 +75,28 @@ struct ClientMessage {
   uint64_t logTime;
   uint64_t publishTime;
   uint32_t sequence;
-  const ClientAdvertisement& advertisement;
+  ClientAdvertisement advertisement;
   size_t dataLength;
-  const uint8_t* data;
+  std::vector<uint8_t> data;
 
   ClientMessage(uint64_t logTime, uint64_t publishTime, uint32_t sequence,
-                const ClientAdvertisement& advertisement, size_t dataLength, const uint8_t* data)
+                const ClientAdvertisement& advertisement, size_t dataLength, const uint8_t* rawData)
       : logTime(logTime)
       , publishTime(publishTime)
       , sequence(sequence)
       , advertisement(advertisement)
       , dataLength(dataLength)
-      , data(data) {}
+      , data(dataLength) {
+    std::memcpy(data.data(), rawData, dataLength);
+  }
 
   static const size_t MSG_PAYLOAD_OFFSET = 5;
 
   const uint8_t* getData() const {
-    return data + MSG_PAYLOAD_OFFSET;
+    return data.data() + MSG_PAYLOAD_OFFSET;
   }
   std::size_t getLength() const {
-    return dataLength - MSG_PAYLOAD_OFFSET;
+    return data.size() - MSG_PAYLOAD_OFFSET;
   }
 };
 

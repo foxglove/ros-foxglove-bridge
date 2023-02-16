@@ -8,6 +8,7 @@
 
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.h>
+#include <ros/callback_queue.h>
 #include <ros/message_event.h>
 #include <ros/ros.h>
 #include <ros/xmlrpc_manager.h>
@@ -22,6 +23,20 @@
 #include <foxglove_bridge/server_factory.hpp>
 #include <foxglove_bridge/service_utils.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
+
+class GenericCallback : public ros::CallbackInterface {
+public:
+  explicit GenericCallback(std::function<void(void)> fn)
+      : _fn(fn) {}
+
+  ros::CallbackInterface::CallResult call() override {
+    _fn();
+    return ros::CallbackInterface::CallResult::Success;
+  }
+
+private:
+  std::function<void(void)> _fn;
+};
 
 namespace foxglove_bridge {
 
@@ -103,7 +118,6 @@ public:
 
       _server = foxglove::ServerFactory::createServer<ConnectionHandle>("foxglove_bridge",
                                                                         logHandler, serverOptions);
-
       foxglove::ServerHandlers<ConnectionHandle> hdlrs;
       hdlrs.subscribeHandler = std::bind(&FoxgloveBridge::subscribeHandler, this,
                                          std::placeholders::_1, std::placeholders::_2);
@@ -127,6 +141,10 @@ public:
       hdlrs.serviceRequestHandler = std::bind(&FoxgloveBridge::serviceRequestHandler, this,
                                               std::placeholders::_1, std::placeholders::_2);
       _server->setHandlers(std::move(hdlrs));
+
+      _handlerCallbackQueue = std::make_unique<ros::CallbackQueue>();
+      _handlerSpinner = std::make_unique<ros::AsyncSpinner>(1, _handlerCallbackQueue.get());
+      _handlerSpinner->start();
 
       _server->start(address, static_cast<uint16_t>(port));
 
@@ -163,7 +181,56 @@ private:
     }
   };
 
-  void subscribeHandler(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
+  void subscribeHandler(foxglove::ChannelId channelId, ConnectionHandle hdl) {
+    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
+      std::bind(&FoxgloveBridge::subscribe, this, channelId, hdl)));
+  }
+
+  void unsubscribeHandler(foxglove::ChannelId channelId, ConnectionHandle hdl) {
+    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
+      std::bind(&FoxgloveBridge::unsubscribe, this, channelId, hdl)));
+  }
+
+  void clientAdvertiseHandler(const foxglove::ClientAdvertisement& channel, ConnectionHandle hdl) {
+    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
+      std::bind(&FoxgloveBridge::clientAdvertise, this, channel, hdl)));
+  }
+
+  void clientUnadvertiseHandler(foxglove::ClientChannelId channelId, ConnectionHandle hdl) {
+    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
+      std::bind(&FoxgloveBridge::clientUnadvertise, this, channelId, hdl)));
+  }
+
+  void clientMessageHandler(const foxglove::ClientMessage& clientMsg, ConnectionHandle hdl) {
+    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
+      std::bind(&FoxgloveBridge::clientMessage, this, clientMsg, hdl)));
+  }
+
+  void parameterRequestHandler(const std::vector<std::string>& parameters,
+                               const std::optional<std::string>& requestId, ConnectionHandle hdl) {
+    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
+      std::bind(&FoxgloveBridge::getParameters, this, parameters, requestId, hdl)));
+  }
+
+  void parameterChangeHandler(const std::vector<foxglove::Parameter>& parameters,
+                              const std::optional<std::string>& requestId, ConnectionHandle hdl) {
+    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
+      std::bind(&FoxgloveBridge::setParameters, this, parameters, requestId, hdl)));
+  }
+
+  void parameterSubscriptionHandler(const std::vector<std::string>& parameters,
+                                    foxglove::ParameterSubscriptionOperation op,
+                                    ConnectionHandle hdl) {
+    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
+      std::bind(&FoxgloveBridge::subscribeParameters, this, parameters, op, hdl)));
+  }
+
+  void serviceRequestHandler(const foxglove::ServiceRequest& request, ConnectionHandle hdl) {
+    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
+      std::bind(&FoxgloveBridge::serviceRequest, this, request, hdl)));
+  }
+
+  void subscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
     auto it = _channelToTopicAndDatatype.find(channelId);
@@ -213,7 +280,7 @@ private:
     }
   }
 
-  void unsubscribeHandler(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
+  void unsubscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
     auto it = _channelToTopicAndDatatype.find(channelId);
@@ -255,8 +322,8 @@ private:
     }
   }
 
-  void clientAdvertiseHandler(const foxglove::ClientAdvertisement& channel,
-                              ConnectionHandle clientHandle) {
+  void clientAdvertise(const foxglove::ClientAdvertisement& channel,
+                       ConnectionHandle clientHandle) {
     if (channel.encoding != ROS1_CHANNEL_ENCODING) {
       ROS_ERROR("Unsupported encoding. Only '%s' encoding is supported at the moment.",
                 ROS1_CHANNEL_ENCODING);
@@ -306,8 +373,7 @@ private:
     }
   }
 
-  void clientUnadvertiseHandler(foxglove::ClientChannelId channelId,
-                                ConnectionHandle clientHandle) {
+  void clientUnadvertise(foxglove::ClientChannelId channelId, ConnectionHandle clientHandle) {
     std::unique_lock<std::shared_mutex> lock(_publicationsMutex);
 
     auto clientPublicationsIt = _clientAdvertisedTopics.find(clientHandle);
@@ -341,8 +407,7 @@ private:
     }
   }
 
-  void clientMessageHandler(const foxglove::ClientMessage& clientMsg,
-                            ConnectionHandle clientHandle) {
+  void clientMessage(const foxglove::ClientMessage& clientMsg, ConnectionHandle clientHandle) {
     ros_babel_fish::BabelFishMessage::Ptr msg(new ros_babel_fish::BabelFishMessage);
     msg->read(clientMsg);
 
@@ -571,8 +636,8 @@ private:
     }
   }
 
-  void parameterRequestHandler(const std::vector<std::string>& parameters,
-                               const std::optional<std::string>& requestId, ConnectionHandle hdl) {
+  void getParameters(const std::vector<std::string>& parameters,
+                     const std::optional<std::string>& requestId, ConnectionHandle hdl) {
     std::vector<std::string> parameterNames = parameters;
     if (parameterNames.empty()) {
       getMTNodeHandle().getParamNames(parameterNames);
@@ -597,8 +662,8 @@ private:
     _server->publishParameterValues(hdl, params, requestId);
   }
 
-  void parameterChangeHandler(const std::vector<foxglove::Parameter>& parameters,
-                              const std::optional<std::string>& requestId, ConnectionHandle hdl) {
+  void setParameters(const std::vector<foxglove::Parameter>& parameters,
+                     const std::optional<std::string>& requestId, ConnectionHandle hdl) {
     using foxglove::ParameterType;
     auto nh = this->getMTNodeHandle();
     for (const auto& param : parameters) {
@@ -638,12 +703,12 @@ private:
       for (size_t i = 0; i < parameters.size(); ++i) {
         parameterNames[i] = parameters[i].getName();
       }
-      parameterRequestHandler(parameterNames, requestId, hdl);
+      getParameters(parameterNames, requestId, hdl);
     }
   }
 
-  void parameterSubscriptionHandler(const std::vector<std::string>& parameters,
-                                    foxglove::ParameterSubscriptionOperation op, ConnectionHandle) {
+  void subscribeParameters(const std::vector<std::string>& parameters,
+                           foxglove::ParameterSubscriptionOperation op, ConnectionHandle) {
     for (const auto& paramName : parameters) {
       if (!isWhitelisted(paramName, _paramWhitelistPatterns)) {
         ROS_WARN("Parameter '%s' is not whitelisted", paramName.c_str());
@@ -716,8 +781,7 @@ private:
     _server->sendMessage(clientHandle, channel.id, receiptTimeNs, msg->buffer(), msg->size());
   }
 
-  void serviceRequestHandler(const foxglove::ServiceRequest& request,
-                             ConnectionHandle clientHandle) {
+  void serviceRequest(const foxglove::ServiceRequest& request, ConnectionHandle clientHandle) {
     std::shared_lock<std::shared_mutex> lock(_servicesMutex);
     const auto serviceIt = _advertisedServices.find(request.serviceId);
     if (serviceIt == _advertisedServices.end()) {
@@ -759,6 +823,8 @@ private:
   }
 
   std::unique_ptr<foxglove::ServerInterface<ConnectionHandle>> _server;
+  std::unique_ptr<ros::CallbackQueue> _handlerCallbackQueue;
+  std::unique_ptr<ros::AsyncSpinner> _handlerSpinner;
   ros_babel_fish::IntegratedDescriptionProvider _rosTypeInfoProvider;
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _paramWhitelistPatterns;
