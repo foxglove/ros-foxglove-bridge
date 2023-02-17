@@ -43,10 +43,13 @@ using rosidl_typesupport_introspection_cpp::MessageMembers;
 using rosidl_typesupport_introspection_cpp::ServiceMembers;
 
 std::shared_ptr<void> allocate_message(const MessageMembers* members) {
-  uint8_t* buf = static_cast<uint8_t*>(malloc(members->size_of_));
-  memset(buf, 0, members->size_of_);
-  members->init_function(buf, rosidl_runtime_cpp::MessageInitialization::ALL);
-  return std::shared_ptr<void>(buf);
+  void* buffer = malloc(members->size_of_);
+  if (buffer == nullptr) {
+    throw std::runtime_error("Failed to allocate memory");
+  }
+  memset(buffer, 0, members->size_of_);
+  members->init_function(buffer, rosidl_runtime_cpp::MessageInitialization::ALL);
+  return std::shared_ptr<void>(buffer, free);
 }
 
 std::string getTypeIntrospectionSymbolName(const std::string& serviceType) {
