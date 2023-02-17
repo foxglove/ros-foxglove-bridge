@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.4.1 (2023-02-17)
+------------------
 * Run client handler functions in separate thread (`#165 <https://github.com/foxglove/ros-foxglove-bridge/issues/165>`_)
 * Fix compilation error due to mismatched new-delete (`#163 <https://github.com/foxglove/ros-foxglove-bridge/issues/163>`_)
 * Decouple server implementation (`#156 <https://github.com/foxglove/ros-foxglove-bridge/issues/156>`_)
