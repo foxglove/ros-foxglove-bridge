@@ -574,20 +574,25 @@ private:
       return;
     }
 
-    // Create a new topic advertisement
-    const auto& topicName = advertisement.topic;
-    const auto& topicType = advertisement.schemaName;
-    rclcpp::QoS qos{rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default)};
-    rclcpp::PublisherOptions publisherOptions{};
-    publisherOptions.callback_group = _clientPublishCallbackGroup;
-    auto publisher = this->create_generic_publisher(topicName, topicType, qos, publisherOptions);
+    try {
+      // Create a new topic advertisement
+      const auto& topicName = advertisement.topic;
+      const auto& topicType = advertisement.schemaName;
+      rclcpp::QoS qos{rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default)};
+      rclcpp::PublisherOptions publisherOptions{};
+      publisherOptions.callback_group = _clientPublishCallbackGroup;
+      auto publisher = this->create_generic_publisher(topicName, topicType, qos, publisherOptions);
 
-    RCLCPP_INFO(this->get_logger(), "Client %s is advertising \"%s\" (%s) on channel %d",
-                _server->remoteEndpointString(hdl).c_str(), topicName.c_str(), topicType.c_str(),
-                advertisement.channelId);
+      RCLCPP_INFO(this->get_logger(), "Client %s is advertising \"%s\" (%s) on channel %d",
+                  _server->remoteEndpointString(hdl).c_str(), topicName.c_str(), topicType.c_str(),
+                  advertisement.channelId);
 
-    // Store the new topic advertisement
-    clientPublications.emplace(advertisement.channelId, std::move(publisher));
+      // Store the new topic advertisement
+      clientPublications.emplace(advertisement.channelId, std::move(publisher));
+    } catch (const std::exception& ex) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to create publisher: %s", ex.what());
+      return;
+    }
   }
 
   void clientUnadvertiseHandler(foxglove::ChannelId channelId, foxglove::ConnHandle hdl) {
