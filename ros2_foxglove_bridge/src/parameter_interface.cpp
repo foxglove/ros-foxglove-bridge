@@ -6,6 +6,14 @@ namespace {
 
 constexpr char PARAM_SEP = '.';
 
+static std::pair<std::string, std::string> getNodeAndNodeNamespace(const std::string& fqnNodeName) {
+  const std::size_t found = fqnNodeName.find_last_of("/");
+  if (found == std::string::npos) {
+    throw std::runtime_error("Invalid fully qualified node name: " + fqnNodeName);
+  }
+  return std::make_pair(fqnNodeName.substr(0, found), fqnNodeName.substr(found + 1));
+}
+
 static std::pair<std::string, std::string> getNodeAndParamName(
   const std::string& nodeNameAndParamName) {
   return {nodeNameAndParamName.substr(0UL, nodeNameAndParamName.find(PARAM_SEP)),
@@ -86,6 +94,7 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
   std::lock_guard<std::mutex> lock(_mutex);
 
   std::unordered_map<std::string, std::vector<std::string>> paramNamesByNodeName;
+  const auto thisNode = _node->get_fully_qualified_name();
 
   if (!paramNames.empty()) {
     // Break apart fully qualified {node_name}.{param_name} strings and build a
@@ -99,19 +108,44 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
                 paramNamesByNodeName.size());
   } else {
     // Make a map of node names to empty parameter lists
-    for (const auto& nodeName : _node->get_node_names()) {
-      paramNamesByNodeName.insert({nodeName, {}});
+    // Only consider nodes that offer services to list & get parameters.
+    for (const auto& fqnNodeName : _node->get_node_names()) {
+      if (fqnNodeName == thisNode) {
+        continue;
+      }
+      const auto [nodeNs, nodeName] = getNodeAndNodeNamespace(fqnNodeName);
+      const auto serviceNamesAndTypes =
+        _node->get_service_names_and_types_by_node(nodeName, nodeNs);
+
+      bool listParamsSrvFound = false, getParamsSrvFound = false;
+      for (const auto& [serviceName, serviceTypes] : serviceNamesAndTypes) {
+        constexpr char GET_PARAMS_SERVICE_TYPE[] = "rcl_interfaces/srv/GetParameters";
+        constexpr char LIST_PARAMS_SERVICE_TYPE[] = "rcl_interfaces/srv/ListParameters";
+
+        if (!getParamsSrvFound) {
+          getParamsSrvFound = std::find(serviceTypes.begin(), serviceTypes.end(),
+                                        GET_PARAMS_SERVICE_TYPE) != serviceTypes.end();
+        }
+        if (!listParamsSrvFound) {
+          listParamsSrvFound = std::find(serviceTypes.begin(), serviceTypes.end(),
+                                         LIST_PARAMS_SERVICE_TYPE) != serviceTypes.end();
+        }
+      }
+
+      if (listParamsSrvFound && getParamsSrvFound) {
+        paramNamesByNodeName.insert({fqnNodeName, {}});
+      }
     }
 
+    if (!paramNamesByNodeName.empty()) {
     RCLCPP_INFO(_node->get_logger(), "Getting all parameters from %zu nodes...",
                 paramNamesByNodeName.size());
+    }
   }
 
   std::vector<std::future<ParameterList>> getParametersFuture;
   for (const auto& [nodeName, nodeParamNames] : paramNamesByNodeName) {
-    const auto this_name = _node->get_fully_qualified_name();
-
-    if (nodeName == this_name) {
+    if (nodeName == thisNode) {
       continue;
     }
 
