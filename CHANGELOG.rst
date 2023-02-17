@@ -2,6 +2,15 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.4.1 (2023-02-17)
+------------------
+* Run client handler functions in separate thread (`#165 <https://github.com/foxglove/ros-foxglove-bridge/issues/165>`_)
+* Fix compilation error due to mismatched new-delete (`#163 <https://github.com/foxglove/ros-foxglove-bridge/issues/163>`_)
+* Decouple server implementation (`#156 <https://github.com/foxglove/ros-foxglove-bridge/issues/156>`_)
+* ROS2 parameter fixes (`#169 <https://github.com/foxglove/ros-foxglove-bridge/issues/169>`_)
+* Fix program crash due to unhandled exception when creating publisher with invalid topic name (`#168 <https://github.com/foxglove/ros-foxglove-bridge/issues/168>`_)
+* Contributors: Hans-Joachim Krauch
+
 0.4.0 (2023-02-15)
 ------------------
 * Update README with suggestion to build from source, minor fixes
