@@ -19,6 +19,7 @@
 #include "common.hpp"
 #include "parameter.hpp"
 #include "serialization.hpp"
+#include "server_interface.hpp"
 #include "websocket_logging.hpp"
 #include "websocket_notls.hpp"
 #include "websocket_tls.hpp"
@@ -46,8 +47,6 @@ static const websocketpp::log::level APP = websocketpp::log::alevel::app;
 static const websocketpp::log::level WARNING = websocketpp::log::elevel::warn;
 static const websocketpp::log::level RECOVERABLE = websocketpp::log::elevel::rerror;
 
-constexpr size_t DEFAULT_SEND_BUFFER_LIMIT_BYTES = 10000000UL;  // 10 MB
-
 constexpr uint32_t Integer(const std::string_view str) {
   uint32_t result = 0x811C9DC5;  // FNV-1a 32-bit algorithm
   for (char c : str) {
@@ -55,67 +54,6 @@ constexpr uint32_t Integer(const std::string_view str) {
   }
   return result;
 }
-
-struct ChannelWithoutId {
-  std::string topic;
-  std::string encoding;
-  std::string schemaName;
-  std::string schema;
-
-  bool operator==(const ChannelWithoutId& other) const {
-    return topic == other.topic && encoding == other.encoding && schemaName == other.schemaName &&
-           schema == other.schema;
-  }
-};
-
-struct Channel : ChannelWithoutId {
-  ChannelId id;
-
-  explicit Channel(ChannelId id, ChannelWithoutId ch)
-      : ChannelWithoutId(std::move(ch))
-      , id(id) {}
-
-  friend void to_json(json& j, const Channel& channel) {
-    j = {
-      {"id", channel.id},
-      {"topic", channel.topic},
-      {"encoding", channel.encoding},
-      {"schemaName", channel.schemaName},
-      {"schema", channel.schema},
-    };
-  }
-
-  bool operator==(const Channel& other) const {
-    return id == other.id && ChannelWithoutId::operator==(other);
-  }
-};
-
-struct ClientMessage {
-  uint64_t logTime;
-  uint64_t publishTime;
-  uint32_t sequence;
-  const ClientAdvertisement& advertisement;
-  size_t dataLength;
-  const uint8_t* data;
-
-  ClientMessage(uint64_t logTime, uint64_t publishTime, uint32_t sequence,
-                const ClientAdvertisement& advertisement, size_t dataLength, const uint8_t* data)
-      : logTime(logTime)
-      , publishTime(publishTime)
-      , sequence(sequence)
-      , advertisement(advertisement)
-      , dataLength(dataLength)
-      , data(data) {}
-
-  static const size_t MSG_PAYLOAD_OFFSET = 5;
-
-  const uint8_t* getData() const {
-    return data + MSG_PAYLOAD_OFFSET;
-  }
-  std::size_t getLength() const {
-    return dataLength - MSG_PAYLOAD_OFFSET;
-  }
-};
 
 enum class StatusLevel : uint8_t {
   Info = 0,
@@ -136,74 +74,13 @@ constexpr const char* StatusLevelToString(StatusLevel level) {
   }
 }
 
-using Tcp = websocketpp::lib::asio::ip::tcp;
-using SubscribeUnsubscribeHandler = std::function<void(ChannelId, ConnHandle)>;
-using ClientAdvertiseHandler = std::function<void(const ClientAdvertisement&, ConnHandle)>;
-using ClientUnadvertiseHandler = std::function<void(ClientChannelId, ConnHandle)>;
-using ClientMessageHandler = std::function<void(const ClientMessage&, ConnHandle)>;
-using ParameterRequestHandler = std::function<void(const std::vector<std::string>&,
-                                                   const std::optional<std::string>&, ConnHandle)>;
-using ParameterChangeHandler =
-  std::function<void(const std::vector<Parameter>&, const std::optional<std::string>&, ConnHandle)>;
-using ParameterSubscriptionHandler =
-  std::function<void(const std::vector<std::string>&, ParameterSubscriptionOperation, ConnHandle)>;
-using ServiceRequestHandler = std::function<void(const ServiceRequest&, ConnHandle)>;
-
-class ServerInterface {
-public:
-  virtual ~ServerInterface() {}
-  virtual void start(const std::string& host, uint16_t port) = 0;
-  virtual void stop() = 0;
-
-  virtual ChannelId addChannel(ChannelWithoutId channel) = 0;
-  virtual void removeChannel(ChannelId chanId) = 0;
-  virtual void broadcastChannels() = 0;
-  virtual void publishParameterValues(ConnHandle clientHandle,
-                                      const std::vector<Parameter>& parameters,
-                                      const std::optional<std::string>& requestId) = 0;
-  virtual void updateParameterValues(const std::vector<Parameter>& parameters) = 0;
-  virtual std::vector<ServiceId> addServices(const std::vector<ServiceWithoutId>& services) = 0;
-  virtual void removeServices(const std::vector<ServiceId>& serviceIds) = 0;
-
-  virtual void setSubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
-  virtual void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) = 0;
-  virtual void setClientAdvertiseHandler(ClientAdvertiseHandler handler) = 0;
-  virtual void setClientUnadvertiseHandler(ClientUnadvertiseHandler handler) = 0;
-  virtual void setClientMessageHandler(ClientMessageHandler handler) = 0;
-  virtual void setParameterRequestHandler(ParameterRequestHandler handler) = 0;
-  virtual void setParameterChangeHandler(ParameterChangeHandler handler) = 0;
-  virtual void setParameterSubscriptionHandler(ParameterSubscriptionHandler handler) = 0;
-  virtual void setServiceRequestHandler(ServiceRequestHandler handler) = 0;
-
-  virtual void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
-                           const uint8_t* payload, size_t payloadSize) = 0;
-  virtual void broadcastTime(uint64_t timestamp) = 0;
-  virtual void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) = 0;
-
-  virtual std::optional<Tcp::endpoint> localEndpoint() = 0;
-  virtual std::string remoteEndpointString(ConnHandle clientHandle) = 0;
-
-private:
-  virtual void setupTlsHandler() = 0;
-};
-
-struct ServerOptions {
-  std::vector<std::string> capabilities;
-  std::vector<std::string> supportedEncodings;
-  std::unordered_map<std::string, std::string> metadata;
-  size_t sendBufferLimitBytes = DEFAULT_SEND_BUFFER_LIMIT_BYTES;
-  std::string certfile = "";
-  std::string keyfile = "";
-  std::string sessionId;
-  bool useCompression = false;
-};
-
 template <typename ServerConfiguration>
-class Server final : public ServerInterface {
+class Server final : public ServerInterface<ConnHandle> {
 public:
   using ServerType = websocketpp::server<ServerConfiguration>;
   using ConnectionType = websocketpp::connection<ServerConfiguration>;
   using MessagePtr = typename ServerType::message_ptr;
+  using Tcp = websocketpp::lib::asio::ip::tcp;
 
   static bool USES_TLS;
 
@@ -227,22 +104,14 @@ public:
   std::vector<ServiceId> addServices(const std::vector<ServiceWithoutId>& services) override;
   void removeServices(const std::vector<ServiceId>& serviceIds) override;
 
-  void setSubscribeHandler(SubscribeUnsubscribeHandler handler) override;
-  void setUnsubscribeHandler(SubscribeUnsubscribeHandler handler) override;
-  void setClientAdvertiseHandler(ClientAdvertiseHandler handler) override;
-  void setClientUnadvertiseHandler(ClientUnadvertiseHandler handler) override;
-  void setClientMessageHandler(ClientMessageHandler handler) override;
-  void setParameterRequestHandler(ParameterRequestHandler handler) override;
-  void setParameterChangeHandler(ParameterChangeHandler handler) override;
-  void setParameterSubscriptionHandler(ParameterSubscriptionHandler handler) override;
-  void setServiceRequestHandler(ServiceRequestHandler handler) override;
+  void setHandlers(ServerHandlers<ConnHandle>&& handlers) override;
 
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
                    const uint8_t* payload, size_t payloadSize) override;
   void broadcastTime(uint64_t timestamp) override;
   void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) override;
 
-  std::optional<Tcp::endpoint> localEndpoint() override;
+  uint16_t getPort() override;
   std::string remoteEndpointString(ConnHandle clientHandle) override;
 
 private:
@@ -274,22 +143,14 @@ private:
     _clientParamSubscriptions;
   ServiceId _nextServiceId = 0;
   std::unordered_map<ServiceId, ServiceWithoutId> _services;
-  SubscribeUnsubscribeHandler _subscribeHandler;
-  SubscribeUnsubscribeHandler _unsubscribeHandler;
-  ClientAdvertiseHandler _clientAdvertiseHandler;
-  ClientUnadvertiseHandler _clientUnadvertiseHandler;
-  ClientMessageHandler _clientMessageHandler;
-  ParameterRequestHandler _parameterRequestHandler;
-  ParameterChangeHandler _parameterChangeHandler;
-  ParameterSubscriptionHandler _parameterSubscriptionHandler;
-  ServiceRequestHandler _serviceRequestHandler;
+  ServerHandlers<ConnHandle> _handlers;
   std::shared_mutex _clientsMutex;
   std::shared_mutex _channelsMutex;
   std::shared_mutex _clientChannelsMutex;
   std::shared_mutex _servicesMutex;
   std::mutex _clientParamSubscriptionsMutex;
 
-  void setupTlsHandler() override;
+  void setupTlsHandler();
   void socketInit(ConnHandle hdl);
   bool validateConnection(ConnHandle hdl);
   void handleConnectionOpened(ConnHandle hdl);
@@ -440,8 +301,8 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
   for (const auto clientChannelId : oldAdvertisedChannels) {
     _server.get_alog().write(APP, "Client " + clientName + " unadvertising channel " +
                                     std::to_string(clientChannelId) + " due to disconnect");
-    if (_clientUnadvertiseHandler) {
-      _clientUnadvertiseHandler(clientChannelId, hdl);
+    if (_handlers.clientUnadvertiseHandler) {
+      _handlers.clientUnadvertiseHandler(clientChannelId, hdl);
     }
   }
 
@@ -451,10 +312,10 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
   }
 
   // Unsubscribe all channels this client subscribed to
-  if (_unsubscribeHandler) {
+  if (_handlers.unsubscribeHandler) {
     for (const auto& [chanId, subs] : oldSubscriptionsByChannel) {
       (void)subs;
-      _unsubscribeHandler(chanId, hdl);
+      _handlers.unsubscribeHandler(chanId, hdl);
     }
   }
 
@@ -470,52 +331,8 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
 }  // namespace foxglove
 
 template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setSubscribeHandler(SubscribeUnsubscribeHandler handler) {
-  _subscribeHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setUnsubscribeHandler(
-  SubscribeUnsubscribeHandler handler) {
-  _unsubscribeHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setClientAdvertiseHandler(ClientAdvertiseHandler handler) {
-  _clientAdvertiseHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setClientUnadvertiseHandler(
-  ClientUnadvertiseHandler handler) {
-  _clientUnadvertiseHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setClientMessageHandler(ClientMessageHandler handler) {
-  _clientMessageHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setParameterRequestHandler(
-  ParameterRequestHandler handler) {
-  _parameterRequestHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setParameterChangeHandler(ParameterChangeHandler handler) {
-  _parameterChangeHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setParameterSubscriptionHandler(
-  ParameterSubscriptionHandler handler) {
-  _parameterSubscriptionHandler = std::move(handler);
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::setServiceRequestHandler(ServiceRequestHandler handler) {
-  _serviceRequestHandler = std::move(handler);
+inline void Server<ServerConfiguration>::setHandlers(ServerHandlers<ConnHandle>&& handlers) {
+  _handlers = handlers;
 }
 
 template <typename ServerConfiguration>
@@ -744,8 +561,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
           continue;
         }
         clientInfo.subscriptionsByChannel.emplace(channelId, subId);
-        if (_subscribeHandler) {
-          _subscribeHandler(channelId, hdl);
+        if (_handlers.subscribeHandler) {
+          _handlers.subscribeHandler(channelId, hdl);
         }
       }
     } break;
@@ -761,8 +578,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         }
         ChannelId chanId = sub->first;
         clientInfo.subscriptionsByChannel.erase(sub);
-        if (_unsubscribeHandler) {
-          _unsubscribeHandler(chanId, hdl);
+        if (_handlers.unsubscribeHandler) {
+          _handlers.unsubscribeHandler(chanId, hdl);
         }
       }
     } break;
@@ -787,8 +604,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         advertisement.schemaName = chan.at("schemaName").get<std::string>();
         clientPublications.emplace(channelId, advertisement);
         clientInfo.advertisedChannels.emplace(channelId);
-        if (_clientAdvertiseHandler) {
-          _clientAdvertiseHandler(advertisement, hdl);
+        if (_handlers.clientAdvertiseHandler) {
+          _handlers.clientAdvertiseHandler(advertisement, hdl);
         }
       }
     } break;
@@ -814,8 +631,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
           clientInfo.advertisedChannels.erase(advertisedChannelIt);
         }
 
-        if (_clientUnadvertiseHandler) {
-          _clientUnadvertiseHandler(channelId, hdl);
+        if (_handlers.clientUnadvertiseHandler) {
+          _handlers.clientUnadvertiseHandler(channelId, hdl);
         }
       }
     } break;
@@ -825,7 +642,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
                                                 "' not supported as server capability '" +
                                                 CAPABILITY_PARAMETERS + "' is missing");
         return;
-      } else if (!_parameterRequestHandler) {
+      } else if (!_handlers.parameterRequestHandler) {
         return;
       }
 
@@ -833,7 +650,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       const auto requestId = payload.find("id") == payload.end()
                                ? std::nullopt
                                : std::optional<std::string>(payload["id"].get<std::string>());
-      _parameterRequestHandler(paramNames, requestId, hdl);
+      _handlers.parameterRequestHandler(paramNames, requestId, hdl);
     } break;
     case SET_PARAMETERS: {
       if (!hasCapability(CAPABILITY_PARAMETERS)) {
@@ -841,7 +658,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
                                                 "' not supported as server capability '" +
                                                 CAPABILITY_PARAMETERS + "' is missing");
         return;
-      } else if (!_parameterChangeHandler) {
+      } else if (!_handlers.parameterChangeHandler) {
         return;
       }
 
@@ -849,7 +666,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       const auto requestId = payload.find("id") == payload.end()
                                ? std::nullopt
                                : std::optional<std::string>(payload["id"].get<std::string>());
-      _parameterChangeHandler(parameters, requestId, hdl);
+      _handlers.parameterChangeHandler(parameters, requestId, hdl);
     } break;
     case SUBSCRIBE_PARAMETER_UPDATES: {
       if (!hasCapability(CAPABILITY_PARAMETERS_SUBSCRIBE)) {
@@ -857,7 +674,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
                                                 "' not supported as server capability '" +
                                                 CAPABILITY_PARAMETERS_SUBSCRIBE + " is missing'");
         return;
-      } else if (!_parameterSubscriptionHandler) {
+      } else if (!_handlers.parameterSubscriptionHandler) {
         return;
       }
 
@@ -877,8 +694,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
 
       if (!paramsToSubscribe.empty()) {
-        _parameterSubscriptionHandler(paramsToSubscribe, ParameterSubscriptionOperation::SUBSCRIBE,
-                                      hdl);
+        _handlers.parameterSubscriptionHandler(paramsToSubscribe,
+                                               ParameterSubscriptionOperation::SUBSCRIBE, hdl);
       }
     } break;
     case UNSUBSCRIBE_PARAMETER_UPDATES: {
@@ -887,7 +704,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
                                                 "' not supported as server capability '" +
                                                 CAPABILITY_PARAMETERS_SUBSCRIBE + " is missing'");
         return;
-      } else if (!_parameterSubscriptionHandler) {
+      } else if (!_handlers.parameterSubscriptionHandler) {
         return;
       }
 
@@ -944,7 +761,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
         return;
       }
 
-      if (_clientMessageHandler) {
+      if (_handlers.clientMessageHandler) {
         const auto& advertisement = channelIt->second;
         const uint32_t sequence = 0;
         const ClientMessage clientMessage{static_cast<uint64_t>(timestamp),
@@ -953,7 +770,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
                                           advertisement,
                                           length,
                                           msg};
-        _clientMessageHandler(clientMessage, hdl);
+        _handlers.clientMessageHandler(clientMessage, hdl);
       }
     } break;
     case ClientBinaryOpcode::SERVICE_CALL_REQUEST: {
@@ -975,8 +792,8 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
         }
       }
 
-      if (_serviceRequestHandler) {
-        _serviceRequestHandler(request, hdl);
+      if (_handlers.serviceRequestHandler) {
+        _handlers.serviceRequestHandler(request, hdl);
       }
     } break;
     default: {
@@ -1193,13 +1010,13 @@ inline void Server<ServerConfiguration>::sendServiceResponse(ConnHandle clientHa
 }
 
 template <typename ServerConfiguration>
-inline std::optional<asio::ip::tcp::endpoint> Server<ServerConfiguration>::localEndpoint() {
+inline uint16_t Server<ServerConfiguration>::getPort() {
   std::error_code ec;
   auto endpoint = _server.get_local_endpoint(ec);
   if (ec) {
-    return std::nullopt;
+    throw std::runtime_error("Server not listening on any port. Has it been started before?");
   }
-  return endpoint;
+  return endpoint.port();
 }
 
 template <typename ServerConfiguration>
@@ -1230,12 +1047,12 @@ inline void Server<ServerConfiguration>::unsubscribeParamsWithoutSubscriptions(
                  });
   }
 
-  if (_parameterSubscriptionHandler && !paramsToUnsubscribe.empty()) {
+  if (_handlers.parameterSubscriptionHandler && !paramsToUnsubscribe.empty()) {
     for (const auto& param : paramsToUnsubscribe) {
       _server.get_alog().write(APP, "Unsubscribing from parameter '" + param + "'.");
     }
-    _parameterSubscriptionHandler(paramsToUnsubscribe, ParameterSubscriptionOperation::UNSUBSCRIBE,
-                                  hdl);
+    _handlers.parameterSubscriptionHandler(paramsToUnsubscribe,
+                                           ParameterSubscriptionOperation::UNSUBSCRIBE, hdl);
   }
 }
 
@@ -1291,8 +1108,5 @@ inline void Server<WebSocketTls>::setupTlsHandler() {
     return ctx;
   });
 }
-
-extern template class Server<WebSocketTls>;
-extern template class Server<WebSocketNoTls>;
 
 }  // namespace foxglove

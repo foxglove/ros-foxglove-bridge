@@ -5,15 +5,9 @@
 #include <asio/ip/address.hpp>
 #include <websocketpp/logger/levels.hpp>
 
-namespace foxglove {
+#include "common.hpp"
 
-enum class WebSocketLogLevel {
-  Debug,
-  Info,
-  Warn,
-  Error,
-  Critical,
-};
+namespace foxglove {
 
 using LogCallback = std::function<void(WebSocketLogLevel, char const*)>;
 

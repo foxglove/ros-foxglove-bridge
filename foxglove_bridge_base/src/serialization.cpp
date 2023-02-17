@@ -2,6 +2,25 @@
 
 namespace foxglove {
 
+void to_json(nlohmann::json& j, const Channel& c) {
+  j = {
+    {"id", c.id},
+    {"topic", c.topic},
+    {"encoding", c.encoding},
+    {"schemaName", c.schemaName},
+    {"schema", c.schema},
+  };
+}
+void from_json(const nlohmann::json& j, Channel& c) {
+  ChannelWithoutId channelWithoutId{
+    j["topic"].get<std::string>(),
+    j["encoding"].get<std::string>(),
+    j["schemaName"].get<std::string>(),
+    j["schema"].get<std::string>(),
+  };
+  c = Channel(j["id"].get<ChannelId>(), channelWithoutId);
+}
+
 void to_json(nlohmann::json& j, const Parameter& p) {
   const auto paramType = p.getType();
   if (paramType == ParameterType::PARAMETER_BOOL) {
@@ -88,15 +107,6 @@ void from_json(const nlohmann::json& j, Service& p) {
   p.type = j["type"].get<std::string>();
   p.requestSchema = j["requestSchema"].get<std::string>();
   p.responseSchema = j["responseSchema"].get<std::string>();
-}
-
-inline uint32_t ReadUint32LE(const uint8_t* buf) {
-#ifdef ARCH_IS_BIG_ENDIAN
-  uint32_t val = (bytes[0] << 24) + (bytes[1] << 16) + (bytes[2] << 8) + bytes[3];
-  return val;
-#else
-  return reinterpret_cast<const uint32_t*>(buf)[0];
-#endif
 }
 
 void ServiceResponse::read(const uint8_t* data, size_t dataLength) {
