@@ -138,8 +138,8 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
     }
 
     if (!paramNamesByNodeName.empty()) {
-    RCLCPP_INFO(_node->get_logger(), "Getting all parameters from %zu nodes...",
-                paramNamesByNodeName.size());
+      RCLCPP_INFO(_node->get_logger(), "Getting all parameters from %zu nodes...",
+                  paramNamesByNodeName.size());
     }
   }
 
@@ -149,9 +149,13 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
       continue;
     }
 
-    auto [paramClientIt, wasNewlyCreated] = _paramClientsByNode.try_emplace(
-      nodeName, rclcpp::AsyncParametersClient::make_shared(
-                  _node, nodeName, rmw_qos_profile_parameters, _callbackGroup));
+    auto paramClientIt = _paramClientsByNode.find(nodeName);
+    if (paramClientIt == _paramClientsByNode.end()) {
+      const auto insertedPair = _paramClientsByNode.emplace(
+        nodeName, rclcpp::AsyncParametersClient::make_shared(
+                    _node, nodeName, rmw_qos_profile_parameters, _callbackGroup));
+      paramClientIt = insertedPair.first;
+    }
 
     getParametersFuture.emplace_back(
       std::async(std::launch::async, &ParameterInterface::getNodeParameters, this,
@@ -188,9 +192,13 @@ void ParameterInterface::setParams(const ParameterList& parameters,
 
   std::vector<std::future<void>> setParametersFuture;
   for (const auto& [nodeName, params] : paramsByNode) {
-    auto [paramClientIt, wasNewlyCreated] = _paramClientsByNode.try_emplace(
-      nodeName, rclcpp::AsyncParametersClient::make_shared(
-                  _node, nodeName, rmw_qos_profile_parameters, _callbackGroup));
+    auto paramClientIt = _paramClientsByNode.find(nodeName);
+    if (paramClientIt == _paramClientsByNode.end()) {
+      const auto insertedPair = _paramClientsByNode.emplace(
+        nodeName, rclcpp::AsyncParametersClient::make_shared(
+                    _node, nodeName, rmw_qos_profile_parameters, _callbackGroup));
+      paramClientIt = insertedPair.first;
+    }
 
     setParametersFuture.emplace_back(std::async(std::launch::async,
                                                 &ParameterInterface::setNodeParameters, this,
@@ -227,9 +235,14 @@ void ParameterInterface::subscribeParams(const std::vector<std::string>& paramNa
   }
 
   for (const auto& nodeName : nodesToSubscribe) {
-    auto [paramClientIt, wasNewlyCreated] = _paramClientsByNode.try_emplace(
-      nodeName, rclcpp::AsyncParametersClient::make_shared(
-                  _node, nodeName, rmw_qos_profile_parameters, _callbackGroup));
+    auto paramClientIt = _paramClientsByNode.find(nodeName);
+    if (paramClientIt == _paramClientsByNode.end()) {
+      const auto insertedPair = _paramClientsByNode.emplace(
+        nodeName, rclcpp::AsyncParametersClient::make_shared(
+                    _node, nodeName, rmw_qos_profile_parameters, _callbackGroup));
+      paramClientIt = insertedPair.first;
+    }
+
     auto& paramClient = paramClientIt->second;
 
     _paramSubscriptionsByNode[nodeName] = paramClient->on_parameter_event(
