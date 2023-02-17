@@ -29,12 +29,72 @@ enum class ClientBinaryOpcode : uint8_t {
   SERVICE_CALL_REQUEST = 2,
 };
 
+enum class WebSocketLogLevel {
+  Debug,
+  Info,
+  Warn,
+  Error,
+  Critical,
+};
+
+struct ChannelWithoutId {
+  std::string topic;
+  std::string encoding;
+  std::string schemaName;
+  std::string schema;
+
+  bool operator==(const ChannelWithoutId& other) const {
+    return topic == other.topic && encoding == other.encoding && schemaName == other.schemaName &&
+           schema == other.schema;
+  }
+};
+
+struct Channel : ChannelWithoutId {
+  ChannelId id;
+
+  Channel() = default;  // requirement for json conversions.
+  Channel(ChannelId id, ChannelWithoutId ch)
+      : ChannelWithoutId(std::move(ch))
+      , id(id) {}
+
+  bool operator==(const Channel& other) const {
+    return id == other.id && ChannelWithoutId::operator==(other);
+  }
+};
+
 struct ClientAdvertisement {
   ClientChannelId channelId;
   std::string topic;
   std::string encoding;
   std::string schemaName;
   std::vector<uint8_t> schema;
+};
+
+struct ClientMessage {
+  uint64_t logTime;
+  uint64_t publishTime;
+  uint32_t sequence;
+  const ClientAdvertisement& advertisement;
+  size_t dataLength;
+  const uint8_t* data;
+
+  ClientMessage(uint64_t logTime, uint64_t publishTime, uint32_t sequence,
+                const ClientAdvertisement& advertisement, size_t dataLength, const uint8_t* data)
+      : logTime(logTime)
+      , publishTime(publishTime)
+      , sequence(sequence)
+      , advertisement(advertisement)
+      , dataLength(dataLength)
+      , data(data) {}
+
+  static const size_t MSG_PAYLOAD_OFFSET = 5;
+
+  const uint8_t* getData() const {
+    return data + MSG_PAYLOAD_OFFSET;
+  }
+  std::size_t getLength() const {
+    return dataLength - MSG_PAYLOAD_OFFSET;
+  }
 };
 
 struct ServiceWithoutId {
