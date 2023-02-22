@@ -110,6 +110,8 @@ public:
                    const uint8_t* payload, size_t payloadSize) override;
   void broadcastTime(uint64_t timestamp) override;
   void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) override;
+  void updateConnectionGraph(const MapOfSets& publishedTopics, const MapOfSets& subscribedTopics,
+                             const MapOfSets& advertisedServices) override;
 
   uint16_t getPort() override;
   std::string remoteEndpointString(ConnHandle clientHandle) override;
@@ -120,6 +122,7 @@ private:
     ConnHandle handle;
     std::unordered_map<ChannelId, SubscriptionId> subscriptionsByChannel;
     std::unordered_set<ClientChannelId> advertisedChannels;
+    bool subscribedToConnectionGraph = false;
 
     ClientInfo(const ClientInfo&) = delete;
     ClientInfo& operator=(const ClientInfo&) = delete;
@@ -149,6 +152,14 @@ private:
   std::shared_mutex _clientChannelsMutex;
   std::shared_mutex _servicesMutex;
   std::mutex _clientParamSubscriptionsMutex;
+
+  struct {
+    int subscriptionCount = 0;
+    MapOfSets publishedTopics;
+    MapOfSets subscribedTopics;
+    MapOfSets advertisedServices;
+  } _connectionGraph;
+  std::shared_mutex _connectionGraphMutex;
 
   void setupTlsHandler();
   void socketInit(ConnHandle hdl);
@@ -279,6 +290,7 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
   std::unordered_map<ChannelId, SubscriptionId> oldSubscriptionsByChannel;
   std::unordered_set<ClientChannelId> oldAdvertisedChannels;
   std::string clientName;
+  bool wasSubscribedToConnectionGraph;
   {
     std::unique_lock<std::shared_mutex> lock(_clientsMutex);
     const auto clientIt = _clients.find(hdl);
@@ -294,6 +306,7 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
 
     oldSubscriptionsByChannel = std::move(client.subscriptionsByChannel);
     oldAdvertisedChannels = std::move(client.advertisedChannels);
+    wasSubscribedToConnectionGraph = client.subscribedToConnectionGraph;
     _clients.erase(clientIt);
   }
 
@@ -327,6 +340,15 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
     _clientParamSubscriptions.erase(hdl);
   }
   unsubscribeParamsWithoutSubscriptions(hdl, clientSubscribedParameters);
+
+  if (wasSubscribedToConnectionGraph) {
+    std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
+    _connectionGraph.subscriptionCount--;
+    if (_connectionGraph.subscriptionCount == 0 && _handlers.subscribeConnectionGraphHandler) {
+      _server.get_alog().write(APP, "Unsubscribing from connection graph updates.");
+      _handlers.subscribeConnectionGraphHandler(false);
+    }
+  }
 
 }  // namespace foxglove
 
@@ -541,6 +563,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
   constexpr auto SET_PARAMETERS = Integer("setParameters");
   constexpr auto SUBSCRIBE_PARAMETER_UPDATES = Integer("subscribeParameterUpdates");
   constexpr auto UNSUBSCRIBE_PARAMETER_UPDATES = Integer("unsubscribeParameterUpdates");
+  constexpr auto SUBSCRIBE_CONNECTION_GRAPH = Integer("subscribeConnectionGraph");
+  constexpr auto UNSUBSCRIBE_CONNECTION_GRAPH = Integer("unsubscribeConnectionGraph");
 
   switch (Integer(op)) {
     case SUBSCRIBE: {
@@ -718,6 +742,53 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
 
       unsubscribeParamsWithoutSubscriptions(hdl, paramNames);
+    } break;
+    case SUBSCRIBE_CONNECTION_GRAPH: {
+      std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
+      _connectionGraph.subscriptionCount++;
+
+      if (_connectionGraph.subscriptionCount == 1 && _handlers.subscribeConnectionGraphHandler) {
+        // First subscriber, let the handler know that we are interested in updates.
+        _server.get_alog().write(APP, "Subscribing to connection graph updates.");
+        _handlers.subscribeConnectionGraphHandler(true);
+        clientInfo.subscribedToConnectionGraph = true;
+      }
+
+      json::array_t publishedTopicsJson, subscribedTopicsJson, advertisedServicesJson;
+      for (const auto& [name, ids] : _connectionGraph.publishedTopics) {
+        publishedTopicsJson.push_back(nlohmann::json{{"name", name}, {"publisherIds", ids}});
+      }
+      for (const auto& [name, ids] : _connectionGraph.subscribedTopics) {
+        subscribedTopicsJson.push_back(nlohmann::json{{"name", name}, {"subscriberIds", ids}});
+      }
+      for (const auto& [name, ids] : _connectionGraph.advertisedServices) {
+        advertisedServicesJson.push_back(nlohmann::json{{"name", name}, {"providerIds", ids}});
+      }
+
+      const json jsonMsg = {
+        {"op", "connectionGraphUpdate"},
+        {"publishedTopics", publishedTopicsJson},
+        {"subscribedTopics", subscribedTopicsJson},
+        {"advertisedServices", advertisedServicesJson},
+        {"removedTopics", json::array()},
+        {"removedServices", json::array()},
+      };
+
+      sendJsonRaw(hdl, jsonMsg.dump());
+    } break;
+    case UNSUBSCRIBE_CONNECTION_GRAPH: {
+      if (clientInfo.subscribedToConnectionGraph) {
+        clientInfo.subscribedToConnectionGraph = false;
+        std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
+        _connectionGraph.subscriptionCount--;
+        if (_connectionGraph.subscriptionCount == 0 && _handlers.subscribeConnectionGraphHandler) {
+          _server.get_alog().write(APP, "Unsubscribing from connection graph updates.");
+          _handlers.subscribeConnectionGraphHandler(false);
+        }
+      } else {
+        sendStatus(hdl, StatusLevel::Error,
+                   "Client was not subscribed to connection graph updates");
+      }
     } break;
     default: {
       sendStatus(hdl, StatusLevel::Error, "Unrecognized client opcode \"" + op + "\"");
@@ -1017,6 +1088,81 @@ inline uint16_t Server<ServerConfiguration>::getPort() {
     throw std::runtime_error("Server not listening on any port. Has it been started before?");
   }
   return endpoint.port();
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::updateConnectionGraph(
+  const MapOfSets& publishedTopics, const MapOfSets& subscribedTopics,
+  const MapOfSets& advertisedServices) {
+  json::array_t publisherDiff, subscriberDiff, servicesDiff;
+  std::unordered_set<std::string> topicNames, serviceNames;
+  std::unordered_set<std::string> knownTopicNames, knownServiceNames;
+  {
+    std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
+    for (const auto& [name, publisherIds] : publishedTopics) {
+      const auto it = _connectionGraph.publishedTopics.find(name);
+      if (it == _connectionGraph.publishedTopics.end() ||
+          _connectionGraph.publishedTopics[name] != publisherIds) {
+        publisherDiff.push_back(nlohmann::json{{"name", name}, {"publisherIds", publisherIds}});
+      }
+      topicNames.insert(name);
+    }
+    for (const auto& [name, subscriberIds] : subscribedTopics) {
+      const auto it = _connectionGraph.subscribedTopics.find(name);
+      if (it == _connectionGraph.subscribedTopics.end() ||
+          _connectionGraph.subscribedTopics[name] != subscriberIds) {
+        subscriberDiff.push_back(nlohmann::json{{"name", name}, {"subscriberIds", subscriberIds}});
+      }
+      topicNames.insert(name);
+    }
+    for (const auto& [name, providerIds] : advertisedServices) {
+      const auto it = _connectionGraph.advertisedServices.find(name);
+      if (it == _connectionGraph.advertisedServices.end() ||
+          _connectionGraph.advertisedServices[name] != providerIds) {
+        servicesDiff.push_back(nlohmann::json{{"name", name}, {"providerIds", providerIds}});
+      }
+      serviceNames.insert(name);
+    }
+
+    for (const auto& nameWithIds : _connectionGraph.publishedTopics) {
+      knownTopicNames.insert(nameWithIds.first);
+    }
+    for (const auto& nameWithIds : _connectionGraph.subscribedTopics) {
+      knownTopicNames.insert(nameWithIds.first);
+    }
+    for (const auto& nameWithIds : _connectionGraph.advertisedServices) {
+      knownServiceNames.insert(nameWithIds.first);
+    }
+
+    _connectionGraph.publishedTopics = publishedTopics;
+    _connectionGraph.subscribedTopics = subscribedTopics;
+    _connectionGraph.advertisedServices = advertisedServices;
+  }
+
+  std::vector<std::string> removedTopics, removedServices;
+  std::set_difference(knownTopicNames.begin(), knownTopicNames.end(), topicNames.begin(),
+                      topicNames.end(), std::back_inserter(removedTopics));
+  std::set_difference(knownServiceNames.begin(), knownServiceNames.end(), serviceNames.begin(),
+                      serviceNames.end(), std::back_inserter(removedServices));
+
+  if (publisherDiff.empty() && subscriberDiff.empty() && servicesDiff.empty() &&
+      removedTopics.empty() && removedServices.empty()) {
+    return;
+  }
+
+  const json msg = {
+    {"op", "connectionGraphUpdate"},      {"publishedTopics", publisherDiff},
+    {"subscribedTopics", subscriberDiff}, {"advertisedServices", servicesDiff},
+    {"removedTopics", removedTopics},     {"removedServices", removedServices},
+  };
+  const auto payload = msg.dump();
+
+  std::shared_lock<std::shared_mutex> clientsLock(_clientsMutex);
+  for (const auto& [hdl, clientInfo] : _clients) {
+    if (clientInfo.subscribedToConnectionGraph) {
+      _server.send(hdl, payload, OpCode::TEXT);
+    }
+  }
 }
 
 template <typename ServerConfiguration>

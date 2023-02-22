@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "common.hpp"
@@ -12,6 +13,8 @@
 namespace foxglove {
 
 constexpr size_t DEFAULT_SEND_BUFFER_LIMIT_BYTES = 10000000UL;  // 10 MB
+
+typedef std::unordered_map<std::string, std::unordered_set<std::string>> MapOfSets;
 
 struct ServerOptions {
   std::vector<std::string> capabilities;
@@ -42,6 +45,7 @@ struct ServerHandlers {
                      ConnectionHandle)>
     parameterSubscriptionHandler;
   std::function<void(const ServiceRequest&, ConnectionHandle)> serviceRequestHandler;
+  std::function<void(bool)> subscribeConnectionGraphHandler;
 };
 
 template <typename ConnectionHandle>
@@ -68,6 +72,9 @@ public:
   virtual void broadcastTime(uint64_t timestamp) = 0;
   virtual void sendServiceResponse(ConnectionHandle clientHandle,
                                    const ServiceResponse& response) = 0;
+  virtual void updateConnectionGraph(const MapOfSets& publishedTopics,
+                                     const MapOfSets& subscribedTopics,
+                                     const MapOfSets& advertisedServices) = 0;
 
   virtual uint16_t getPort() = 0;
   virtual std::string remoteEndpointString(ConnectionHandle clientHandle) = 0;

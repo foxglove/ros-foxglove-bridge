@@ -1,3 +1,4 @@
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <regex>
@@ -63,8 +64,9 @@ public:
     foxglove::ServerOptions serverOptions;
     serverOptions.capabilities = {
       foxglove::CAPABILITY_CLIENT_PUBLISH,
-      foxglove::CAPABILITY_PARAMETERS,
+      foxglove::CAPABILITY_CONNECTION_GRAPH,
       foxglove::CAPABILITY_PARAMETERS_SUBSCRIBE,
+      foxglove::CAPABILITY_PARAMETERS,
       foxglove::CAPABILITY_SERVICES,
     };
     if (_useSimTime) {
@@ -96,6 +98,8 @@ public:
     hdlrs.parameterSubscriptionHandler =
       std::bind(&FoxgloveBridge::parameterSubscriptionHandler, this, _1, _2, _3);
     hdlrs.serviceRequestHandler = std::bind(&FoxgloveBridge::serviceRequestHandler, this, _1, _2);
+    hdlrs.subscribeConnectionGraphHandler =
+      std::bind(&FoxgloveBridge::subscribeConnectionGraphHandler, this, _1);
     _server->setHandlers(std::move(hdlrs));
 
     _paramInterface->setParamUpdateCallback(std::bind(&FoxgloveBridge::parameterUpdates, this, _1));
@@ -141,7 +145,7 @@ public:
   }
 
   void rosgraphPollThread() {
-    updateAdvertisedTopics();
+    updateAdvertisedTopics(get_topic_names_and_types());
     updateAdvertisedServices();
 
     auto graphEvent = this->get_graph_event();
@@ -150,8 +154,12 @@ public:
       bool triggered = graphEvent->check_and_clear();
       if (triggered) {
         RCLCPP_DEBUG(this->get_logger(), "rosgraph change detected");
-        updateAdvertisedTopics();
+        const auto topicNamesAndTypes = get_topic_names_and_types();
+        updateAdvertisedTopics(topicNamesAndTypes);
         updateAdvertisedServices();
+        if (_subscribeGraphUpdates) {
+          updateConnectionGraph(topicNamesAndTypes);
+        }
         // Graph changes tend to come in batches, so wait a bit before checking again
         std::this_thread::sleep_for(500ms);
       }
@@ -160,13 +168,12 @@ public:
     RCLCPP_DEBUG(this->get_logger(), "rosgraph polling thread exiting");
   }
 
-  void updateAdvertisedTopics() {
+  void updateAdvertisedTopics(
+    const std::map<std::string, std::vector<std::string>>& topicNamesAndTypes) {
     if (!rclcpp::ok()) {
       return;
     }
 
-    // Get the current list of visible topics and datatypes from the ROS graph
-    auto topicNamesAndTypes = this->get_node_graph_interface()->get_topic_names_and_types();
     std::unordered_set<TopicAndDatatype, PairHash> latestTopics;
     latestTopics.reserve(topicNamesAndTypes.size());
     for (const auto& topicNamesAndType : topicNamesAndTypes) {
@@ -362,6 +369,49 @@ public:
     }
   }
 
+  void updateConnectionGraph(
+    const std::map<std::string, std::vector<std::string>>& topicNamesAndTypes) {
+    foxglove::MapOfSets publishers, subscribers;
+
+    for (const auto& topicNameAndType : topicNamesAndTypes) {
+      const auto& topicName = topicNameAndType.first;
+      if (!isWhitelisted(topicName, _topicWhitelistPatterns)) {
+        continue;
+      }
+
+      const auto publishersInfo = get_publishers_info_by_topic(topicName);
+      const auto subscribersInfo = get_subscriptions_info_by_topic(topicName);
+      std::unordered_set<std::string> publisherIds, subscriberIds;
+      for (const auto& publisher : publishersInfo) {
+        const auto& ns = publisher.node_namespace();
+        const auto sep = (!ns.empty() && ns.back() == '/') ? "" : "/";
+        publisherIds.insert(ns + sep + publisher.node_name());
+      }
+      for (const auto& subscriber : subscribersInfo) {
+        const auto& ns = subscriber.node_namespace();
+        const auto sep = (!ns.empty() && ns.back() == '/') ? "" : "/";
+        subscriberIds.insert(ns + sep + subscriber.node_name());
+      }
+      publishers.emplace(topicName, publisherIds);
+      subscribers.emplace(topicName, subscriberIds);
+    }
+
+    foxglove::MapOfSets services;
+    for (const auto& fqnNodeName : get_node_names()) {
+      const auto [nodeNs, nodeName] = getNodeAndNodeNamespace(fqnNodeName);
+      const auto serviceNamesAndTypes = get_service_names_and_types_by_node(nodeName, nodeNs);
+
+      for (const auto& [serviceName, serviceTypes] : serviceNamesAndTypes) {
+        (void)serviceTypes;
+        if (isWhitelisted(serviceName, _serviceWhitelistPatterns)) {
+          services[serviceName].insert(fqnNodeName);
+        }
+      }
+    }
+
+    _server->updateConnectionGraph(publishers, subscribers, services);
+  }
+
 private:
   struct PairHash {
     template <class T1, class T2>
@@ -392,6 +442,7 @@ private:
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
   bool _useSimTime = false;
+  std::atomic<bool> _subscribeGraphUpdates = false;
 
   void subscribeHandler(foxglove::ChannelId channelId, ConnectionHandle hdl) {
     _handlerCallbackQueue->addCallback(std::bind(&FoxgloveBridge::subscribe, this, channelId, hdl));
@@ -439,6 +490,14 @@ private:
   void serviceRequestHandler(const foxglove::ServiceRequest& request, ConnectionHandle hdl) {
     _handlerCallbackQueue->addCallback(
       std::bind(&FoxgloveBridge::serviceRequest, this, request, hdl));
+  }
+
+  void subscribeConnectionGraphHandler(bool subscribe) {
+    if (_subscribeGraphUpdates = subscribe) {
+      _handlerCallbackQueue->addCallback([this]() {
+        updateConnectionGraph(get_topic_names_and_types());
+      });
+    }
   }
 
   void subscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {

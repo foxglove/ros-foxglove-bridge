@@ -13,6 +13,7 @@ constexpr char CAPABILITY_TIME[] = "time";
 constexpr char CAPABILITY_PARAMETERS[] = "parameters";
 constexpr char CAPABILITY_PARAMETERS_SUBSCRIBE[] = "parametersSubscribe";
 constexpr char CAPABILITY_SERVICES[] = "services";
+constexpr char CAPABILITY_CONNECTION_GRAPH[] = "connectionGraph";
 
 using ChannelId = uint32_t;
 using ClientChannelId = uint32_t;
