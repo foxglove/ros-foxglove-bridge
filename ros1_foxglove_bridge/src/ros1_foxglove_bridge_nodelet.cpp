@@ -233,21 +233,15 @@ private:
   void subscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
-    auto it = _channelToTopicAndDatatype.find(channelId);
-    if (it == _channelToTopicAndDatatype.end()) {
+    auto it = _advertisedTopics.find(channelId);
+    if (it == _advertisedTopics.end()) {
       ROS_WARN("Received subscribe request for unknown channel %d", channelId);
       return;
     }
-    auto& topicAndDatatype = it->second;
-    auto topic = topicAndDatatype.first;
-    auto datatype = topicAndDatatype.second;
-    auto it2 = _advertisedTopics.find(topicAndDatatype);
-    if (it2 == _advertisedTopics.end()) {
-      ROS_ERROR("Channel %d for topic \"%s\" (%s) is not advertised", channelId, topic.c_str(),
-                datatype.c_str());
-      return;
-    }
-    const auto& channel = it2->second;
+
+    const auto& channel = it->second;
+    const auto& topic = channel.topic;
+    const auto& datatype = channel.schemaName;
 
     // Get client subscriptions for this channel or insert an empty map.
     auto [subscriptionsIt, firstSubscription] =
@@ -264,7 +258,7 @@ private:
       subscriptionsByClient.emplace(
         clientHandle, getMTNodeHandle().subscribe<ros_babel_fish::BabelFishMessage>(
                         topic, SUBSCRIPTION_QUEUE_LENGTH,
-                        std::bind(&FoxgloveBridge::rosMessageHandler, this, channel, clientHandle,
+                        std::bind(&FoxgloveBridge::rosMessageHandler, this, channelId, clientHandle,
                                   std::placeholders::_1)));
       if (firstSubscription) {
         ROS_INFO("Subscribed to topic \"%s\" (%s) on channel %d", topic.c_str(), datatype.c_str(),
@@ -283,17 +277,12 @@ private:
   void unsubscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
-    auto it = _channelToTopicAndDatatype.find(channelId);
-    TopicAndDatatype topicAndDatatype =
-      it != _channelToTopicAndDatatype.end()
-        ? it->second
-        : std::make_pair<std::string, std::string>("[Unknown]", "[Unknown]");
-
-    auto it2 = _subscriptions.find(channelId);
-    if (it2 == _subscriptions.end()) {
+    const auto channelIt = _advertisedTopics.find(channelId);
+    if (channelIt == _advertisedTopics.end()) {
       ROS_WARN("Received unsubscribe request for unknown channel %d", channelId);
       return;
     }
+    const auto& channel = channelIt->second;
 
     auto subscriptionsIt = _subscriptions.find(channelId);
     if (subscriptionsIt == _subscriptions.end()) {
@@ -313,9 +302,9 @@ private:
 
     subscriptionsByClient.erase(clientSubscription);
     if (subscriptionsByClient.empty()) {
-      ROS_INFO("Unsubscribing from topic \"%s\" (%s) on channel %d", topicAndDatatype.first.c_str(),
-               topicAndDatatype.second.c_str(), channelId);
-      _subscriptions.erase(it2);
+      ROS_INFO("Unsubscribing from topic \"%s\" (%s) on channel %d", channel.topic.c_str(),
+               channel.schemaName.c_str(), channelId);
+      _subscriptions.erase(subscriptionsIt);
     } else {
       ROS_INFO("Removed one subscription from channel %d (%zu subscription(s) left)", channelId,
                subscriptionsByClient.size());
@@ -480,80 +469,70 @@ private:
         numIgnoredTopics);
     }
 
-    // Create a list of topics that are new to us
-    std::vector<TopicAndDatatype> newTopics;
-    for (const auto& topic : latestTopics) {
-      if (_advertisedTopics.find(topic) == _advertisedTopics.end()) {
-        newTopics.push_back(topic);
-      }
-    }
+    std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
-    // Create a list of topics that have been removed
-    std::vector<TopicAndDatatype> removedTopics;
-    for (const auto& [topic, channel] : _advertisedTopics) {
-      (void)channel;
-      if (latestTopics.find(topic) == latestTopics.end()) {
-        removedTopics.push_back(topic);
-      }
-    }
-
-    // Remove advertisements for topics that have been removed
-    {
-      std::lock_guard<std::mutex> lock(_subscriptionsMutex);
-      for (const auto& topicAndDatatype : removedTopics) {
-        auto& channel = _advertisedTopics.at(topicAndDatatype);
-
-        // Stop tracking this channel in the WebSocket server
-        _server->removeChannel(channel.id);
-
-        // Remove the subscription for this topic, if any
-        _subscriptions.erase(channel.id);
-
-        // Remove this topic+datatype tuple
-        _channelToTopicAndDatatype.erase(channel.id);
-        _advertisedTopics.erase(topicAndDatatype);
-
-        ROS_DEBUG("Removed channel %d for topic \"%s\" (%s)", channel.id,
+    // Remove channels for which the topic does not exist anymore
+    std::vector<foxglove::ChannelId> channelIdsToRemove;
+    for (auto channelIt = _advertisedTopics.begin(); channelIt != _advertisedTopics.end();) {
+      const TopicAndDatatype topicAndDatatype = {channelIt->second.topic,
+                                                 channelIt->second.schemaName};
+      if (latestTopics.find(topicAndDatatype) == latestTopics.end()) {
+        const auto channelId = channelIt->first;
+        channelIdsToRemove.push_back(channelId);
+        _subscriptions.erase(channelId);
+        ROS_DEBUG("Removed channel %d for topic \"%s\" (%s)", channelId,
                   topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
-      }
-
-      // Advertise new topics
-      for (const auto& topicAndDatatype : newTopics) {
-        foxglove::ChannelWithoutId newChannel{};
-        newChannel.topic = topicAndDatatype.first;
-        newChannel.schemaName = topicAndDatatype.second;
-        newChannel.encoding = ROS1_CHANNEL_ENCODING;
-
-        try {
-          const auto msgDescription =
-            _rosTypeInfoProvider.getMessageDescription(topicAndDatatype.second);
-          if (msgDescription) {
-            newChannel.schema = msgDescription->message_definition;
-          } else {
-            ROS_WARN("Could not find definition for type %s", topicAndDatatype.second.c_str());
-
-            // We still advertise the channel, but with an emtpy schema
-            newChannel.schema = "";
-          }
-        } catch (const std::exception& err) {
-          ROS_WARN("Failed to add channel for topic \"%s\" (%s): %s",
-                   topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str(), err.what());
-          continue;
-        }
-
-        auto channel = foxglove::Channel{_server->addChannel(newChannel), newChannel};
-        ROS_DEBUG("Advertising channel %d for topic \"%s\" (%s)", channel.id, channel.topic.c_str(),
-                  channel.schemaName.c_str());
-
-        // Add a mapping from the topic+datatype tuple to the channel, and channel ID to the
-        // topic+datatype tuple
-        _advertisedTopics.emplace(topicAndDatatype, std::move(channel));
-        _channelToTopicAndDatatype.emplace(channel.id, topicAndDatatype);
+        channelIt = _advertisedTopics.erase(channelIt);
+      } else {
+        channelIt++;
       }
     }
+    _server->removeChannels(channelIdsToRemove);
 
-    if (newTopics.size() > 0) {
-      _server->broadcastChannels();
+    // Add new channels for new topics
+    std::vector<foxglove::ChannelWithoutId> channelsToAdd;
+    for (const auto& topicAndDatatype : latestTopics) {
+      if (std::find_if(_advertisedTopics.begin(), _advertisedTopics.end(),
+                       [topicAndDatatype](const auto& channelIdAndChannel) {
+                         const auto& channel = channelIdAndChannel.second;
+                         return channel.topic == topicAndDatatype.first &&
+                                channel.schemaName == topicAndDatatype.second;
+                       }) != _advertisedTopics.end()) {
+        continue;  // Topic already advertised
+      }
+
+      foxglove::ChannelWithoutId newChannel{};
+      newChannel.topic = topicAndDatatype.first;
+      newChannel.schemaName = topicAndDatatype.second;
+      newChannel.encoding = ROS1_CHANNEL_ENCODING;
+
+      try {
+        const auto msgDescription =
+          _rosTypeInfoProvider.getMessageDescription(topicAndDatatype.second);
+        if (msgDescription) {
+          newChannel.schema = msgDescription->message_definition;
+        } else {
+          ROS_WARN("Could not find definition for type %s", topicAndDatatype.second.c_str());
+
+          // We still advertise the channel, but with an emtpy schema
+          newChannel.schema = "";
+        }
+      } catch (const std::exception& err) {
+        ROS_WARN("Failed to add channel for topic \"%s\" (%s): %s", topicAndDatatype.first.c_str(),
+                 topicAndDatatype.second.c_str(), err.what());
+        continue;
+      }
+
+      channelsToAdd.push_back(newChannel);
+    }
+
+    const auto channelIds = _server->addChannels(channelsToAdd);
+    for (size_t i = 0; i < channelsToAdd.size(); ++i) {
+      const auto channelId = channelIds[i];
+      const auto& channel = channelsToAdd[i];
+      _advertisedTopics.emplace(channelId, channel);
+      ROS_DEBUG("Advertising channel %d for topic \"%s\" (%s)", channelId, channel.topic.c_str(),
+                channel.schemaName.c_str());
     }
   }
 
@@ -774,11 +753,11 @@ private:
   }
 
   void rosMessageHandler(
-    const foxglove::Channel& channel, ConnectionHandle clientHandle,
+    const foxglove::ChannelId channelId, ConnectionHandle clientHandle,
     const ros::MessageEvent<ros_babel_fish::BabelFishMessage const>& msgEvent) {
     const auto& msg = msgEvent.getConstMessage();
     const auto receiptTimeNs = msgEvent.getReceiptTime().toNSec();
-    _server->sendMessage(clientHandle, channel.id, receiptTimeNs, msg->buffer(), msg->size());
+    _server->sendMessage(clientHandle, channelId, receiptTimeNs, msg->buffer(), msg->size());
   }
 
   void serviceRequest(const foxglove::ServiceRequest& request, ConnectionHandle clientHandle) {
@@ -830,8 +809,7 @@ private:
   std::vector<std::regex> _paramWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;
   ros::XMLRPCManager xmlrpcServer;
-  std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
-  std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
+  std::unordered_map<foxglove::ChannelId, foxglove::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
   std::unordered_map<foxglove::ServiceId, foxglove::ServiceWithoutId> _advertisedServices;
   PublicationsByClient _clientAdvertisedTopics;

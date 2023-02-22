@@ -95,9 +95,8 @@ public:
   void start(const std::string& host, uint16_t port) override;
   void stop() override;
 
-  ChannelId addChannel(ChannelWithoutId channel) override;
-  void removeChannel(ChannelId chanId) override;
-  void broadcastChannels() override;
+  std::vector<ChannelId> addChannels(const std::vector<ChannelWithoutId>& channels) override;
+  void removeChannels(const std::vector<ChannelId>& channelIds) override;
   void publishParameterValues(ConnHandle clientHandle, const std::vector<Parameter>& parameters,
                               const std::optional<std::string>& requestId = std::nullopt) override;
   void updateParameterValues(const std::vector<Parameter>& parameters) override;
@@ -804,46 +803,60 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
 }
 
 template <typename ServerConfiguration>
-inline ChannelId Server<ServerConfiguration>::addChannel(ChannelWithoutId channel) {
-  std::unique_lock<std::shared_mutex> lock(_channelsMutex);
-  const auto newId = ++_nextChannelId;
-  Channel newChannel{newId, std::move(channel)};
-  _channels.emplace(newId, std::move(newChannel));
-  return newId;
-}
-
-template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::removeChannel(ChannelId chanId) {
-  std::unique_lock<std::shared_mutex> channelsLock(_channelsMutex);
-  std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
-  _channels.erase(chanId);
-  for (auto& [hdl, clientInfo] : _clients) {
-    if (const auto it = clientInfo.subscriptionsByChannel.find(chanId);
-        it != clientInfo.subscriptionsByChannel.end()) {
-      clientInfo.subscriptionsByChannel.erase(it);
-    }
-    sendJson(hdl, {{"op", "unadvertise"}, {"channelIds", {chanId}}});
+inline std::vector<ChannelId> Server<ServerConfiguration>::addChannels(
+  const std::vector<ChannelWithoutId>& channels) {
+  if (channels.empty()) {
+    return {};
   }
+
+  std::vector<ChannelId> channelIds;
+  channelIds.reserve(channels.size());
+  json::array_t channelsJson;
+
+  {
+    std::unique_lock<std::shared_mutex> lock(_channelsMutex);
+    for (const auto& channelWithoutId : channels) {
+      const auto newId = ++_nextChannelId;
+      channelIds.push_back(newId);
+      Channel newChannel{newId, channelWithoutId};
+      channelsJson.push_back(newChannel);
+      _channels.emplace(newId, std::move(newChannel));
+    }
+  }
+
+  const auto msg = json{{"op", "advertise"}, {"channels", channelsJson}}.dump();
+  std::shared_lock<std::shared_mutex> clientsLock(_clientsMutex);
+  for (const auto& [hdl, clientInfo] : _clients) {
+    (void)clientInfo;
+    sendJsonRaw(hdl, msg);
+  }
+
+  return channelIds;
 }
 
 template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::broadcastChannels() {
-  std::shared_lock<std::shared_mutex> clientsLock(_clientsMutex);
-  std::shared_lock<std::shared_mutex> channelsLock(_channelsMutex);
-
-  if (_clients.empty()) {
+inline void Server<ServerConfiguration>::removeChannels(const std::vector<ChannelId>& channelIds) {
+  if (channelIds.empty()) {
     return;
   }
 
-  json channels;
-  for (const auto& [id, channel] : _channels) {
-    (void)id;
-    channels.push_back(channel);
+  {
+    std::unique_lock<std::shared_mutex> channelsLock(_channelsMutex);
+    for (auto channelId : channelIds) {
+      _channels.erase(channelId);
+    }
   }
-  std::string msg = json{{"op", "advertise"}, {"channels", std::move(channels)}}.dump();
 
-  for (const auto& [hdl, clientInfo] : _clients) {
-    (void)clientInfo;
+  const auto msg = json{{"op", "unadvertise"}, {"channelIds", channelIds}}.dump();
+
+  std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+  for (auto& [hdl, clientInfo] : _clients) {
+    for (auto channelId : channelIds) {
+      if (const auto it = clientInfo.subscriptionsByChannel.find(channelId);
+          it != clientInfo.subscriptionsByChannel.end()) {
+        clientInfo.subscriptionsByChannel.erase(it);
+      }
+    }
     sendJsonRaw(hdl, msg);
   }
 }

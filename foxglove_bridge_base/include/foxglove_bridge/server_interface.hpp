@@ -51,9 +51,8 @@ public:
   virtual void start(const std::string& host, uint16_t port) = 0;
   virtual void stop() = 0;
 
-  virtual ChannelId addChannel(ChannelWithoutId channel) = 0;
-  virtual void removeChannel(ChannelId chanId) = 0;
-  virtual void broadcastChannels() = 0;
+  virtual std::vector<ChannelId> addChannels(const std::vector<ChannelWithoutId>& channels) = 0;
+  virtual void removeChannels(const std::vector<ChannelId>& channelIds) = 0;
   virtual void publishParameterValues(ConnectionHandle clientHandle,
                                       const std::vector<Parameter>& parameters,
                                       const std::optional<std::string>& requestId) = 0;
