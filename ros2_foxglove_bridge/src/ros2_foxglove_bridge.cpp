@@ -15,6 +15,7 @@
 #include <foxglove_bridge/param_utils.hpp>
 #include <foxglove_bridge/parameter_interface.hpp>
 #include <foxglove_bridge/server_factory.hpp>
+#include <foxglove_bridge/utils.hpp>
 
 using namespace std::chrono_literals;
 using namespace std::placeholders;
@@ -173,10 +174,7 @@ public:
       const auto& datatypes = topicNamesAndType.second;
 
       // Ignore the topic if it is not on the topic whitelist
-      if (std::find_if(_topicWhitelistPatterns.begin(), _topicWhitelistPatterns.end(),
-                       [&topicName](const auto& regex) {
-                         return std::regex_match(topicName, regex);
-                       }) != _topicWhitelistPatterns.end()) {
+      if (isWhitelisted(topicName, _topicWhitelistPatterns)) {
         for (const auto& datatype : datatypes) {
           latestTopics.emplace(topicName, datatype);
         }
@@ -318,10 +316,7 @@ public:
       }
 
       // Ignore the service if it is not on the service whitelist
-      if (std::find_if(_serviceWhitelistPatterns.begin(), _serviceWhitelistPatterns.end(),
-                       [&serviceName](const auto& regex) {
-                         return std::regex_match(serviceName, regex);
-                       }) == _serviceWhitelistPatterns.end()) {
+      if (!isWhitelisted(serviceName, _serviceWhitelistPatterns)) {
         continue;
       }
 
