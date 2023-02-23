@@ -1,3 +1,4 @@
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -24,6 +25,8 @@
 #include <foxglove_bridge/service_utils.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
 
+namespace {
+
 class GenericCallback : public ros::CallbackInterface {
 public:
   explicit GenericCallback(std::function<void(void)> fn)
@@ -37,6 +40,16 @@ public:
 private:
   std::function<void(void)> _fn;
 };
+
+inline std::unordered_set<std::string> rpcValueToStringSet(const XmlRpc::XmlRpcValue& v) {
+  std::unordered_set<std::string> set;
+  for (int i = 0; i < v.size(); ++i) {
+    set.insert(v[i]);
+  }
+  return set;
+}
+
+}  // namespace
 
 namespace foxglove_bridge {
 
@@ -97,8 +110,9 @@ public:
       foxglove::ServerOptions serverOptions;
       serverOptions.capabilities = {
         foxglove::CAPABILITY_CLIENT_PUBLISH,
-        foxglove::CAPABILITY_PARAMETERS,
+        foxglove::CAPABILITY_CONNECTION_GRAPH,
         foxglove::CAPABILITY_PARAMETERS_SUBSCRIBE,
+        foxglove::CAPABILITY_PARAMETERS,
         foxglove::CAPABILITY_SERVICES,
       };
       if (_useSimTime) {
@@ -140,6 +154,8 @@ public:
                   std::placeholders::_2, std::placeholders::_3);
       hdlrs.serviceRequestHandler = std::bind(&FoxgloveBridge::serviceRequestHandler, this,
                                               std::placeholders::_1, std::placeholders::_2);
+      hdlrs.subscribeConnectionGraphHandler =
+        std::bind(&FoxgloveBridge::subscribeConnectionGraphHandler, this, std::placeholders::_1);
       _server->setHandlers(std::move(hdlrs));
 
       _handlerCallbackQueue = std::make_unique<ros::CallbackQueue>();
@@ -228,6 +244,10 @@ private:
   void serviceRequestHandler(const foxglove::ServiceRequest& request, ConnectionHandle hdl) {
     _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
       std::bind(&FoxgloveBridge::serviceRequest, this, request, hdl)));
+  }
+
+  void subscribeConnectionGraphHandler(bool subscribe) {
+    _subscribeGraphUpdates = subscribe;
   }
 
   void subscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
@@ -442,8 +462,48 @@ private:
       return;
     }
 
+    // Retrieve system state from ROS master.
+    std::vector<std::string> serviceNames;
+    foxglove::MapOfSets publishers, subscribers, services;
+    XmlRpc::XmlRpcValue params, result, payload;
+    params[0] = this->getName();
+    if (ros::master::execute("getSystemState", params, result, payload, false) &&
+        static_cast<int>(result[0]) == 1) {
+      const auto& systemState = result[2];
+      const auto& publishersXmlRpc = systemState[0];
+      const auto& subscribersXmlRpc = systemState[1];
+      const auto& servicesXmlRpc = systemState[2];
+
+      for (int i = 0; i < servicesXmlRpc.size(); ++i) {
+        const std::string& name = servicesXmlRpc[i][0];
+        if (isWhitelisted(name, _serviceWhitelistPatterns)) {
+          serviceNames.push_back(name);
+          services.emplace(name, rpcValueToStringSet(servicesXmlRpc[i][1]));
+        }
+      }
+      for (int i = 0; i < publishersXmlRpc.size(); ++i) {
+        const std::string& name = publishersXmlRpc[i][0];
+        if (isWhitelisted(name, _topicWhitelistPatterns)) {
+          publishers.emplace(name, rpcValueToStringSet(publishersXmlRpc[i][1]));
+        }
+      }
+      for (int i = 0; i < subscribersXmlRpc.size(); ++i) {
+        const std::string& name = subscribersXmlRpc[i][0];
+        if (isWhitelisted(name, _topicWhitelistPatterns)) {
+          subscribers.emplace(name, rpcValueToStringSet(subscribersXmlRpc[i][1]));
+        }
+      }
+    } else {
+      ROS_WARN("Failed to call getSystemState: %s", result.toXml().c_str());
+      return;
+    }
+
     updateAdvertisedTopics();
-    updateAdvertisedServices();
+    updateAdvertisedServices(serviceNames);
+
+    if (_subscribeGraphUpdates) {
+      _server->updateConnectionGraph(publishers, subscribers, services);
+    }
 
     // Schedule the next update using truncated exponential backoff, between `MIN_UPDATE_PERIOD_MS`
     // and `_maxUpdateMs`
@@ -557,23 +617,7 @@ private:
     }
   }
 
-  void updateAdvertisedServices() {
-    std::vector<std::string> serviceNames;
-    XmlRpc::XmlRpcValue params, result, payload;
-    params[0] = this->getName();
-    if (ros::master::execute("getSystemState", params, result, payload, false) &&
-        static_cast<int>(result[0]) == 1) {
-      const auto& systemState = result[2];
-      const auto& services = systemState[2];
-      for (int i = 0; i < services.size(); ++i) {
-        const std::string serviceName = services[i][0];
-        serviceNames.emplace_back(serviceName);
-      }
-    } else {
-      ROS_WARN("Failed to call getSystemState: %s", result.toXml().c_str());
-      return;
-    }
-
+  void updateAdvertisedServices(const std::vector<std::string>& serviceNames) {
     std::unique_lock<std::shared_mutex> lock(_servicesMutex);
 
     // Remove advertisements for services that have been removed
@@ -843,6 +887,7 @@ private:
   size_t _updateCount = 0;
   ros::Subscriber _clockSubscription;
   bool _useSimTime = false;
+  std::atomic<bool> _subscribeGraphUpdates = false;
 };
 
 }  // namespace foxglove_bridge

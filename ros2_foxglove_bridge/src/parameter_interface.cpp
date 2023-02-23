@@ -2,17 +2,11 @@
 
 #include <nlohmann/json.hpp>
 
+#include "foxglove_bridge/utils.hpp"
+
 namespace {
 
 constexpr char PARAM_SEP = '.';
-
-static std::pair<std::string, std::string> getNodeAndNodeNamespace(const std::string& fqnNodeName) {
-  const std::size_t found = fqnNodeName.find_last_of("/");
-  if (found == std::string::npos) {
-    throw std::runtime_error("Invalid fully qualified node name: " + fqnNodeName);
-  }
-  return std::make_pair(fqnNodeName.substr(0, found), fqnNodeName.substr(found + 1));
-}
 
 static std::pair<std::string, std::string> getNodeAndParamName(
   const std::string& nodeNameAndParamName) {
@@ -181,7 +175,7 @@ void ParameterInterface::setParams(const ParameterList& parameters,
 
   rclcpp::ParameterMap paramsByNode;
   for (const auto& param : parameters) {
-    if (!isWhitelistedParam(param.getName())) {
+    if (!isWhitelisted(param.getName(), _paramWhitelistPatterns)) {
       return;
     }
 
@@ -219,7 +213,7 @@ void ParameterInterface::subscribeParams(const std::vector<std::string>& paramNa
 
   std::unordered_set<std::string> nodesToSubscribe;
   for (const auto& paramName : paramNames) {
-    if (!isWhitelistedParam(paramName)) {
+    if (!isWhitelisted(paramName, _paramWhitelistPatterns)) {
       return;
     }
 
@@ -317,7 +311,7 @@ ParameterList ParameterInterface::getNodeParameters(
   ParameterList result;
   for (const auto& param : params) {
     const auto fullParamName = prependNodeNameToParamName(param.get_name(), nodeName);
-    if (isWhitelistedParam(fullParamName)) {
+    if (isWhitelisted(fullParamName, _paramWhitelistPatterns)) {
       result.push_back(fromRosParam(rclcpp::Parameter(fullParamName, param.get_parameter_value())));
     }
   }
@@ -363,13 +357,6 @@ void ParameterInterface::setNodeParameters(rclcpp::AsyncParametersClient::Shared
                   nodeName.c_str(), result.reason.c_str());
     }
   }
-}
-
-bool ParameterInterface::isWhitelistedParam(const std::string& paramName) {
-  return std::find_if(_paramWhitelistPatterns.begin(), _paramWhitelistPatterns.end(),
-                      [paramName](const auto& regex) {
-                        return std::regex_match(paramName, regex);
-                      }) != _paramWhitelistPatterns.end();
 }
 
 }  // namespace foxglove_bridge
