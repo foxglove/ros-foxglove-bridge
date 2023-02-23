@@ -493,7 +493,7 @@ private:
   }
 
   void subscribeConnectionGraphHandler(bool subscribe) {
-    if (_subscribeGraphUpdates = subscribe) {
+    if ((_subscribeGraphUpdates = subscribe)) {
       _handlerCallbackQueue->addCallback([this]() {
         updateConnectionGraph(get_topic_names_and_types());
       });

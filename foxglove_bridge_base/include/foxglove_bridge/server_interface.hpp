@@ -14,7 +14,7 @@ namespace foxglove {
 
 constexpr size_t DEFAULT_SEND_BUFFER_LIMIT_BYTES = 10000000UL;  // 10 MB
 
-typedef std::unordered_map<std::string, std::unordered_set<std::string>> MapOfSets;
+using MapOfSets = std::unordered_map<std::string, std::unordered_set<std::string>>;
 
 struct ServerOptions {
   std::vector<std::string> capabilities;
