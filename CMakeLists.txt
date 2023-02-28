@@ -21,7 +21,7 @@ macro(enable_strict_compiler_warnings target)
   )
 endmacro()
 
-find_package(nlohmann_json REQUIRED)
+find_package(nlohmann_json QUIET)
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 find_package(websocketpp REQUIRED)
@@ -48,17 +48,20 @@ add_library(foxglove_bridge_base SHARED
 )
 target_include_directories(foxglove_bridge_base
   PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
-  $<INSTALL_INTERFACE:include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
+    $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(foxglove_bridge_base
-  nlohmann_json::nlohmann_json
-  websocketpp::websocketpp
   OpenSSL::Crypto
   OpenSSL::SSL
   ZLIB::ZLIB
   ${CMAKE_THREAD_LIBS_INIT}
 )
+if(nlohmann_json_FOUND)
+  target_link_libraries(foxglove_bridge_base nlohmann_json::nlohmann_json)
+else()
+  message(STATUS "nlohmann_json not found, will search at compile time")
+endif()
 enable_strict_compiler_warnings(foxglove_bridge_base)
 
 message(STATUS "ROS_VERSION: " $ENV{ROS_VERSION})
