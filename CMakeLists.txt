@@ -14,7 +14,12 @@ project(foxglove_bridge LANGUAGES CXX VERSION 0.4.1)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
+macro(enable_strict_compiler_warnings target)
+  target_compile_options(${target} PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/WX /W4>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror -Wmost -Wold-style-cast -Wfloat-equal>
+  )
+endmacro()
 
 find_package(nlohmann_json QUIET)
 find_package(OpenSSL REQUIRED)
@@ -23,36 +28,7 @@ find_package(websocketpp REQUIRED)
 find_package(ZLIB REQUIRED)
 
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Debug)
-endif()
-
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  set(OPTIMIZATION_FLAGS "-DDEBUG")
-  if(NOT MSVC)
-    set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -O0")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -fno-omit-frame-pointer")
-  endif()
-  message("-- Configuring debug build")
-else()
-  set(OPTIMIZATION_FLAGS "-DNDEBUG -O2")
-  message("-- Configuring release build")
-endif()
-
-if(MSVC)
-  set(DESIRED_WARNINGS "-WX")
-else()
-  set(DESIRED_WARNINGS "-Wall -Wextra -Wconversion -Wunreachable-code -Wuninitialized -pedantic-errors -Wold-style-cast -Wno-error=unused-variable -Wfloat-equal")
-  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    set(DESIRED_WARNINGS "${DESIRED_WARNINGS} -Wmost")
-  endif()
-  set(DESIRED_WARNINGS "${DESIRED_WARNINGS} -Werror")
-endif()
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OPTIMIZATION_FLAGS} ${DESIRED_WARNINGS}")
-
-IF(NOT WIN32 AND ENABLE_ASAN)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
-  set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
 # Detect big-endian architectures
@@ -86,6 +62,7 @@ if(nlohmann_json_FOUND)
 else()
   message(STATUS "nlohmann_json not found, will search at compile time")
 endif()
+enable_strict_compiler_warnings(foxglove_bridge_base)
 
 message(STATUS "ROS_VERSION: " $ENV{ROS_VERSION})
 message(STATUS "ROS_DISTRO: " $ENV{ROS_DISTRO})
@@ -119,10 +96,12 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
         ${catkin_INCLUDE_DIRS}
     )
     target_link_libraries(foxglove_bridge_nodelet foxglove_bridge_base ${catkin_LIBRARIES})
+    enable_strict_compiler_warnings(foxglove_bridge_nodelet)
 
     add_executable(foxglove_bridge ros1_foxglove_bridge/src/ros1_foxglove_bridge_node.cpp)
     target_include_directories(foxglove_bridge SYSTEM PRIVATE ${catkin_INCLUDE_DIRS})
     target_link_libraries(foxglove_bridge ${catkin_LIBRARIES})
+    enable_strict_compiler_warnings(foxglove_bridge)
   else()
     message(FATAL_ERROR "Could not find catkin")
   endif()
@@ -153,12 +132,13 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     ament_target_dependencies(foxglove_bridge_component rclcpp rclcpp_components rosgraph_msgs)
     target_link_libraries(foxglove_bridge_component foxglove_bridge_base)
     rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
-
+    enable_strict_compiler_warnings(foxglove_bridge_component)
     add_executable(foxglove_bridge
       ros2_foxglove_bridge/src/ros2_foxglove_bridge_node.cpp
     )
     target_include_directories(foxglove_bridge SYSTEM PRIVATE ${rclcpp_INCLUDE_DIRS})
     ament_target_dependencies(foxglove_bridge rclcpp rclcpp_components)
+    enable_strict_compiler_warnings(foxglove_bridge)
   else()
     message(FATAL_ERROR "Could not find ament_cmake")
   endif()
@@ -180,9 +160,11 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
 
     catkin_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
     target_link_libraries(version_test foxglove_bridge_base)
+    enable_strict_compiler_warnings(version_test)
 
     catkin_add_gtest(serialization_test foxglove_bridge_base/tests/serialization_test.cpp)
     target_link_libraries(serialization_test foxglove_bridge_base)
+    enable_strict_compiler_warnings(foxglove_bridge)
 
     add_rostest_gtest(smoke_test ros1_foxglove_bridge/tests/smoke.test ros1_foxglove_bridge/tests/smoke_test.cpp)
     target_include_directories(smoke_test SYSTEM PRIVATE
@@ -191,6 +173,7 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
       $<INSTALL_INTERFACE:include>
     )
     target_link_libraries(smoke_test foxglove_bridge_base ${catkin_LIBRARIES})
+    enable_strict_compiler_warnings(smoke_test)
   endif()
 elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
   if(BUILD_TESTING)
@@ -202,13 +185,16 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
 
     ament_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
     target_link_libraries(version_test foxglove_bridge_base)
+    enable_strict_compiler_warnings(version_test)
 
     ament_add_gtest(serialization_test foxglove_bridge_base/tests/serialization_test.cpp)
     target_link_libraries(serialization_test foxglove_bridge_base)
+    enable_strict_compiler_warnings(serialization_test)
 
     ament_add_gtest(smoke_test ros2_foxglove_bridge/tests/smoke_test.cpp)
     ament_target_dependencies(smoke_test rclcpp rclcpp_components std_msgs std_srvs)
     target_link_libraries(smoke_test foxglove_bridge_base)
+    enable_strict_compiler_warnings(smoke_test)
   endif()
 endif()
 

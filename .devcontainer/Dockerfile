@@ -3,6 +3,7 @@ FROM ros:noetic-ros-core
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
+  clang \
   clang-format \
   curl \
   git \
@@ -19,6 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3-wstool \
   strace \
   && rm -rf /var/lib/apt/lists/*
+
+ENV CC=clang
+ENV CXX=clang++
 
 # Authorize the ROS 2 GPG key and add the ROS 2 apt repository
 RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg

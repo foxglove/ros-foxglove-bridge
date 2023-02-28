@@ -1,6 +1,14 @@
 ARG ROS_DISTRIBUTION=humble
 FROM ros:$ROS_DISTRIBUTION-ros-base
 
+# Install clang and set as default compiler.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  clang \
+  && rm -rf /var/lib/apt/lists/*
+
+ENV CC=clang
+ENV CXX=clang++
+
 # Set environment and working directory
 ENV ROS_WS /ros2_ws
 WORKDIR $ROS_WS
