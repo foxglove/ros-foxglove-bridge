@@ -195,89 +195,80 @@ public:
         numIgnoredTopics);
     }
 
-    // Create a list of topics that are new to us
-    std::vector<TopicAndDatatype> newTopics;
-    for (const auto& topic : latestTopics) {
-      if (_advertisedTopics.find(topic) == _advertisedTopics.end()) {
-        newTopics.push_back(topic);
-      }
-    }
+    std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
-    // Create a list of topics that have been removed
-    std::vector<TopicAndDatatype> removedTopics;
-    for (const auto& [topic, channel] : _advertisedTopics) {
-      if (latestTopics.find(topic) == latestTopics.end()) {
-        removedTopics.push_back(topic);
-      }
-    }
-
-    // Remove advertisements for topics that have been removed
-    {
-      std::lock_guard<std::mutex> lock(_subscriptionsMutex);
-      for (const auto& topicAndDatatype : removedTopics) {
-        auto& channel = _advertisedTopics.at(topicAndDatatype);
-
-        // Stop tracking this channel in the WebSocket server
-        _server->removeChannel(channel.id);
-
-        // Remove the subscription for this topic, if any
-        _subscriptions.erase(channel.id);
-
-        // Remove this topic+datatype tuple
-        _channelToTopicAndDatatype.erase(channel.id);
-        _advertisedTopics.erase(topicAndDatatype);
-
-        RCLCPP_INFO(this->get_logger(), "Removed channel %d for topic \"%s\" (%s)", channel.id,
+    // Remove channels for which the topic does not exist anymore
+    std::vector<foxglove::ChannelId> channelIdsToRemove;
+    for (auto channelIt = _advertisedTopics.begin(); channelIt != _advertisedTopics.end();) {
+      const TopicAndDatatype topicAndDatatype = {channelIt->second.topic,
+                                                 channelIt->second.schemaName};
+      if (latestTopics.find(topicAndDatatype) == latestTopics.end()) {
+        const auto channelId = channelIt->first;
+        channelIdsToRemove.push_back(channelId);
+        _subscriptions.erase(channelId);
+        RCLCPP_INFO(this->get_logger(), "Removed channel %d for topic \"%s\" (%s)", channelId,
                     topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
+        channelIt = _advertisedTopics.erase(channelIt);
+      } else {
+        channelIt++;
+      }
+    }
+    _server->removeChannels(channelIdsToRemove);
+
+    // Add new channels for new topics
+    std::vector<foxglove::ChannelWithoutId> channelsToAdd;
+    for (const auto& topicAndDatatype : latestTopics) {
+      if (std::find_if(_advertisedTopics.begin(), _advertisedTopics.end(),
+                       [topicAndDatatype](const auto& channelIdAndChannel) {
+                         const auto& channel = channelIdAndChannel.second;
+                         return channel.topic == topicAndDatatype.first &&
+                                channel.schemaName == topicAndDatatype.second;
+                       }) != _advertisedTopics.end()) {
+        continue;  // Topic already advertised
       }
 
-      // Advertise new topics
-      for (const auto& topicAndDatatype : newTopics) {
-        foxglove::ChannelWithoutId newChannel{};
-        newChannel.topic = topicAndDatatype.first;
-        newChannel.schemaName = topicAndDatatype.second;
+      foxglove::ChannelWithoutId newChannel{};
+      newChannel.topic = topicAndDatatype.first;
+      newChannel.schemaName = topicAndDatatype.second;
 
-        try {
-          auto [format, schema] = _messageDefinitionCache.get_full_text(topicAndDatatype.second);
-          switch (format) {
-            case foxglove::MessageDefinitionFormat::MSG:
-              newChannel.encoding = "cdr";
-              newChannel.schema = schema;
-              break;
-            case foxglove::MessageDefinitionFormat::IDL:
-              RCLCPP_WARN(this->get_logger(),
-                          "IDL message definition format cannot be communicated over ws-protocol. "
-                          "Topic \"%s\" (%s) may not decode correctly in clients",
-                          topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
-              newChannel.encoding = "cdr";
-              newChannel.schema = schema;
-              break;
-          }
-
-        } catch (const foxglove::DefinitionNotFoundError& err) {
-          RCLCPP_WARN(this->get_logger(), "Could not find definition for type %s: %s",
-                      topicAndDatatype.second.c_str(), err.what());
-          // We still advertise the channel, but with an emtpy schema
-          newChannel.schema = "";
-        } catch (const std::exception& err) {
-          RCLCPP_WARN(this->get_logger(), "Failed to add channel for topic \"%s\" (%s): %s",
-                      topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str(), err.what());
-          continue;
+      try {
+        auto [format, schema] = _messageDefinitionCache.get_full_text(topicAndDatatype.second);
+        switch (format) {
+          case foxglove::MessageDefinitionFormat::MSG:
+            newChannel.encoding = "cdr";
+            newChannel.schema = schema;
+            break;
+          case foxglove::MessageDefinitionFormat::IDL:
+            RCLCPP_WARN(this->get_logger(),
+                        "IDL message definition format cannot be communicated over ws-protocol. "
+                        "Topic \"%s\" (%s) may not decode correctly in clients",
+                        topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
+            newChannel.encoding = "cdr";
+            newChannel.schema = schema;
+            break;
         }
 
-        auto channel = foxglove::Channel{_server->addChannel(newChannel), newChannel};
-        RCLCPP_DEBUG(this->get_logger(), "Advertising channel %d for topic \"%s\" (%s)", channel.id,
-                     channel.topic.c_str(), channel.schemaName.c_str());
-
-        // Add a mapping from the topic+datatype tuple to the channel, and channel ID to the
-        // topic+datatype tuple
-        _advertisedTopics.emplace(topicAndDatatype, std::move(channel));
-        _channelToTopicAndDatatype.emplace(channel.id, topicAndDatatype);
+      } catch (const foxglove::DefinitionNotFoundError& err) {
+        RCLCPP_WARN(this->get_logger(), "Could not find definition for type %s: %s",
+                    topicAndDatatype.second.c_str(), err.what());
+        // We still advertise the channel, but with an emtpy schema
+        newChannel.schema = "";
+      } catch (const std::exception& err) {
+        RCLCPP_WARN(this->get_logger(), "Failed to add channel for topic \"%s\" (%s): %s",
+                    topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str(), err.what());
+        continue;
       }
+
+      channelsToAdd.push_back(newChannel);
     }
 
-    if (newTopics.size() > 0) {
-      _server->broadcastChannels();
+    const auto channelIds = _server->addChannels(channelsToAdd);
+    for (size_t i = 0; i < channelsToAdd.size(); ++i) {
+      const auto channelId = channelIds[i];
+      const auto& channel = channelsToAdd[i];
+      _advertisedTopics.emplace(channelId, channel);
+      RCLCPP_DEBUG(this->get_logger(), "Advertising channel %d for topic \"%s\" (%s)", channelId,
+                   channel.topic.c_str(), channel.schemaName.c_str());
     }
   }
 
@@ -426,9 +417,8 @@ private:
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;
   std::shared_ptr<ParameterInterface> _paramInterface;
-  std::unordered_map<TopicAndDatatype, foxglove::Channel, PairHash> _advertisedTopics;
+  std::unordered_map<foxglove::ChannelId, foxglove::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove::ServiceId, foxglove::ServiceWithoutId> _advertisedServices;
-  std::unordered_map<foxglove::ChannelId, TopicAndDatatype> _channelToTopicAndDatatype;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
   PublicationsByClient _clientAdvertisedTopics;
   std::unordered_map<foxglove::ServiceId, GenericClient::SharedPtr> _serviceClients;
@@ -502,22 +492,16 @@ private:
 
   void subscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
-    auto it = _channelToTopicAndDatatype.find(channelId);
-    if (it == _channelToTopicAndDatatype.end()) {
+    auto it = _advertisedTopics.find(channelId);
+    if (it == _advertisedTopics.end()) {
       RCLCPP_WARN(this->get_logger(), "Received subscribe request for unknown channel %d",
                   channelId);
       return;
     }
-    auto& topicAndDatatype = it->second;
-    auto topic = topicAndDatatype.first;
-    auto datatype = topicAndDatatype.second;
-    auto it2 = _advertisedTopics.find(topicAndDatatype);
-    if (it2 == _advertisedTopics.end()) {
-      RCLCPP_ERROR(this->get_logger(), "Channel %d for topic \"%s\" (%s) is not advertised",
-                   channelId, topic.c_str(), datatype.c_str());
-      return;
-    }
-    const auto& channel = it2->second;
+
+    const auto& channel = it->second;
+    const auto& topic = channel.topic;
+    const auto& datatype = channel.schemaName;
 
     // Get client subscriptions for this channel or insert an empty map.
     auto [subscriptionsIt, firstSubscription] =
@@ -601,7 +585,7 @@ private:
     try {
       auto subscriber = this->create_generic_subscription(
         topic, datatype, qos,
-        std::bind(&FoxgloveBridge::rosMessageHandler, this, channel, clientHandle, _1),
+        std::bind(&FoxgloveBridge::rosMessageHandler, this, channelId, clientHandle, _1),
         subscriptionOptions);
       subscriptionsByClient.emplace(clientHandle, std::move(subscriber));
     } catch (const std::exception& ex) {
@@ -613,18 +597,13 @@ private:
   void unsubscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
-    auto it = _channelToTopicAndDatatype.find(channelId);
-    TopicAndDatatype topicAndDatatype =
-      it != _channelToTopicAndDatatype.end()
-        ? it->second
-        : std::make_pair<std::string, std::string>("[Unknown]", "[Unknown]");
-
-    auto it2 = _subscriptions.find(channelId);
-    if (it2 == _subscriptions.end()) {
+    const auto channelIt = _advertisedTopics.find(channelId);
+    if (channelIt == _advertisedTopics.end()) {
       RCLCPP_WARN(this->get_logger(), "Received unsubscribe request for unknown channel %d",
                   channelId);
       return;
     }
+    const auto& channel = channelIt->second;
 
     auto subscriptionsIt = _subscriptions.find(channelId);
     if (subscriptionsIt == _subscriptions.end()) {
@@ -648,8 +627,8 @@ private:
     subscriptionsByClient.erase(clientSubscription);
     if (subscriptionsByClient.empty()) {
       RCLCPP_INFO(this->get_logger(), "Unsubscribing from topic \"%s\" (%s) on channel %d",
-                  topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str(), channelId);
-      _subscriptions.erase(it2);
+                  channel.topic.c_str(), channel.schemaName.c_str(), channelId);
+      _subscriptions.erase(subscriptionsIt);
     } else {
       RCLCPP_INFO(this->get_logger(),
                   "Removed one subscription from channel %d (%zu subscription(s) left)", channelId,
@@ -821,14 +800,14 @@ private:
     }
   }
 
-  void rosMessageHandler(const foxglove::Channel& channel, ConnectionHandle clientHandle,
+  void rosMessageHandler(const foxglove::ChannelId& channelId, ConnectionHandle clientHandle,
                          std::shared_ptr<rclcpp::SerializedMessage> msg) {
     // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
     // to `/rosout` will cause a feedback loop
     const auto timestamp = this->now().nanoseconds();
     assert(timestamp >= 0 && "Timestamp is negative");
     const auto rclSerializedMsg = msg->get_rcl_serialized_message();
-    _server->sendMessage(clientHandle, channel.id, static_cast<uint64_t>(timestamp),
+    _server->sendMessage(clientHandle, channelId, static_cast<uint64_t>(timestamp),
                          rclSerializedMsg.buffer, rclSerializedMsg.buffer_length);
   }
 
