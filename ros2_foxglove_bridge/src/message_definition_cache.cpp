@@ -18,7 +18,7 @@ namespace foxglove {
 
 // Match datatype names (foo_msgs/Bar or foo_msgs/msg/Bar or foo_msgs/srv/Bar)
 static const std::regex PACKAGE_TYPENAME_REGEX{
-  R"(^([a-zA-Z0-9_]+)/(?:msg/|srv/)?([a-zA-Z0-9_]+)$)"};
+  R"(^([a-zA-Z0-9_]+)/(?:msg/|srv/|action/)?([a-zA-Z0-9_]+)$)"};
 
 // Match field types from .msg definitions ("foo_msgs/Bar" in "foo_msgs/Bar[] bar")
 static const std::regex MSG_FIELD_TYPE_REGEX{R"((?:^|\n)\s*([a-zA-Z0-9_/]+)(?:\[[^\]]*\])?\s+)"};
@@ -203,7 +203,7 @@ std::pair<MessageDefinitionFormat, std::string> MessageDefinitionCache::get_full
     result = append_recursive(DefinitionIdentifier{format, root_package_resource_name});
   } catch (const DefinitionNotFoundError& err) {
     // log that we've fallen back
-    RCUTILS_LOG_WARN_NAMED("rosbag2_storage_mcap", "no .msg definition for %s, falling back to IDL",
+    RCUTILS_LOG_WARN_NAMED("foxglove_bridge", "no .msg definition for %s, falling back to IDL",
                            err.what());
     format = MessageDefinitionFormat::IDL;
     DefinitionIdentifier root_definition_identifier{format, root_package_resource_name};
