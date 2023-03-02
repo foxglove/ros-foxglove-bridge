@@ -203,7 +203,7 @@ std::pair<MessageDefinitionFormat, std::string> MessageDefinitionCache::get_full
     result = append_recursive(DefinitionIdentifier{format, root_package_resource_name});
   } catch (const DefinitionNotFoundError& err) {
     // log that we've fallen back
-    RCUTILS_LOG_WARN_NAMED("rosbag2_storage_mcap", "no .msg definition for %s, falling back to IDL",
+    RCUTILS_LOG_WARN_NAMED("foxglove_bridge", "no .msg definition for %s, falling back to IDL",
                            err.what());
     format = MessageDefinitionFormat::IDL;
     DefinitionIdentifier root_definition_identifier{format, root_package_resource_name};
