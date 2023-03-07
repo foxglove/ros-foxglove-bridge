@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstring>
 #include <stdint.h>
 #include <string>
@@ -14,6 +15,11 @@ constexpr char CAPABILITY_PARAMETERS[] = "parameters";
 constexpr char CAPABILITY_PARAMETERS_SUBSCRIBE[] = "parametersSubscribe";
 constexpr char CAPABILITY_SERVICES[] = "services";
 constexpr char CAPABILITY_CONNECTION_GRAPH[] = "connectionGraph";
+
+constexpr std::array<const char*, 5> DEFAULT_CAPABILITIES = {
+  CAPABILITY_CLIENT_PUBLISH, CAPABILITY_CONNECTION_GRAPH, CAPABILITY_PARAMETERS_SUBSCRIBE,
+  CAPABILITY_PARAMETERS,     CAPABILITY_SERVICES,
+};
 
 using ChannelId = uint32_t;
 using ClientChannelId = uint32_t;
