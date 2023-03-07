@@ -1,5 +1,6 @@
 
 
+#include <foxglove_bridge/common.hpp>
 #include <foxglove_bridge/param_utils.hpp>
 
 namespace foxglove_bridge {
@@ -106,6 +107,17 @@ void declareParameters(rclcpp::Node* node) {
     "at the cost of additional CPU load.";
   useCompressionDescription.read_only = true;
   node->declare_parameter(PARAM_USE_COMPRESSION, false, useCompressionDescription);
+
+  auto paramCapabilities = rcl_interfaces::msg::ParameterDescriptor{};
+  paramCapabilities.name = PARAM_CAPABILITIES;
+  paramCapabilities.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  paramCapabilities.description = "Server capabilities";
+  paramCapabilities.read_only = true;
+  node->declare_parameter(
+    PARAM_CAPABILITIES,
+    std::vector<std::string>(std::vector<std::string>(foxglove::DEFAULT_CAPABILITIES.begin(),
+                                                      foxglove::DEFAULT_CAPABILITIES.end())),
+    paramCapabilities);
 }
 
 std::vector<std::regex> parseRegexStrings(rclcpp::Node* node,

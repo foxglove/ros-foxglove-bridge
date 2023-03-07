@@ -55,6 +55,26 @@ constexpr uint32_t Integer(const std::string_view str) {
   return result;
 }
 
+/// Map of required capability by client operation (text).
+const std::unordered_map<std::string, std::string> CAPABILITY_BY_CLIENT_OPERATION = {
+  // {"subscribe", },   // No required capability.
+  // {"unsubscribe", }, // No required capability.
+  {"advertise", CAPABILITY_CLIENT_PUBLISH},
+  {"unadvertise", CAPABILITY_CLIENT_PUBLISH},
+  {"getParameters", CAPABILITY_PARAMETERS},
+  {"setParameters", CAPABILITY_PARAMETERS},
+  {"subscribeParameterUpdates", CAPABILITY_PARAMETERS_SUBSCRIBE},
+  {"unsubscribeParameterUpdates", CAPABILITY_PARAMETERS_SUBSCRIBE},
+  {"subscribeConnectionGraph", CAPABILITY_CONNECTION_GRAPH},
+  {"unsubscribeConnectionGraph", CAPABILITY_CONNECTION_GRAPH},
+};
+
+/// Map of required capability by client operation (binary).
+const std::unordered_map<ClientBinaryOpcode, std::string> CAPABILITY_BY_CLIENT_BINARY_OPERATION = {
+  {ClientBinaryOpcode::MESSAGE_DATA, CAPABILITY_CLIENT_PUBLISH},
+  {ClientBinaryOpcode::SERVICE_CALL_REQUEST, CAPABILITY_SERVICES},
+};
+
 enum class StatusLevel : uint8_t {
   Info = 0,
   Warning = 1,
@@ -544,6 +564,15 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
   const json payload = json::parse(msg);
   const std::string& op = payload.at("op").get<std::string>();
 
+  const auto requiredCapabilityIt = CAPABILITY_BY_CLIENT_OPERATION.find(op);
+  if (requiredCapabilityIt != CAPABILITY_BY_CLIENT_OPERATION.end() &&
+      !hasCapability(requiredCapabilityIt->second)) {
+    sendStatus(hdl, StatusLevel::Error,
+               "Operation '" + op + "' not supported as server capability '" +
+                 requiredCapabilityIt->second + "' is missing");
+    return;
+  }
+
   std::shared_lock<std::shared_mutex> clientsLock(_clientsMutex);
   auto& clientInfo = _clients.at(hdl);
 
@@ -660,12 +689,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
     } break;
     case GET_PARAMETERS: {
-      if (!hasCapability(CAPABILITY_PARAMETERS)) {
-        _server.get_elog().write(RECOVERABLE, "Operation '" + op +
-                                                "' not supported as server capability '" +
-                                                CAPABILITY_PARAMETERS + "' is missing");
-        return;
-      } else if (!_handlers.parameterRequestHandler) {
+      if (!_handlers.parameterRequestHandler) {
         return;
       }
 
@@ -676,12 +700,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       _handlers.parameterRequestHandler(paramNames, requestId, hdl);
     } break;
     case SET_PARAMETERS: {
-      if (!hasCapability(CAPABILITY_PARAMETERS)) {
-        _server.get_elog().write(RECOVERABLE, "Operation '" + op +
-                                                "' not supported as server capability '" +
-                                                CAPABILITY_PARAMETERS + "' is missing");
-        return;
-      } else if (!_handlers.parameterChangeHandler) {
+      if (!_handlers.parameterChangeHandler) {
         return;
       }
 
@@ -692,12 +711,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       _handlers.parameterChangeHandler(parameters, requestId, hdl);
     } break;
     case SUBSCRIBE_PARAMETER_UPDATES: {
-      if (!hasCapability(CAPABILITY_PARAMETERS_SUBSCRIBE)) {
-        _server.get_elog().write(RECOVERABLE, "Operation '" + op +
-                                                "' not supported as server capability '" +
-                                                CAPABILITY_PARAMETERS_SUBSCRIBE + " is missing'");
-        return;
-      } else if (!_handlers.parameterSubscriptionHandler) {
+      if (!_handlers.parameterSubscriptionHandler) {
         return;
       }
 
@@ -722,12 +736,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
     } break;
     case UNSUBSCRIBE_PARAMETER_UPDATES: {
-      if (!hasCapability(CAPABILITY_PARAMETERS_SUBSCRIBE)) {
-        _server.get_elog().write(RECOVERABLE, "Operation '" + op +
-                                                "' not supported as server capability '" +
-                                                CAPABILITY_PARAMETERS_SUBSCRIBE + " is missing'");
-        return;
-      } else if (!_handlers.parameterSubscriptionHandler) {
+      if (!_handlers.parameterSubscriptionHandler) {
         return;
       }
 
@@ -798,22 +807,32 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, const uint8_t* msg,
                                                              size_t length) {
-  const auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                           std::chrono::high_resolution_clock::now().time_since_epoch())
-                           .count();
-
   if (length < 1) {
     sendStatus(hdl, StatusLevel::Error, "Received an empty binary message");
     return;
   }
 
   const auto op = static_cast<ClientBinaryOpcode>(msg[0]);
+
+  const auto requiredCapabilityIt = CAPABILITY_BY_CLIENT_BINARY_OPERATION.find(op);
+  if (requiredCapabilityIt != CAPABILITY_BY_CLIENT_BINARY_OPERATION.end() &&
+      !hasCapability(requiredCapabilityIt->second)) {
+    sendStatus(hdl, StatusLevel::Error,
+               "Binary operation '" + std::to_string(static_cast<int>(op)) +
+                 "' not supported as server capability '" + requiredCapabilityIt->second +
+                 "' is missing");
+    return;
+  }
+
   switch (op) {
     case ClientBinaryOpcode::MESSAGE_DATA: {
       if (length < 5) {
         sendStatus(hdl, StatusLevel::Error, "Invalid message length " + std::to_string(length));
         return;
       }
+      const auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                               std::chrono::high_resolution_clock::now().time_since_epoch())
+                               .count();
       const ClientChannelId channelId = *reinterpret_cast<const ClientChannelId*>(msg + 1);
       std::shared_lock<std::shared_mutex> lock(_clientChannelsMutex);
 

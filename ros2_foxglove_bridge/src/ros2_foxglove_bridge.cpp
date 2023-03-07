@@ -57,18 +57,11 @@ public:
     const auto paramWhitelistPatterns = parseRegexStrings(this, paramWhiteList);
     const auto useCompression = this->get_parameter(PARAM_USE_COMPRESSION).as_bool();
     _useSimTime = this->get_parameter("use_sim_time").as_bool();
-
-    _paramInterface = std::make_shared<ParameterInterface>(this, paramWhitelistPatterns);
+    _capabilities = this->get_parameter(PARAM_CAPABILITIES).as_string_array();
 
     const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
     foxglove::ServerOptions serverOptions;
-    serverOptions.capabilities = {
-      foxglove::CAPABILITY_CLIENT_PUBLISH,
-      foxglove::CAPABILITY_CONNECTION_GRAPH,
-      foxglove::CAPABILITY_PARAMETERS_SUBSCRIBE,
-      foxglove::CAPABILITY_PARAMETERS,
-      foxglove::CAPABILITY_SERVICES,
-    };
+    serverOptions.capabilities = _capabilities;
     if (_useSimTime) {
       serverOptions.capabilities.push_back(foxglove::CAPABILITY_TIME);
     }
@@ -91,18 +84,25 @@ public:
     hdlrs.clientUnadvertiseHandler =
       std::bind(&FoxgloveBridge::clientUnadvertiseHandler, this, _1, _2);
     hdlrs.clientMessageHandler = std::bind(&FoxgloveBridge::clientMessageHandler, this, _1, _2);
-    hdlrs.parameterRequestHandler =
-      std::bind(&FoxgloveBridge::parameterRequestHandler, this, _1, _2, _3);
-    hdlrs.parameterChangeHandler =
-      std::bind(&FoxgloveBridge::parameterChangeHandler, this, _1, _2, _3);
-    hdlrs.parameterSubscriptionHandler =
-      std::bind(&FoxgloveBridge::parameterSubscriptionHandler, this, _1, _2, _3);
     hdlrs.serviceRequestHandler = std::bind(&FoxgloveBridge::serviceRequestHandler, this, _1, _2);
     hdlrs.subscribeConnectionGraphHandler =
       std::bind(&FoxgloveBridge::subscribeConnectionGraphHandler, this, _1);
-    _server->setHandlers(std::move(hdlrs));
 
-    _paramInterface->setParamUpdateCallback(std::bind(&FoxgloveBridge::parameterUpdates, this, _1));
+    if (hasCapability(foxglove::CAPABILITY_PARAMETERS) ||
+        hasCapability(foxglove::CAPABILITY_PARAMETERS_SUBSCRIBE)) {
+      hdlrs.parameterRequestHandler =
+        std::bind(&FoxgloveBridge::parameterRequestHandler, this, _1, _2, _3);
+      hdlrs.parameterChangeHandler =
+        std::bind(&FoxgloveBridge::parameterChangeHandler, this, _1, _2, _3);
+      hdlrs.parameterSubscriptionHandler =
+        std::bind(&FoxgloveBridge::parameterSubscriptionHandler, this, _1, _2, _3);
+
+      _paramInterface = std::make_shared<ParameterInterface>(this, paramWhitelistPatterns);
+      _paramInterface->setParamUpdateCallback(
+        std::bind(&FoxgloveBridge::parameterUpdates, this, _1));
+    }
+
+    _server->setHandlers(std::move(hdlrs));
 
     _handlerCallbackQueue = std::make_unique<CallbackQueue>(1ul /* 1 thread */);
     _server->start(address, port);
@@ -275,6 +275,8 @@ public:
   void updateAdvertisedServices() {
     if (!rclcpp::ok()) {
       return;
+    } else if (!hasCapability(foxglove::CAPABILITY_SERVICES)) {
+      return;
     }
 
     // Get the current list of visible services and datatypes from the ROS graph
@@ -432,6 +434,7 @@ private:
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
   bool _useSimTime = false;
+  std::vector<std::string> _capabilities;
   std::atomic<bool> _subscribeGraphUpdates = false;
 
   void subscribeHandler(foxglove::ChannelId channelId, ConnectionHandle hdl) {
@@ -859,6 +862,10 @@ private:
       _server->sendServiceResponse(clientHandle, response);
     };
     client->async_send_request(reqMessage, responseReceivedCallback);
+  }
+
+  bool hasCapability(const std::string& capability) {
+    return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
   }
 };
 

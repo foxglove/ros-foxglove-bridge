@@ -84,6 +84,9 @@ public:
     const auto useCompression = nhp.param<bool>("use_compression", false);
     _useSimTime = nhp.param<bool>("/use_sim_time", false);
     const auto sessionId = nhp.param<std::string>("/run_id", std::to_string(std::time(nullptr)));
+    _capabilities = nhp.param<std::vector<std::string>>(
+      "capabilities", std::vector<std::string>(foxglove::DEFAULT_CAPABILITIES.begin(),
+                                               foxglove::DEFAULT_CAPABILITIES.end()));
 
     const auto topicWhitelistPatterns =
       nhp.param<std::vector<std::string>>("topic_whitelist", {".*"});
@@ -108,13 +111,7 @@ public:
 
     try {
       foxglove::ServerOptions serverOptions;
-      serverOptions.capabilities = {
-        foxglove::CAPABILITY_CLIENT_PUBLISH,
-        foxglove::CAPABILITY_CONNECTION_GRAPH,
-        foxglove::CAPABILITY_PARAMETERS_SUBSCRIBE,
-        foxglove::CAPABILITY_PARAMETERS,
-        foxglove::CAPABILITY_SERVICES,
-      };
+      serverOptions.capabilities = _capabilities;
       if (_useSimTime) {
         serverOptions.capabilities.push_back(foxglove::CAPABILITY_TIME);
       }
@@ -451,45 +448,51 @@ private:
       return;
     }
 
-    // Retrieve system state from ROS master.
+    const bool servicesEnabled = hasCapability(foxglove::CAPABILITY_SERVICES);
+    const bool querySystemState = servicesEnabled || _subscribeGraphUpdates;
+
     std::vector<std::string> serviceNames;
     foxglove::MapOfSets publishers, subscribers, services;
-    XmlRpc::XmlRpcValue params, result, payload;
-    params[0] = this->getName();
-    if (ros::master::execute("getSystemState", params, result, payload, false) &&
-        static_cast<int>(result[0]) == 1) {
-      const auto& systemState = result[2];
-      const auto& publishersXmlRpc = systemState[0];
-      const auto& subscribersXmlRpc = systemState[1];
-      const auto& servicesXmlRpc = systemState[2];
 
-      for (int i = 0; i < servicesXmlRpc.size(); ++i) {
-        const std::string& name = servicesXmlRpc[i][0];
-        if (isWhitelisted(name, _serviceWhitelistPatterns)) {
-          serviceNames.push_back(name);
-          services.emplace(name, rpcValueToStringSet(servicesXmlRpc[i][1]));
+    // Retrieve system state from ROS master.
+    if (querySystemState) {
+      XmlRpc::XmlRpcValue params, result, payload;
+      params[0] = this->getName();
+      if (ros::master::execute("getSystemState", params, result, payload, false) &&
+          static_cast<int>(result[0]) == 1) {
+        const auto& systemState = result[2];
+        const auto& publishersXmlRpc = systemState[0];
+        const auto& subscribersXmlRpc = systemState[1];
+        const auto& servicesXmlRpc = systemState[2];
+
+        for (int i = 0; i < servicesXmlRpc.size(); ++i) {
+          const std::string& name = servicesXmlRpc[i][0];
+          if (isWhitelisted(name, _serviceWhitelistPatterns)) {
+            serviceNames.push_back(name);
+            services.emplace(name, rpcValueToStringSet(servicesXmlRpc[i][1]));
+          }
         }
-      }
-      for (int i = 0; i < publishersXmlRpc.size(); ++i) {
-        const std::string& name = publishersXmlRpc[i][0];
-        if (isWhitelisted(name, _topicWhitelistPatterns)) {
-          publishers.emplace(name, rpcValueToStringSet(publishersXmlRpc[i][1]));
+        for (int i = 0; i < publishersXmlRpc.size(); ++i) {
+          const std::string& name = publishersXmlRpc[i][0];
+          if (isWhitelisted(name, _topicWhitelistPatterns)) {
+            publishers.emplace(name, rpcValueToStringSet(publishersXmlRpc[i][1]));
+          }
         }
-      }
-      for (int i = 0; i < subscribersXmlRpc.size(); ++i) {
-        const std::string& name = subscribersXmlRpc[i][0];
-        if (isWhitelisted(name, _topicWhitelistPatterns)) {
-          subscribers.emplace(name, rpcValueToStringSet(subscribersXmlRpc[i][1]));
+        for (int i = 0; i < subscribersXmlRpc.size(); ++i) {
+          const std::string& name = subscribersXmlRpc[i][0];
+          if (isWhitelisted(name, _topicWhitelistPatterns)) {
+            subscribers.emplace(name, rpcValueToStringSet(subscribersXmlRpc[i][1]));
+          }
         }
+      } else {
+        ROS_WARN("Failed to call getSystemState: %s", result.toXml().c_str());
       }
-    } else {
-      ROS_WARN("Failed to call getSystemState: %s", result.toXml().c_str());
-      return;
     }
 
     updateAdvertisedTopics();
-    updateAdvertisedServices(serviceNames);
-
+    if (servicesEnabled) {
+      updateAdvertisedServices(serviceNames);
+    }
     if (_subscribeGraphUpdates) {
       _server->updateConnectionGraph(publishers, subscribers, services);
     }
@@ -845,6 +848,10 @@ private:
     }
   }
 
+  bool hasCapability(const std::string& capability) {
+    return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
+  }
+
   std::unique_ptr<foxglove::ServerInterface<ConnectionHandle>> _server;
   std::unique_ptr<ros::CallbackQueue> _handlerCallbackQueue;
   std::unique_ptr<ros::AsyncSpinner> _handlerSpinner;
@@ -865,6 +872,7 @@ private:
   size_t _updateCount = 0;
   ros::Subscriber _clockSubscription;
   bool _useSimTime = false;
+  std::vector<std::string> _capabilities;
   std::atomic<bool> _subscribeGraphUpdates = false;
 };
 
