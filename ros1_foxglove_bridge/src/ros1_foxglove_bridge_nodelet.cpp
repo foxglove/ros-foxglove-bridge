@@ -21,6 +21,7 @@
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/generic_service.hpp>
 #include <foxglove_bridge/param_utils.hpp>
+#include <foxglove_bridge/regex_utils.hpp>
 #include <foxglove_bridge/server_factory.hpp>
 #include <foxglove_bridge/service_utils.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
@@ -67,6 +68,7 @@ using TopicAndDatatype = std::pair<std::string, std::string>;
 using SubscriptionsByClient = std::map<ConnectionHandle, ros::Subscriber, std::owner_less<>>;
 using ClientPublications = std::unordered_map<foxglove::ClientChannelId, ros::Publisher>;
 using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std::owner_less<>>;
+using foxglove::isWhitelisted;
 
 class FoxgloveBridge : public nodelet::Nodelet {
 public:

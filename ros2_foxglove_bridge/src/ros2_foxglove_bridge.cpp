@@ -15,6 +15,7 @@
 #include <foxglove_bridge/message_definition_cache.hpp>
 #include <foxglove_bridge/param_utils.hpp>
 #include <foxglove_bridge/parameter_interface.hpp>
+#include <foxglove_bridge/regex_utils.hpp>
 #include <foxglove_bridge/server_factory.hpp>
 #include <foxglove_bridge/utils.hpp>
 
@@ -27,6 +28,7 @@ using SubscriptionsByClient = std::map<ConnectionHandle, Subscription, std::owne
 using Publication = rclcpp::GenericPublisher::SharedPtr;
 using ClientPublications = std::unordered_map<foxglove::ClientChannelId, Publication>;
 using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std::owner_less<>>;
+using foxglove::isWhitelisted;
 
 namespace foxglove_bridge {
 
