@@ -32,7 +32,7 @@ To run the bridge node, it is recommended to use the provided launch file:
 **ROS 1**
 
 ```bash
-$ roslaunch --screen foxglove_bridge foxglove_bridge.launch port:=8765 # topic_whitelist:=[/foo/.*,/bar/baz]
+$ roslaunch --screen foxglove_bridge foxglove_bridge.launch port:=8765
 ```
 
 ```xml
@@ -48,7 +48,7 @@ $ roslaunch --screen foxglove_bridge foxglove_bridge.launch port:=8765 # topic_w
 **ROS 2**
 
 ```bash
-$ ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765 # topic_whitelist:=[/foo/.*,/bar/baz]
+$ ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
 ```
 
 ```xml
