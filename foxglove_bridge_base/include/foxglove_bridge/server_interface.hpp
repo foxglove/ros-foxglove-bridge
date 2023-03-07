@@ -27,7 +27,7 @@ struct ServerOptions {
   std::string keyfile = "";
   std::string sessionId;
   bool useCompression = false;
-  std::vector<std::regex> topicWhitelistPatterns;
+  std::vector<std::regex> clientTopicWhitelistPatterns;
 };
 
 template <typename ConnectionHandle>

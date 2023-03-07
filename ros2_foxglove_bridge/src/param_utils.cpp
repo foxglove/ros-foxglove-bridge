@@ -118,6 +118,15 @@ void declareParameters(rclcpp::Node* node) {
     std::vector<std::string>(std::vector<std::string>(foxglove::DEFAULT_CAPABILITIES.begin(),
                                                       foxglove::DEFAULT_CAPABILITIES.end())),
     paramCapabilities);
+
+  auto clientTopicWhiteListDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  clientTopicWhiteListDescription.name = PARAM_CLIENT_TOPIC_WHITELIST;
+  clientTopicWhiteListDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  clientTopicWhiteListDescription.description =
+    "List of regular expressions (ECMAScript) of whitelisted client-published topic names.";
+  clientTopicWhiteListDescription.read_only = true;
+  node->declare_parameter(PARAM_CLIENT_TOPIC_WHITELIST, std::vector<std::string>({".*"}),
+                          paramWhiteListDescription);
 }
 
 std::vector<std::regex> parseRegexStrings(rclcpp::Node* node,

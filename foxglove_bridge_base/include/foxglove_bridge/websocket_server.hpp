@@ -652,7 +652,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         }
 
         const auto topic = chan.at("topic").get<std::string>();
-        if (!isWhitelisted(topic, _options.topicWhitelistPatterns)) {
+        if (!isWhitelisted(topic, _options.clientTopicWhitelistPatterns)) {
           sendStatus(hdl, StatusLevel::Error,
                      "Can't advertise channel " + std::to_string(channelId) + ", topic '" + topic +
                        "' not whitelisted");

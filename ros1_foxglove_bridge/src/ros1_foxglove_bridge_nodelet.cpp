@@ -108,6 +108,13 @@ public:
       ROS_ERROR("Failed to parse one or more service whitelist patterns");
     }
 
+    const auto clientTopicWhitelist =
+      nhp.param<std::vector<std::string>>("client_topic_whitelist", {".*"});
+    const auto clientTopicWhitelistPatterns = parseRegexPatterns(clientTopicWhitelist);
+    if (clientTopicWhitelist.size() != clientTopicWhitelistPatterns.size()) {
+      ROS_ERROR("Failed to parse one or more service whitelist patterns");
+    }
+
     ROS_INFO("Starting %s with %s", ros::this_node::getName().c_str(),
              foxglove::WebSocketUserAgent());
 
@@ -125,7 +132,7 @@ public:
       serverOptions.certfile = certfile;
       serverOptions.keyfile = keyfile;
       serverOptions.useCompression = useCompression;
-      serverOptions.topicWhitelistPatterns = _topicWhitelistPatterns;
+      serverOptions.clientTopicWhitelistPatterns = clientTopicWhitelistPatterns;
 
       const auto logHandler =
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);

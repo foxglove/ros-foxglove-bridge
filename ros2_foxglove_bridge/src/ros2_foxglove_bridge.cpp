@@ -60,6 +60,9 @@ public:
     const auto useCompression = this->get_parameter(PARAM_USE_COMPRESSION).as_bool();
     _useSimTime = this->get_parameter("use_sim_time").as_bool();
     _capabilities = this->get_parameter(PARAM_CAPABILITIES).as_string_array();
+    const auto clientTopicWhiteList =
+      this->get_parameter(PARAM_CLIENT_TOPIC_WHITELIST).as_string_array();
+    const auto clientTopicWhiteListPatterns = parseRegexStrings(this, clientTopicWhiteList);
 
     const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
     foxglove::ServerOptions serverOptions;
@@ -75,7 +78,7 @@ public:
     serverOptions.useTls = useTLS;
     serverOptions.certfile = certfile;
     serverOptions.keyfile = keyfile;
-    serverOptions.topicWhitelistPatterns = _topicWhitelistPatterns;
+    serverOptions.clientTopicWhitelistPatterns = clientTopicWhiteListPatterns;
 
     _server = foxglove::ServerFactory::createServer<ConnectionHandle>("foxglove_bridge", logHandler,
                                                                       serverOptions);
