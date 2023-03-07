@@ -11,6 +11,7 @@
   <arg name="send_buffer_limit"         default="10000000" />
   <arg name="nodelet_manager"           default="foxglove_nodelet_manager" />
   <arg name="num_threads"               default="0" />
+  <arg name="capabilities"              default="[clientPublish,parameters,parametersSubscribe,services,connectionGraph]" />
 
   <node pkg="nodelet" type="nodelet" name="foxglove_nodelet_manager" args="manager"
         if="$(eval nodelet_manager == 'foxglove_nodelet_manager')">
@@ -30,5 +31,6 @@
     <rosparam param="topic_whitelist"   subst_value="True">$(arg topic_whitelist)</rosparam>
     <rosparam param="param_whitelist"   subst_value="True">$(arg param_whitelist)</rosparam>
     <rosparam param="service_whitelist" subst_value="True">$(arg service_whitelist)</rosparam>
+    <rosparam param="capabilities"      subst_value="True">$(arg capabilities)</rosparam>
   </node>
 </launch>
