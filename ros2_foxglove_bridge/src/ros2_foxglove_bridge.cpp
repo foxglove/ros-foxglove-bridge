@@ -75,6 +75,7 @@ public:
     serverOptions.useTls = useTLS;
     serverOptions.certfile = certfile;
     serverOptions.keyfile = keyfile;
+    serverOptions.topicWhitelistPatterns = _topicWhitelistPatterns;
 
     _server = foxglove::ServerFactory::createServer<ConnectionHandle>("foxglove_bridge", logHandler,
                                                                       serverOptions);

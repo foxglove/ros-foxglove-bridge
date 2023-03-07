@@ -125,6 +125,7 @@ public:
       serverOptions.certfile = certfile;
       serverOptions.keyfile = keyfile;
       serverOptions.useCompression = useCompression;
+      serverOptions.topicWhitelistPatterns = _topicWhitelistPatterns;
 
       const auto logHandler =
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);
