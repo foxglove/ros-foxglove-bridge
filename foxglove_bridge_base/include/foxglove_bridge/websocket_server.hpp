@@ -15,6 +15,8 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <websocketpp/config/asio.hpp>
+#include <websocketpp/server.hpp>
 
 #include "common.hpp"
 #include "parameter.hpp"
@@ -22,8 +24,6 @@
 #include "serialization.hpp"
 #include "server_interface.hpp"
 #include "websocket_logging.hpp"
-#include "websocket_notls.hpp"
-#include "websocket_tls.hpp"
 
 // Debounce a function call (tied to the line number)
 // This macro takes in a function and the debounce time in milliseconds
@@ -102,8 +102,6 @@ public:
   using ConnectionType = websocketpp::connection<ServerConfiguration>;
   using MessagePtr = typename ServerType::message_ptr;
   using Tcp = websocketpp::lib::asio::ip::tcp;
-
-  static bool USES_TLS;
 
   explicit Server(std::string name, LogCallback logger, const ServerOptions& options);
   virtual ~Server();
@@ -489,7 +487,7 @@ inline void Server<ServerConfiguration>::start(const std::string& host, uint16_t
     throw std::runtime_error("Failed to resolve the local endpoint: " + ec.message());
   }
 
-  const std::string protocol = USES_TLS ? "wss" : "ws";
+  const std::string protocol = _options.useTls ? "wss" : "ws";
   auto address = endpoint.address();
   _server.get_alog().write(APP, "WebSocket server listening at " + protocol + "://" +
                                   IPAddressToString(address) + ":" +
@@ -1247,53 +1245,6 @@ template <typename ServerConfiguration>
 inline bool Server<ServerConfiguration>::hasCapability(const std::string& capability) const {
   return std::find(_options.capabilities.begin(), _options.capabilities.end(), capability) !=
          _options.capabilities.end();
-}
-
-template <>
-bool Server<WebSocketNoTls>::USES_TLS = false;
-
-template <>
-bool Server<WebSocketTls>::USES_TLS = true;
-
-template <>
-inline void Server<WebSocketNoTls>::setupTlsHandler() {
-  _server.get_alog().write(APP, "Server running without TLS");
-}
-
-template <>
-inline void Server<WebSocketTls>::setupTlsHandler() {
-  _server.set_tls_init_handler([this](ConnHandle hdl) {
-    (void)hdl;
-
-    namespace asio = websocketpp::lib::asio;
-    auto ctx = websocketpp::lib::make_shared<asio::ssl::context>(asio::ssl::context::sslv23);
-
-    try {
-      ctx->set_options(asio::ssl::context::default_workarounds | asio::ssl::context::no_tlsv1 |
-                       asio::ssl::context::no_sslv2 | asio::ssl::context::no_sslv3);
-      ctx->use_certificate_chain_file(_options.certfile);
-      ctx->use_private_key_file(_options.keyfile, asio::ssl::context::pem);
-
-      // Ciphers are taken from the websocketpp example echo tls server:
-      // https://github.com/zaphoyd/websocketpp/blob/1b11fd301/examples/echo_server_tls/echo_server_tls.cpp#L119
-      constexpr char ciphers[] =
-        "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:"
-        "ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+"
-        "AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-"
-        "AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-"
-        "ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-"
-        "AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!3DES:"
-        "!MD5:!PSK";
-
-      if (SSL_CTX_set_cipher_list(ctx->native_handle(), ciphers) != 1) {
-        _server.get_elog().write(RECOVERABLE, "Error setting cipher list");
-      }
-    } catch (const std::exception& ex) {
-      _server.get_elog().write(RECOVERABLE,
-                               std::string("Exception in TLS handshake: ") + ex.what());
-    }
-    return ctx;
-  });
 }
 
 }  // namespace foxglove
