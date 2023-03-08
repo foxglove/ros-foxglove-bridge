@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstring>
+#include <optional>
 #include <stdint.h>
 #include <string>
 #include <vector>
@@ -50,10 +51,11 @@ struct ChannelWithoutId {
   std::string encoding;
   std::string schemaName;
   std::string schema;
+  std::optional<std::string> schemaEncoding;
 
   bool operator==(const ChannelWithoutId& other) const {
     return topic == other.topic && encoding == other.encoding && schemaName == other.schemaName &&
-           schema == other.schema;
+           schema == other.schema && schemaEncoding == other.schemaEncoding;
   }
 };
 
