@@ -2,7 +2,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "foxglove_bridge/utils.hpp"
+#include <foxglove_bridge/regex_utils.hpp>
+#include <foxglove_bridge/utils.hpp>
 
 namespace {
 
@@ -76,6 +77,8 @@ static foxglove::Parameter fromRosParam(const rclcpp::Parameter& p) {
 }  // namespace
 
 namespace foxglove_bridge {
+
+using foxglove::isWhitelisted;
 
 ParameterInterface::ParameterInterface(rclcpp::Node* node,
                                        std::vector<std::regex> paramWhitelistPatterns)

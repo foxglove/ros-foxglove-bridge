@@ -18,6 +18,7 @@
 
 #include "common.hpp"
 #include "parameter.hpp"
+#include "regex_utils.hpp"
 #include "serialization.hpp"
 #include "server_interface.hpp"
 #include "websocket_logging.hpp"
@@ -649,9 +650,17 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
                      "Channel " + std::to_string(channelId) + " was already advertised");
           continue;
         }
+
+        const auto topic = chan.at("topic").get<std::string>();
+        if (!isWhitelisted(topic, _options.clientTopicWhitelistPatterns)) {
+          sendStatus(hdl, StatusLevel::Error,
+                     "Can't advertise channel " + std::to_string(channelId) + ", topic '" + topic +
+                       "' not whitelisted");
+          continue;
+        }
         ClientAdvertisement advertisement{};
         advertisement.channelId = channelId;
-        advertisement.topic = chan.at("topic").get<std::string>();
+        advertisement.topic = topic;
         advertisement.encoding = chan.at("encoding").get<std::string>();
         advertisement.schemaName = chan.at("schemaName").get<std::string>();
         clientPublications.emplace(channelId, advertisement);

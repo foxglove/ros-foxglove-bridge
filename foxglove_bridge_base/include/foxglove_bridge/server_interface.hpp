@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <optional>
+#include <regex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -26,6 +27,7 @@ struct ServerOptions {
   std::string keyfile = "";
   std::string sessionId;
   bool useCompression = false;
+  std::vector<std::regex> clientTopicWhitelistPatterns;
 };
 
 template <typename ConnectionHandle>

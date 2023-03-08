@@ -14,6 +14,4 @@ foxglove::Parameter fromRosParam(const std::string& name, const XmlRpc::XmlRpcVa
 
 std::vector<std::regex> parseRegexPatterns(const std::vector<std::string>& strings);
 
-bool isWhitelisted(const std::string& name, const std::vector<std::regex>& regexPatterns);
-
 }  // namespace foxglove_bridge
