@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.5.0 (2023-03-08)
+------------------
 * Add support for `schemaEncoding` field (`#186 <https://github.com/foxglove/ros-foxglove-bridge/issues/186>`_)
 * Use QoS profile of existing publishers (if available) when creating new publishers (`#184 <https://github.com/foxglove/ros-foxglove-bridge/issues/184>`_)
 * Make server more independent of given server configurations (`#185 <https://github.com/foxglove/ros-foxglove-bridge/issues/185>`_)
