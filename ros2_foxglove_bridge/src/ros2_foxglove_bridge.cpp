@@ -243,14 +243,12 @@ public:
           case foxglove::MessageDefinitionFormat::MSG:
             newChannel.encoding = "cdr";
             newChannel.schema = schema;
+            newChannel.schemaEncoding = "ros2msg";
             break;
           case foxglove::MessageDefinitionFormat::IDL:
-            RCLCPP_WARN(this->get_logger(),
-                        "IDL message definition format cannot be communicated over ws-protocol. "
-                        "Topic \"%s\" (%s) may not decode correctly in clients",
-                        topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
             newChannel.encoding = "cdr";
             newChannel.schema = schema;
+            newChannel.schemaEncoding = "ros2idl";
             break;
         }
 

@@ -10,14 +10,20 @@ void to_json(nlohmann::json& j, const Channel& c) {
     {"schemaName", c.schemaName},
     {"schema", c.schema},
   };
+
+  if (c.schemaEncoding.has_value()) {
+    j["schemaEncoding"] = c.schemaEncoding.value();
+  }
 }
 void from_json(const nlohmann::json& j, Channel& c) {
-  ChannelWithoutId channelWithoutId{
-    j["topic"].get<std::string>(),
-    j["encoding"].get<std::string>(),
-    j["schemaName"].get<std::string>(),
-    j["schema"].get<std::string>(),
-  };
+  const auto schemaEncoding =
+    j.find("schemaEncoding") == j.end()
+      ? std::optional<std::string>(std::nullopt)
+      : std::optional<std::string>(j["schemaEncoding"].get<std::string>());
+
+  ChannelWithoutId channelWithoutId{j["topic"].get<std::string>(), j["encoding"].get<std::string>(),
+                                    j["schemaName"].get<std::string>(),
+                                    j["schema"].get<std::string>(), schemaEncoding};
   c = Channel(j["id"].get<ChannelId>(), channelWithoutId);
 }
 
