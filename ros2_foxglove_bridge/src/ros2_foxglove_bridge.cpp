@@ -666,7 +666,15 @@ private:
       // Create a new topic advertisement
       const auto& topicName = advertisement.topic;
       const auto& topicType = advertisement.schemaName;
-      rclcpp::QoS qos{rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default)};
+
+      // Lookup if there are other publishers for that topic. If that's the case, we use a matching
+      // QoS profile.
+      const auto otherPublishers = get_publishers_info_by_topic(topicName);
+      const rclcpp::QoS qos =
+        otherPublishers.empty()
+          ? rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default))
+          : otherPublishers.front().qos_profile();
+
       rclcpp::PublisherOptions publisherOptions{};
       publisherOptions.callback_group = _clientPublishCallbackGroup;
       auto publisher = this->create_generic_publisher(topicName, topicType, qos, publisherOptions);
