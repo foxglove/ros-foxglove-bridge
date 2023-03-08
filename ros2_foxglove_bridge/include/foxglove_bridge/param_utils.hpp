@@ -20,6 +20,7 @@ constexpr char PARAM_SERVICE_WHITELIST[] = "service_whitelist";
 constexpr char PARAM_PARAMETER_WHITELIST[] = "param_whitelist";
 constexpr char PARAM_USE_COMPRESSION[] = "use_compression";
 constexpr char PARAM_CAPABILITIES[] = "capabilities";
+constexpr char PARAM_CLIENT_TOPIC_WHITELIST[] = "client_topic_whitelist";
 
 constexpr int64_t DEFAULT_PORT = 8765;
 constexpr char DEFAULT_ADDRESS[] = "0.0.0.0";

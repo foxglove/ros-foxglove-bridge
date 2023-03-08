@@ -71,10 +71,4 @@ std::vector<std::regex> parseRegexPatterns(const std::vector<std::string>& patte
   return result;
 }
 
-bool isWhitelisted(const std::string& name, const std::vector<std::regex>& regexPatterns) {
-  return std::find_if(regexPatterns.begin(), regexPatterns.end(), [name](const auto& regex) {
-           return std::regex_match(name, regex);
-         }) != regexPatterns.end();
-}
-
 }  // namespace foxglove_bridge

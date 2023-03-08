@@ -15,6 +15,7 @@
 #include <foxglove_bridge/message_definition_cache.hpp>
 #include <foxglove_bridge/param_utils.hpp>
 #include <foxglove_bridge/parameter_interface.hpp>
+#include <foxglove_bridge/regex_utils.hpp>
 #include <foxglove_bridge/server_factory.hpp>
 #include <foxglove_bridge/utils.hpp>
 
@@ -27,6 +28,7 @@ using SubscriptionsByClient = std::map<ConnectionHandle, Subscription, std::owne
 using Publication = rclcpp::GenericPublisher::SharedPtr;
 using ClientPublications = std::unordered_map<foxglove::ClientChannelId, Publication>;
 using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std::owner_less<>>;
+using foxglove::isWhitelisted;
 
 namespace foxglove_bridge {
 
@@ -58,6 +60,9 @@ public:
     const auto useCompression = this->get_parameter(PARAM_USE_COMPRESSION).as_bool();
     _useSimTime = this->get_parameter("use_sim_time").as_bool();
     _capabilities = this->get_parameter(PARAM_CAPABILITIES).as_string_array();
+    const auto clientTopicWhiteList =
+      this->get_parameter(PARAM_CLIENT_TOPIC_WHITELIST).as_string_array();
+    const auto clientTopicWhiteListPatterns = parseRegexStrings(this, clientTopicWhiteList);
 
     const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
     foxglove::ServerOptions serverOptions;
@@ -73,6 +78,7 @@ public:
     serverOptions.useTls = useTLS;
     serverOptions.certfile = certfile;
     serverOptions.keyfile = keyfile;
+    serverOptions.clientTopicWhitelistPatterns = clientTopicWhiteListPatterns;
 
     _server = foxglove::ServerFactory::createServer<ConnectionHandle>("foxglove_bridge", logHandler,
                                                                       serverOptions);

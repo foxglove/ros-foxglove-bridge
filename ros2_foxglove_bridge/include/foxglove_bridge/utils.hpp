@@ -17,10 +17,4 @@ inline std::pair<std::string, std::string> getNodeAndNodeNamespace(const std::st
   return std::make_pair(fqnNodeName.substr(0, found), fqnNodeName.substr(found + 1));
 }
 
-inline bool isWhitelisted(const std::string& name, const std::vector<std::regex>& regexPatterns) {
-  return std::find_if(regexPatterns.begin(), regexPatterns.end(), [name](const auto& regex) {
-           return std::regex_match(name, regex);
-         }) != regexPatterns.end();
-}
-
 }  // namespace foxglove_bridge
