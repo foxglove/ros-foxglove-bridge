@@ -2,6 +2,20 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.0 (2023-03-08)
+------------------
+* Add support for `schemaEncoding` field (`#186 <https://github.com/foxglove/ros-foxglove-bridge/issues/186>`_)
+* Use QoS profile of existing publishers (if available) when creating new publishers (`#184 <https://github.com/foxglove/ros-foxglove-bridge/issues/184>`_)
+* Make server more independent of given server configurations (`#185 <https://github.com/foxglove/ros-foxglove-bridge/issues/185>`_)
+* Add parameter `client_topic_whitelist` for whitelisting client-published topics (`#181 <https://github.com/foxglove/ros-foxglove-bridge/issues/181>`_)
+* Make server capabilities configurable (`#182 <https://github.com/foxglove/ros-foxglove-bridge/issues/182>`_)
+* Fix action topic log spam (`#179 <https://github.com/foxglove/ros-foxglove-bridge/issues/179>`_)
+* Remove (clang specific) compiler flag -Wmost (`#177 <https://github.com/foxglove/ros-foxglove-bridge/issues/177>`_)
+* Improve the way compiler flags are set, use clang as default compiler (`#175 <https://github.com/foxglove/ros-foxglove-bridge/issues/175>`_)
+* Avoid re-advertising existing channels when advertising new channels (`#172 <https://github.com/foxglove/ros-foxglove-bridge/issues/172>`_)
+* Allow subscribing to connection graph updates (`#167 <https://github.com/foxglove/ros-foxglove-bridge/issues/167>`_)
+* Contributors: Hans-Joachim Krauch
+
 0.4.1 (2023-02-17)
 ------------------
 * Run client handler functions in separate thread (`#165 <https://github.com/foxglove/ros-foxglove-bridge/issues/165>`_)
