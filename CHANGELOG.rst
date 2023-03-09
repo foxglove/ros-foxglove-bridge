@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.5.1 (2023-03-09)
+------------------
 * Add more exception handling (`#191 <https://github.com/foxglove/ros-foxglove-bridge/issues/191>`_)
 * [ROS1] Fix exception not being caught when retrieving service type  (`#190 <https://github.com/foxglove/ros-foxglove-bridge/issues/190>`_)
 * Devcontainer: Use catkin tools, add build commands for ros1 (`#188 <https://github.com/foxglove/ros-foxglove-bridge/issues/188>`_)
