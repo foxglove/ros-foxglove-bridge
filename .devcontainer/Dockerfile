@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   lldb \
   lsb-release \
   openssh-client \
+  python3-catkin-tools \
   python3-colcon-common-extensions \
   python3-pip \
   python3-rosdep \
@@ -59,12 +60,22 @@ RUN . /opt/ros/galactic/setup.sh && \
       --ignore-src \
     && rm -rf /var/lib/apt/lists/*
 
+RUN catkin config --init --install \
+  --workspace /ros_ws \
+  --extend /opt/ros/noetic \
+  --build-space build_ros1 \
+  --devel-space devel_ros1 \
+  --install-space install_ros1
+
 SHELL ["/bin/bash", "-c"]
 
 # Unset the ROS_DISTRO and add aliases to .bashrc
 RUN echo $'\
 unset ROS_DISTRO\n\
-alias ros2_build_debug="colcon build --event-handlers console_direct+ --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Debug"\n\
-alias ros2_build_release="colcon build --event-handlers console_direct+ --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo"\n\
+alias ros1_build_debug="catkin build -DCMAKE_BUILD_TYPE=Debug"\n\
+alias ros1_build_release="catkin build -DCMAKE_BUILD_TYPE=RelWithDebInfo"\n\
+alias ros1_foxglove_bridge="/ros_ws/install_ros1/env.sh roslaunch foxglove_bridge foxglove_bridge.launch --screen"\n\
+alias ros2_build_debug="source /opt/ros/galactic/setup.bash && colcon build --event-handlers console_direct+ --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Debug"\n\
+alias ros2_build_release="source /opt/ros/galactic/setup.bash && colcon build --event-handlers console_direct+ --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo"\n\
 alias ros2_foxglove_bridge="source /ros_ws/install/setup.bash && ros2 run foxglove_bridge foxglove_bridge --ros-args --log-level debug --log-level rcl:=INFO"\n\
 ' >> ~/.bashrc
