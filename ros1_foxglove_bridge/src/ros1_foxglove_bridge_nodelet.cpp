@@ -645,25 +645,31 @@ private:
         continue;
       }
 
-      const auto serviceType = serviceTypeFuture.get();
-      const auto srvDescription = _rosTypeInfoProvider.getServiceDescription(serviceType);
+      try {
+        const auto serviceType = serviceTypeFuture.get();
+        const auto srvDescription = _rosTypeInfoProvider.getServiceDescription(serviceType);
 
-      foxglove::ServiceWithoutId service;
-      service.name = serviceName;
-      service.type = serviceType;
+        foxglove::ServiceWithoutId service;
+        service.name = serviceName;
+        service.type = serviceType;
 
-      if (srvDescription) {
-        service.requestSchema = srvDescription->request->message_definition;
-        service.responseSchema = srvDescription->response->message_definition;
-      } else {
-        ROS_ERROR("Failed to retrieve type information for service '%s' of type '%s'",
-                  serviceName.c_str(), serviceType.c_str());
+        if (srvDescription) {
+          service.requestSchema = srvDescription->request->message_definition;
+          service.responseSchema = srvDescription->response->message_definition;
+        } else {
+          ROS_ERROR("Failed to retrieve type information for service '%s' of type '%s'",
+                    serviceName.c_str(), serviceType.c_str());
 
-        // We still advertise the channel, but with empty schema.
-        service.requestSchema = "";
-        service.responseSchema = "";
+          // We still advertise the channel, but with empty schema.
+          service.requestSchema = "";
+          service.responseSchema = "";
+        }
+        newServices.push_back(service);
+      } catch (const std::exception& e) {
+        ROS_ERROR("Failed to retrieve service type or service description of service %s: %s",
+                  serviceName.c_str(), e.what());
+        continue;
       }
-      newServices.push_back(service);
     }
 
     const auto serviceIds = _server->addServices(newServices);
