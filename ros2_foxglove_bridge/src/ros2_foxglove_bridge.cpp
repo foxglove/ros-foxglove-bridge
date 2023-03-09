@@ -156,18 +156,22 @@ public:
 
     auto graphEvent = this->get_graph_event();
     while (rclcpp::ok()) {
-      this->wait_for_graph_change(graphEvent, 200ms);
-      bool triggered = graphEvent->check_and_clear();
-      if (triggered) {
-        RCLCPP_DEBUG(this->get_logger(), "rosgraph change detected");
-        const auto topicNamesAndTypes = get_topic_names_and_types();
-        updateAdvertisedTopics(topicNamesAndTypes);
-        updateAdvertisedServices();
-        if (_subscribeGraphUpdates) {
-          updateConnectionGraph(topicNamesAndTypes);
+      try {
+        this->wait_for_graph_change(graphEvent, 200ms);
+        bool triggered = graphEvent->check_and_clear();
+        if (triggered) {
+          RCLCPP_DEBUG(this->get_logger(), "rosgraph change detected");
+          const auto topicNamesAndTypes = get_topic_names_and_types();
+          updateAdvertisedTopics(topicNamesAndTypes);
+          updateAdvertisedServices();
+          if (_subscribeGraphUpdates) {
+            updateConnectionGraph(topicNamesAndTypes);
+          }
+          // Graph changes tend to come in batches, so wait a bit before checking again
+          std::this_thread::sleep_for(500ms);
         }
-        // Graph changes tend to come in batches, so wait a bit before checking again
-        std::this_thread::sleep_for(500ms);
+      } catch (const std::exception& ex) {
+        RCLCPP_ERROR(this->get_logger(), "Exception thrown in rosgraphPollThread: %s", ex.what());
       }
     }
 

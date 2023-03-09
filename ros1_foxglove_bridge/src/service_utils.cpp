@@ -17,6 +17,9 @@ std::future<std::string> retrieveServiceType(const std::string& serviceName) {
       std::string serviceType;
       if (header.getValue("type", serviceType)) {
         promise->set_value(serviceType);
+      } else {
+        promise->set_exception(std::make_exception_ptr(
+          std::runtime_error("Key 'type' not found in service connection header")));
       }
       return true;
     });
