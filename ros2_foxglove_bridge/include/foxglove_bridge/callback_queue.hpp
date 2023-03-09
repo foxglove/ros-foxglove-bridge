@@ -8,6 +8,8 @@
 #include <thread>
 #include <vector>
 
+#include <rclcpp/logging.hpp>
+
 namespace foxglove_bridge {
 
 class CallbackQueue {
@@ -53,7 +55,13 @@ private:
         std::function<void(void)> cb = _callbackQueue.front();
         _callbackQueue.pop_front();
         lock.unlock();
-        cb();
+        try {
+          cb();
+        } catch (const std::exception& ex) {
+          // Should never get here if we catch all exceptions in the callbacks.
+          RCLCPP_ERROR(rclcpp::get_logger("foxglove_bridge"),
+                       "Caught unhandled exception in calback_queue: %s", ex.what());
+        }
       }
     }
   }
