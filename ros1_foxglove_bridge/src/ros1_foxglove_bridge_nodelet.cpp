@@ -453,8 +453,8 @@ private:
     try {
       channelPublicationIt->second.publish(msg);
     } catch (const std::exception& ex) {
-      ROS_ERROR("Failed to publish message on topic '%s'",
-                channelPublicationIt->second.getTopic().c_str());
+      ROS_ERROR("Failed to publish message on topic '%s': %s",
+                channelPublicationIt->second.getTopic().c_str(), ex.what());
     }
   }
 
