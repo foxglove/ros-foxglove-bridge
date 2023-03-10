@@ -17,7 +17,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 macro(enable_strict_compiler_warnings target)
   target_compile_options(${target} PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/WX /W4>
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror -Wold-style-cast -Wfloat-equal>
+    $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra -Wpedantic -Werror -Wmost -Wold-style-cast -Wfloat-equal -Wunused-exception-parameter>
+    $<$<NOT:$<OR:$<CXX_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:Clang>>>:
+      -Wall -Wextra -Wpedantic -Werror -Wold-style-cast -Wfloat-equal
+    >
   )
 endmacro()
 
