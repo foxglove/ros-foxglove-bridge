@@ -15,13 +15,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 macro(enable_strict_compiler_warnings target)
-  target_compile_options(${target} PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/WX /W4>
-    $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra -Wpedantic -Werror -Wmost -Wold-style-cast -Wfloat-equal -Wunused-exception-parameter>
-    $<$<NOT:$<OR:$<CXX_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:Clang>>>:
-      -Wall -Wextra -Wpedantic -Werror -Wold-style-cast -Wfloat-equal
-    >
-  )
+  if (MSVC)
+    target_compile_options(${target} PRIVATE /WX /W4)
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror -Wold-style-cast -Wfloat-equal -Wmost -Wunused-exception-parameter)
+  else()
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror -Wold-style-cast -Wfloat-equal)
+  endif()
 endmacro()
 
 find_package(nlohmann_json QUIET)
