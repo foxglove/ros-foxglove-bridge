@@ -1056,7 +1056,7 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
   }
 
   const auto bufferSizeinBytes = con->get_buffered_amount();
-  if (bufferSizeinBytes >= _options.sendBufferLimitBytes) {
+  if (bufferSizeinBytes + payloadSize >= _options.sendBufferLimitBytes) {
     FOXGLOVE_DEBOUNCE(
       [this]() {
         _server.get_elog().write(
