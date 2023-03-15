@@ -37,6 +37,9 @@ void to_json(nlohmann::json& j, const Parameter& p) {
     j["value"] = p.getValue<double>();
   } else if (paramType == ParameterType::PARAMETER_STRING) {
     j["value"] = p.getValue<std::string>();
+  } else if (paramType == ParameterType::PARAMETER_BYTE_ARRAY) {
+    j["value"] = p.getValue<std::string>();
+    j["type"] = "byte_array";
   } else if (paramType == ParameterType::PARAMETER_BOOL_ARRAY) {
     j["value"] = p.getValue<std::vector<bool>>();
   } else if (paramType == ParameterType::PARAMETER_INTEGER_ARRAY) {
@@ -64,7 +67,13 @@ void from_json(const nlohmann::json& j, Parameter& p) {
   const auto jsonType = j["value"].type();
 
   if (jsonType == nlohmann::detail::value_t::string) {
-    p = Parameter(name, value.get<std::string>());
+    if (j.find("type") == j.end()) {
+      p = Parameter(name, value.get<std::string>());
+    } else if (j["type"] == "byte_array") {
+      p = Parameter(name, value.get<std::string>(), ParameterType::PARAMETER_BYTE_ARRAY);
+    } else {
+      throw std::runtime_error("Unsupported parameter 'type' value: " + j.dump());
+    }
   } else if (jsonType == nlohmann::detail::value_t::boolean) {
     p = Parameter(name, value.get<bool>());
   } else if (jsonType == nlohmann::detail::value_t::number_integer) {

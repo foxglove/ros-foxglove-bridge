@@ -38,6 +38,11 @@ Parameter::Parameter(const std::string& name, std::string value)
     , _type(ParameterType::PARAMETER_STRING)
     , _value(value) {}
 
+Parameter::Parameter(const std::string& name, std::string value, ParameterType type)
+    : _name(name)
+    , _type(type)
+    , _value(value) {}
+
 Parameter::Parameter(const std::string& name, const std::vector<bool>& value)
     : _name(name)
     , _type(ParameterType::PARAMETER_BOOL_ARRAY)
