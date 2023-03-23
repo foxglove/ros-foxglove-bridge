@@ -38,9 +38,9 @@ Parameter::Parameter(const std::string& name, std::string value)
     , _type(ParameterType::PARAMETER_STRING)
     , _value(value) {}
 
-Parameter::Parameter(const std::string& name, std::string value, ParameterType type)
+Parameter::Parameter(const std::string& name, const std::vector<unsigned char>& value)
     : _name(name)
-    , _type(type)
+    , _type(ParameterType::PARAMETER_BYTE_ARRAY)
     , _value(value) {}
 
 Parameter::Parameter(const std::string& name, const std::vector<bool>& value)

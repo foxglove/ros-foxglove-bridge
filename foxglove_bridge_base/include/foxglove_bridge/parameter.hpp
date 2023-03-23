@@ -34,8 +34,8 @@ public:
   Parameter(const std::string& name, int64_t value);
   Parameter(const std::string& name, double value);
   Parameter(const std::string& name, std::string value);
-  Parameter(const std::string& name, std::string value, ParameterType type);
   Parameter(const std::string& name, const char* value);
+  Parameter(const std::string& name, const std::vector<unsigned char>& value);
   Parameter(const std::string& name, const std::vector<bool>& value);
   Parameter(const std::string& name, const std::vector<int>& value);
   Parameter(const std::string& name, const std::vector<int64_t>& value);

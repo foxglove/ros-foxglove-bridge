@@ -1,3 +1,4 @@
+#include <foxglove_bridge/base64.hpp>
 #include <foxglove_bridge/serialization.hpp>
 
 namespace foxglove {
@@ -38,7 +39,9 @@ void to_json(nlohmann::json& j, const Parameter& p) {
   } else if (paramType == ParameterType::PARAMETER_STRING) {
     j["value"] = p.getValue<std::string>();
   } else if (paramType == ParameterType::PARAMETER_BYTE_ARRAY) {
-    j["value"] = p.getValue<std::string>();
+    const auto paramValue = p.getValue<std::vector<unsigned char>>();
+    const std::string strValue(paramValue.begin(), paramValue.end());
+    j["value"] = base64Encode(strValue);
     j["type"] = "byte_array";
   } else if (paramType == ParameterType::PARAMETER_BOOL_ARRAY) {
     j["value"] = p.getValue<std::vector<bool>>();
@@ -70,7 +73,7 @@ void from_json(const nlohmann::json& j, Parameter& p) {
     if (j.find("type") == j.end()) {
       p = Parameter(name, value.get<std::string>());
     } else if (j["type"] == "byte_array") {
-      p = Parameter(name, value.get<std::string>(), ParameterType::PARAMETER_BYTE_ARRAY);
+      p = Parameter(name, base64Decode(value.get<std::string>()));
     } else {
       throw std::runtime_error("Unsupported parameter 'type' value: " + j.dump());
     }
