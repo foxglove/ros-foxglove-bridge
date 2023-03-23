@@ -1063,12 +1063,11 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
 
   const auto bufferSizeinBytes = con->get_buffered_amount();
   if (bufferSizeinBytes + payloadSize >= _options.sendBufferLimitBytes) {
-    FOXGLOVE_DEBOUNCE(
-      [this]() {
-        _server.get_elog().write(
-          WARNING, "Connection send buffer limit reached, messages will be dropped...");
-      },
-      2500);
+    const auto logFn = [this, clientHandle]() {
+      sendStatusAndLogMsg(clientHandle, StatusLevel::Warning,
+                          "Connection send buffer limit reached, messages will be dropped...");
+    };
+    FOXGLOVE_DEBOUNCE(logFn, 2500);
     return;
   }
 
