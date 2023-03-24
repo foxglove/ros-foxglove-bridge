@@ -18,6 +18,7 @@ enum class ParameterType {
   PARAMETER_INTEGER,
   PARAMETER_DOUBLE,
   PARAMETER_STRING,
+  PARAMETER_BYTE_ARRAY,
   PARAMETER_BOOL_ARRAY,
   PARAMETER_INTEGER_ARRAY,
   PARAMETER_DOUBLE_ARRAY,
@@ -34,6 +35,7 @@ public:
   Parameter(const std::string& name, double value);
   Parameter(const std::string& name, std::string value);
   Parameter(const std::string& name, const char* value);
+  Parameter(const std::string& name, const std::vector<unsigned char>& value);
   Parameter(const std::string& name, const std::vector<bool>& value);
   Parameter(const std::string& name, const std::vector<int>& value);
   Parameter(const std::string& name, const std::vector<int64_t>& value);

@@ -33,6 +33,8 @@ static rclcpp::Parameter toRosParam(const foxglove::Parameter& p) {
     return rclcpp::Parameter(p.getName(), p.getValue<double>());
   } else if (paramType == ParameterType::PARAMETER_STRING) {
     return rclcpp::Parameter(p.getName(), p.getValue<std::string>());
+  } else if (paramType == ParameterType::PARAMETER_BYTE_ARRAY) {
+    return rclcpp::Parameter(p.getName(), p.getValue<std::vector<unsigned char>>());
   } else if (paramType == ParameterType::PARAMETER_BOOL_ARRAY) {
     return rclcpp::Parameter(p.getName(), p.getValue<std::vector<bool>>());
   } else if (paramType == ParameterType::PARAMETER_INTEGER_ARRAY) {
@@ -61,6 +63,8 @@ static foxglove::Parameter fromRosParam(const rclcpp::Parameter& p) {
     return foxglove::Parameter(p.get_name(), p.as_double());
   } else if (type == rclcpp::ParameterType::PARAMETER_STRING) {
     return foxglove::Parameter(p.get_name(), p.as_string());
+  } else if (type == rclcpp::ParameterType::PARAMETER_BYTE_ARRAY) {
+    return foxglove::Parameter(p.get_name(), p.as_byte_array());
   } else if (type == rclcpp::ParameterType::PARAMETER_BOOL_ARRAY) {
     return foxglove::Parameter(p.get_name(), p.as_bool_array());
   } else if (type == rclcpp::ParameterType::PARAMETER_INTEGER_ARRAY) {

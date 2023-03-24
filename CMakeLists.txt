@@ -43,6 +43,7 @@ endif()
 
 # Build the foxglove_bridge_base library
 add_library(foxglove_bridge_base SHARED
+  foxglove_bridge_base/src/base64.cpp
   foxglove_bridge_base/src/foxglove_bridge.cpp
   foxglove_bridge_base/src/parameter.cpp
   foxglove_bridge_base/src/serialization.cpp
@@ -169,6 +170,10 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
     target_link_libraries(serialization_test foxglove_bridge_base)
     enable_strict_compiler_warnings(foxglove_bridge)
 
+    catkin_add_gtest(base64_test foxglove_bridge_base/tests/base64_test.cpp)
+    target_link_libraries(base64_test foxglove_bridge_base)
+    enable_strict_compiler_warnings(foxglove_bridge)
+
     add_rostest_gtest(smoke_test ros1_foxglove_bridge/tests/smoke.test ros1_foxglove_bridge/tests/smoke_test.cpp)
     target_include_directories(smoke_test SYSTEM PRIVATE
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
@@ -193,6 +198,10 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
     ament_add_gtest(serialization_test foxglove_bridge_base/tests/serialization_test.cpp)
     target_link_libraries(serialization_test foxglove_bridge_base)
     enable_strict_compiler_warnings(serialization_test)
+
+    ament_add_gtest(base64_test foxglove_bridge_base/tests/base64_test.cpp)
+    target_link_libraries(base64_test foxglove_bridge_base)
+    enable_strict_compiler_warnings(base64_test)
 
     ament_add_gtest(smoke_test ros2_foxglove_bridge/tests/smoke_test.cpp)
     ament_target_dependencies(smoke_test rclcpp rclcpp_components std_msgs std_srvs)
