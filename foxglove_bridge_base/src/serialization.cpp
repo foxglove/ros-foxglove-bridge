@@ -39,8 +39,9 @@ void to_json(nlohmann::json& j, const Parameter& p) {
   } else if (paramType == ParameterType::PARAMETER_STRING) {
     j["value"] = p.getValue<std::string>();
   } else if (paramType == ParameterType::PARAMETER_BYTE_ARRAY) {
-    const auto paramValue = p.getValue<std::vector<unsigned char>>();
-    const std::string strValue(paramValue.begin(), paramValue.end());
+    const auto& paramValue = p.getValue<std::vector<unsigned char>>();
+    const std::string_view strValue(reinterpret_cast<const char*>(paramValue.data()),
+                                    paramValue.size());
     j["value"] = base64Encode(strValue);
     j["type"] = "byte_array";
   } else if (paramType == ParameterType::PARAMETER_BOOL_ARRAY) {
