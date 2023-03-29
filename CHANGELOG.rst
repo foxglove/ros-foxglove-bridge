@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.5.2 (2023-03-29)
+------------------
 * Notify client when Server's send buffer limit has been reached (`#201 <https://github.com/foxglove/ros-foxglove-bridge/issues/201>`_)
 * Add support for byte array params (`#199 <https://github.com/foxglove/ros-foxglove-bridge/issues/199>`_)
 * Do not allow connection output buffer to exceed configured limit (`#196 <https://github.com/foxglove/ros-foxglove-bridge/issues/196>`_)
