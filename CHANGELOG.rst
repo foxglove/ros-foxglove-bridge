@@ -2,6 +2,11 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.3 (2023-03-31)
+------------------
+* Fix publishers being created with invalid QoS profile (`#205 <https://github.com/foxglove/ros-foxglove-bridge/issues/205>`_)
+* Contributors: Hans-Joachim Krauch
+
 0.5.2 (2023-03-29)
 ------------------
 * Notify client when Server's send buffer limit has been reached (`#201 <https://github.com/foxglove/ros-foxglove-bridge/issues/201>`_)
