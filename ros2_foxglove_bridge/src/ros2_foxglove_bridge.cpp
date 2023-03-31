@@ -669,14 +669,18 @@ private:
       const auto& topicName = advertisement.topic;
       const auto& topicType = advertisement.schemaName;
 
-      // Lookup if there are other publishers for that topic. If that's the case, we use a matching
-      // QoS profile.
+      // Lookup if there are publishers from other nodes for that topic. If that's the case, we use
+      // a matching QoS profile.
       const auto otherPublishers = get_publishers_info_by_topic(topicName);
-      const rclcpp::QoS qos =
-        otherPublishers.empty()
-          ? rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default))
-          : otherPublishers.front().qos_profile();
-
+      const auto otherPublisherIt =
+        std::find_if(otherPublishers.begin(), otherPublishers.end(),
+                     [this](const rclcpp::TopicEndpointInfo& endpoint) {
+                       return endpoint.node_name() != this->get_name() ||
+                              endpoint.node_namespace() != this->get_namespace();
+                     });
+      const rclcpp::QoS qos = otherPublisherIt == otherPublishers.end()
+                                ? rclcpp::SystemDefaultsQoS()
+                                : otherPublisherIt->qos_profile();
       rclcpp::PublisherOptions publisherOptions{};
       publisherOptions.callback_group = _clientPublishCallbackGroup;
       auto publisher = this->create_generic_publisher(topicName, topicType, qos, publisherOptions);
