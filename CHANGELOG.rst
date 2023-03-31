@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.5.3 (2023-03-31)
+------------------
 * Fix publishers being created with invalid QoS profile (`#205 <https://github.com/foxglove/ros-foxglove-bridge/issues/205>`_)
 * Contributors: Hans-Joachim Krauch
 
