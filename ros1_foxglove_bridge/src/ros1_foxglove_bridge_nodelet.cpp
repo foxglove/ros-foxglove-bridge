@@ -115,7 +115,9 @@ public:
       ROS_ERROR("Failed to parse one or more service whitelist patterns");
     }
 
-    ROS_INFO("Starting %s with %s", ros::this_node::getName().c_str(),
+    const char* rosDistro = std::getenv("ROS_DISTRO");
+    ROS_INFO("Starting foxglove_bridge (%s, %s@%s) with %s", rosDistro,
+             foxglove::FOXGLOVE_BRIDGE_VERSION, foxglove::FOXGLOVE_BRIDGE_GIT_HASH,
              foxglove::WebSocketUserAgent());
 
     try {
@@ -125,7 +127,7 @@ public:
         serverOptions.capabilities.push_back(foxglove::CAPABILITY_TIME);
       }
       serverOptions.supportedEncodings = {ROS1_CHANNEL_ENCODING};
-      serverOptions.metadata = {{"ROS_DISTRO", std::getenv("ROS_DISTRO")}};
+      serverOptions.metadata = {{"ROS_DISTRO", rosDistro}};
       serverOptions.sendBufferLimitBytes = send_buffer_limit;
       serverOptions.sessionId = sessionId;
       serverOptions.useTls = useTLS;
