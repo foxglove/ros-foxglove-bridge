@@ -45,7 +45,7 @@ endif()
 find_program(GIT_SCM git DOC "Git version control")
 if (GIT_SCM)
   execute_process(
-    COMMAND ${GIT_SCM} describe --always --dirty --abbrev=10 --match="NoTagWithThisName"
+    COMMAND ${GIT_SCM} describe --always --dirty --exclude="*"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     OUTPUT_VARIABLE FOXGLOVE_BRIDGE_GIT_HASH
     OUTPUT_STRIP_TRAILING_WHITESPACE
