@@ -38,7 +38,9 @@ public:
 
   FoxgloveBridge(const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
       : Node("foxglove_bridge", options) {
-    RCLCPP_INFO(this->get_logger(), "Starting %s with %s", this->get_name(),
+    const char* rosDistro = std::getenv("ROS_DISTRO");
+    RCLCPP_INFO(this->get_logger(), "Starting foxglove_bridge (%s, %s@%s) with %s", rosDistro,
+                foxglove::FOXGLOVE_BRIDGE_VERSION, foxglove::FOXGLOVE_BRIDGE_GIT_HASH,
                 foxglove::WebSocketUserAgent());
 
     declareParameters(this);
@@ -71,7 +73,7 @@ public:
       serverOptions.capabilities.push_back(foxglove::CAPABILITY_TIME);
     }
     serverOptions.supportedEncodings = {"cdr"};
-    serverOptions.metadata = {{"ROS_DISTRO", std::getenv("ROS_DISTRO")}};
+    serverOptions.metadata = {{"ROS_DISTRO", rosDistro}};
     serverOptions.sendBufferLimitBytes = send_buffer_limit;
     serverOptions.sessionId = std::to_string(std::time(nullptr));
     serverOptions.useCompression = useCompression;
