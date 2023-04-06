@@ -18,6 +18,7 @@
 #include <websocketpp/config/asio.hpp>
 #include <websocketpp/server.hpp>
 
+#include "callback_queue.hpp"
 #include "common.hpp"
 #include "parameter.hpp"
 #include "regex_utils.hpp"
@@ -158,6 +159,7 @@ private:
   ServerOptions _options;
   ServerType _server;
   std::unique_ptr<std::thread> _serverThread;
+  std::unique_ptr<CallbackQueue> _handlerCallbackQueue;
 
   uint32_t _nextChannelId = 0;
   std::map<ConnHandle, ClientInfo, std::owner_less<>> _clients;
@@ -189,8 +191,8 @@ private:
   void handleConnectionOpened(ConnHandle hdl);
   void handleConnectionClosed(ConnHandle hdl);
   void handleMessage(ConnHandle hdl, MessagePtr msg);
-  void handleTextMessage(ConnHandle hdl, const std::string& msg);
-  void handleBinaryMessage(ConnHandle hdl, const uint8_t* msg, size_t length);
+  void handleTextMessage(ConnHandle hdl, MessagePtr msg);
+  void handleBinaryMessage(ConnHandle hdl, MessagePtr msg);
 
   void sendJson(ConnHandle hdl, json&& payload);
   void sendJsonRaw(ConnHandle hdl, const std::string& payload);
@@ -231,6 +233,9 @@ inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger,
     std::bind(&Server::handleMessage, this, std::placeholders::_1, std::placeholders::_2));
   _server.set_reuse_addr(true);
   _server.set_listen_backlog(128);
+
+  // Callback queue for handling client requests.
+  _handlerCallbackQueue = std::make_unique<CallbackQueue>(_logger, 1ul /* 1 thread */);
 }
 
 template <typename ServerConfiguration>
@@ -551,11 +556,14 @@ inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePt
   try {
     switch (op) {
       case OpCode::TEXT: {
-        handleTextMessage(hdl, msg->get_payload());
+        _handlerCallbackQueue->addCallback([this, hdl, msg]() {
+          handleTextMessage(hdl, msg);
+        });
       } break;
       case OpCode::BINARY: {
-        const auto& payload = msg->get_payload();
-        handleBinaryMessage(hdl, reinterpret_cast<const uint8_t*>(payload.data()), payload.size());
+        _handlerCallbackQueue->addCallback([this, hdl, msg]() {
+          handleBinaryMessage(hdl, msg);
+        });
       } break;
       default:
         break;
@@ -567,8 +575,8 @@ inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePt
 }
 
 template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const std::string& msg) {
-  const json payload = json::parse(msg);
+inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, MessagePtr msg) {
+  const json payload = json::parse(msg->get_payload());
   const std::string& op = payload.at("op").get<std::string>();
 
   const auto requiredCapabilityIt = CAPABILITY_BY_CLIENT_OPERATION.find(op);
@@ -820,14 +828,17 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
 }
 
 template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, const uint8_t* msg,
-                                                             size_t length) {
+inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, MessagePtr msg) {
+  const auto& payload = msg->get_payload();
+  const uint8_t* data = reinterpret_cast<const uint8_t*>(payload.data());
+  const size_t length = payload.size();
+
   if (length < 1) {
     sendStatusAndLogMsg(hdl, StatusLevel::Error, "Received an empty binary message");
     return;
   }
 
-  const auto op = static_cast<ClientBinaryOpcode>(msg[0]);
+  const auto op = static_cast<ClientBinaryOpcode>(data[0]);
 
   const auto requiredCapabilityIt = CAPABILITY_BY_CLIENT_BINARY_OPERATION.find(op);
   if (requiredCapabilityIt != CAPABILITY_BY_CLIENT_BINARY_OPERATION.end() &&
@@ -849,7 +860,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
       const auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
                                std::chrono::high_resolution_clock::now().time_since_epoch())
                                .count();
-      const ClientChannelId channelId = *reinterpret_cast<const ClientChannelId*>(msg + 1);
+      const ClientChannelId channelId = *reinterpret_cast<const ClientChannelId*>(data + 1);
       std::shared_lock<std::shared_mutex> lock(_clientChannelsMutex);
 
       auto clientPublicationsIt = _clientChannels.find(hdl);
@@ -874,7 +885,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
                                           sequence,
                                           advertisement,
                                           length,
-                                          msg};
+                                          data};
         _handlers.clientMessageHandler(clientMessage, hdl);
       }
     } break;
@@ -886,7 +897,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
         return;
       }
 
-      request.read(msg + 1, length - 1);
+      request.read(data + 1, length - 1);
 
       {
         std::shared_lock<std::shared_mutex> lock(_servicesMutex);

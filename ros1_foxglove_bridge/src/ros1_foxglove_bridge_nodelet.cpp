@@ -9,7 +9,6 @@
 
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.h>
-#include <ros/callback_queue.h>
 #include <ros/message_event.h>
 #include <ros/ros.h>
 #include <ros/xmlrpc_manager.h>
@@ -27,20 +26,6 @@
 #include <foxglove_bridge/websocket_server.hpp>
 
 namespace {
-
-class GenericCallback : public ros::CallbackInterface {
-public:
-  explicit GenericCallback(std::function<void(void)> fn)
-      : _fn(fn) {}
-
-  ros::CallbackInterface::CallResult call() override {
-    _fn();
-    return ros::CallbackInterface::CallResult::Success;
-  }
-
-private:
-  std::function<void(void)> _fn;
-};
 
 inline std::unordered_set<std::string> rpcValueToStringSet(const XmlRpc::XmlRpcValue& v) {
   std::unordered_set<std::string> set;
@@ -142,34 +127,31 @@ public:
       _server = foxglove::ServerFactory::createServer<ConnectionHandle>("foxglove_bridge",
                                                                         logHandler, serverOptions);
       foxglove::ServerHandlers<ConnectionHandle> hdlrs;
-      hdlrs.subscribeHandler = std::bind(&FoxgloveBridge::subscribeHandler, this,
-                                         std::placeholders::_1, std::placeholders::_2);
-      hdlrs.unsubscribeHandler = std::bind(&FoxgloveBridge::unsubscribeHandler, this,
-                                           std::placeholders::_1, std::placeholders::_2);
-      hdlrs.clientAdvertiseHandler = std::bind(&FoxgloveBridge::clientAdvertiseHandler, this,
+      hdlrs.subscribeHandler =
+        std::bind(&FoxgloveBridge::subscribe, this, std::placeholders::_1, std::placeholders::_2);
+      hdlrs.unsubscribeHandler =
+        std::bind(&FoxgloveBridge::unsubscribe, this, std::placeholders::_1, std::placeholders::_2);
+      hdlrs.clientAdvertiseHandler = std::bind(&FoxgloveBridge::clientAdvertise, this,
                                                std::placeholders::_1, std::placeholders::_2);
-      hdlrs.clientUnadvertiseHandler = std::bind(&FoxgloveBridge::clientUnadvertiseHandler, this,
+      hdlrs.clientUnadvertiseHandler = std::bind(&FoxgloveBridge::clientUnadvertise, this,
                                                  std::placeholders::_1, std::placeholders::_2);
-      hdlrs.clientMessageHandler = std::bind(&FoxgloveBridge::clientMessageHandler, this,
+      hdlrs.clientMessageHandler = std::bind(&FoxgloveBridge::clientMessage, this,
                                              std::placeholders::_1, std::placeholders::_2);
       hdlrs.parameterRequestHandler =
-        std::bind(&FoxgloveBridge::parameterRequestHandler, this, std::placeholders::_1,
+        std::bind(&FoxgloveBridge::getParameters, this, std::placeholders::_1,
                   std::placeholders::_2, std::placeholders::_3);
       hdlrs.parameterChangeHandler =
-        std::bind(&FoxgloveBridge::parameterChangeHandler, this, std::placeholders::_1,
+        std::bind(&FoxgloveBridge::setParameters, this, std::placeholders::_1,
                   std::placeholders::_2, std::placeholders::_3);
       hdlrs.parameterSubscriptionHandler =
-        std::bind(&FoxgloveBridge::parameterSubscriptionHandler, this, std::placeholders::_1,
+        std::bind(&FoxgloveBridge::subscribeParameters, this, std::placeholders::_1,
                   std::placeholders::_2, std::placeholders::_3);
-      hdlrs.serviceRequestHandler = std::bind(&FoxgloveBridge::serviceRequestHandler, this,
+      hdlrs.serviceRequestHandler = std::bind(&FoxgloveBridge::serviceRequest, this,
                                               std::placeholders::_1, std::placeholders::_2);
-      hdlrs.subscribeConnectionGraphHandler =
-        std::bind(&FoxgloveBridge::subscribeConnectionGraphHandler, this, std::placeholders::_1);
+      hdlrs.subscribeConnectionGraphHandler = [this](bool subscribe) {
+        _subscribeGraphUpdates = subscribe;
+      };
       _server->setHandlers(std::move(hdlrs));
-
-      _handlerCallbackQueue = std::make_unique<ros::CallbackQueue>();
-      _handlerSpinner = std::make_unique<ros::AsyncSpinner>(1, _handlerCallbackQueue.get());
-      _handlerSpinner->start();
 
       _server->start(address, static_cast<uint16_t>(port));
 
@@ -205,59 +187,6 @@ private:
       return std::hash<T1>()(pair.first) ^ std::hash<T2>()(pair.second);
     }
   };
-
-  void subscribeHandler(foxglove::ChannelId channelId, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
-      std::bind(&FoxgloveBridge::subscribe, this, channelId, hdl)));
-  }
-
-  void unsubscribeHandler(foxglove::ChannelId channelId, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
-      std::bind(&FoxgloveBridge::unsubscribe, this, channelId, hdl)));
-  }
-
-  void clientAdvertiseHandler(const foxglove::ClientAdvertisement& channel, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
-      std::bind(&FoxgloveBridge::clientAdvertise, this, channel, hdl)));
-  }
-
-  void clientUnadvertiseHandler(foxglove::ClientChannelId channelId, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
-      std::bind(&FoxgloveBridge::clientUnadvertise, this, channelId, hdl)));
-  }
-
-  void clientMessageHandler(const foxglove::ClientMessage& clientMsg, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
-      std::bind(&FoxgloveBridge::clientMessage, this, clientMsg, hdl)));
-  }
-
-  void parameterRequestHandler(const std::vector<std::string>& parameters,
-                               const std::optional<std::string>& requestId, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
-      std::bind(&FoxgloveBridge::getParameters, this, parameters, requestId, hdl)));
-  }
-
-  void parameterChangeHandler(const std::vector<foxglove::Parameter>& parameters,
-                              const std::optional<std::string>& requestId, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
-      std::bind(&FoxgloveBridge::setParameters, this, parameters, requestId, hdl)));
-  }
-
-  void parameterSubscriptionHandler(const std::vector<std::string>& parameters,
-                                    foxglove::ParameterSubscriptionOperation op,
-                                    ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
-      std::bind(&FoxgloveBridge::subscribeParameters, this, parameters, op, hdl)));
-  }
-
-  void serviceRequestHandler(const foxglove::ServiceRequest& request, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(boost::make_shared<GenericCallback>(
-      std::bind(&FoxgloveBridge::serviceRequest, this, request, hdl)));
-  }
-
-  void subscribeConnectionGraphHandler(bool subscribe) {
-    _subscribeGraphUpdates = subscribe;
-  }
 
   void subscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
@@ -891,8 +820,6 @@ private:
   }
 
   std::unique_ptr<foxglove::ServerInterface<ConnectionHandle>> _server;
-  std::unique_ptr<ros::CallbackQueue> _handlerCallbackQueue;
-  std::unique_ptr<ros::AsyncSpinner> _handlerSpinner;
   ros_babel_fish::IntegratedDescriptionProvider _rosTypeInfoProvider;
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _paramWhitelistPatterns;

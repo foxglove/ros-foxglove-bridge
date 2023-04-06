@@ -9,7 +9,6 @@
 #include <rosgraph_msgs/msg/clock.hpp>
 #include <websocketpp/common/connection_hdl.hpp>
 
-#include <foxglove_bridge/callback_queue.hpp>
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/generic_client.hpp>
 #include <foxglove_bridge/message_definition_cache.hpp>
@@ -97,24 +96,21 @@ public:
                                                                       serverOptions);
 
     foxglove::ServerHandlers<ConnectionHandle> hdlrs;
-    hdlrs.subscribeHandler = std::bind(&FoxgloveBridge::subscribeHandler, this, _1, _2);
-    hdlrs.unsubscribeHandler = std::bind(&FoxgloveBridge::unsubscribeHandler, this, _1, _2);
-    hdlrs.clientAdvertiseHandler = std::bind(&FoxgloveBridge::clientAdvertiseHandler, this, _1, _2);
-    hdlrs.clientUnadvertiseHandler =
-      std::bind(&FoxgloveBridge::clientUnadvertiseHandler, this, _1, _2);
-    hdlrs.clientMessageHandler = std::bind(&FoxgloveBridge::clientMessageHandler, this, _1, _2);
-    hdlrs.serviceRequestHandler = std::bind(&FoxgloveBridge::serviceRequestHandler, this, _1, _2);
+    hdlrs.subscribeHandler = std::bind(&FoxgloveBridge::subscribe, this, _1, _2);
+    hdlrs.unsubscribeHandler = std::bind(&FoxgloveBridge::unsubscribe, this, _1, _2);
+    hdlrs.clientAdvertiseHandler = std::bind(&FoxgloveBridge::clientAdvertise, this, _1, _2);
+    hdlrs.clientUnadvertiseHandler = std::bind(&FoxgloveBridge::clientUnadvertise, this, _1, _2);
+    hdlrs.clientMessageHandler = std::bind(&FoxgloveBridge::clientMessage, this, _1, _2);
+    hdlrs.serviceRequestHandler = std::bind(&FoxgloveBridge::serviceRequest, this, _1, _2);
     hdlrs.subscribeConnectionGraphHandler =
-      std::bind(&FoxgloveBridge::subscribeConnectionGraphHandler, this, _1);
+      std::bind(&FoxgloveBridge::subscribeConnectionGraph, this, _1);
 
     if (hasCapability(foxglove::CAPABILITY_PARAMETERS) ||
         hasCapability(foxglove::CAPABILITY_PARAMETERS_SUBSCRIBE)) {
-      hdlrs.parameterRequestHandler =
-        std::bind(&FoxgloveBridge::parameterRequestHandler, this, _1, _2, _3);
-      hdlrs.parameterChangeHandler =
-        std::bind(&FoxgloveBridge::parameterChangeHandler, this, _1, _2, _3);
+      hdlrs.parameterRequestHandler = std::bind(&FoxgloveBridge::getParameters, this, _1, _2, _3);
+      hdlrs.parameterChangeHandler = std::bind(&FoxgloveBridge::setParameters, this, _1, _2, _3);
       hdlrs.parameterSubscriptionHandler =
-        std::bind(&FoxgloveBridge::parameterSubscriptionHandler, this, _1, _2, _3);
+        std::bind(&FoxgloveBridge::subscribeParameters, this, _1, _2, _3);
 
       _paramInterface = std::make_shared<ParameterInterface>(this, paramWhitelistPatterns);
       _paramInterface->setParamUpdateCallback(
@@ -122,8 +118,6 @@ public:
     }
 
     _server->setHandlers(std::move(hdlrs));
-
-    _handlerCallbackQueue = std::make_unique<CallbackQueue>(1ul /* 1 thread */);
     _server->start(address, port);
 
     // Get the actual port we bound to
@@ -447,7 +441,6 @@ private:
   };
 
   std::unique_ptr<foxglove::ServerInterface<ConnectionHandle>> _server;
-  std::unique_ptr<CallbackQueue> _handlerCallbackQueue;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;
@@ -472,60 +465,10 @@ private:
   std::atomic<bool> _subscribeGraphUpdates = false;
   bool _includeHidden = false;
 
-  void subscribeHandler(foxglove::ChannelId channelId, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(std::bind(&FoxgloveBridge::subscribe, this, channelId, hdl));
-  }
-
-  void unsubscribeHandler(foxglove::ChannelId channelId, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(
-      std::bind(&FoxgloveBridge::unsubscribe, this, channelId, hdl));
-  }
-
-  void clientAdvertiseHandler(const foxglove::ClientAdvertisement& channel, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(
-      std::bind(&FoxgloveBridge::clientAdvertise, this, channel, hdl));
-  }
-
-  void clientUnadvertiseHandler(foxglove::ClientChannelId channelId, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(
-      std::bind(&FoxgloveBridge::clientUnadvertise, this, channelId, hdl));
-  }
-
-  void clientMessageHandler(const foxglove::ClientMessage& clientMsg, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(
-      std::bind(&FoxgloveBridge::clientMessage, this, clientMsg, hdl));
-  }
-
-  void parameterRequestHandler(const std::vector<std::string>& parameters,
-                               const std::optional<std::string>& requestId, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(
-      std::bind(&FoxgloveBridge::getParameters, this, parameters, requestId, hdl));
-  }
-
-  void parameterChangeHandler(const std::vector<foxglove::Parameter>& parameters,
-                              const std::optional<std::string>& requestId, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(
-      std::bind(&FoxgloveBridge::setParameters, this, parameters, requestId, hdl));
-  }
-
-  void parameterSubscriptionHandler(const std::vector<std::string>& parameters,
-                                    foxglove::ParameterSubscriptionOperation op,
-                                    ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(
-      std::bind(&FoxgloveBridge::subscribeParameters, this, parameters, op, hdl));
-  }
-
-  void serviceRequestHandler(const foxglove::ServiceRequest& request, ConnectionHandle hdl) {
-    _handlerCallbackQueue->addCallback(
-      std::bind(&FoxgloveBridge::serviceRequest, this, request, hdl));
-  }
-
-  void subscribeConnectionGraphHandler(bool subscribe) {
+  void subscribeConnectionGraph(bool subscribe) {
     if ((_subscribeGraphUpdates = subscribe)) {
-      _handlerCallbackQueue->addCallback([this]() {
-        updateConnectionGraph(get_topic_names_and_types());
-      });
-    }
+      updateConnectionGraph(get_topic_names_and_types());
+    };
   }
 
   void subscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
