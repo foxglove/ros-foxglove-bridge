@@ -197,6 +197,7 @@ private:
   void sendJson(ConnHandle hdl, json&& payload);
   void sendJsonRaw(ConnHandle hdl, const std::string& payload);
   void sendBinary(ConnHandle hdl, const uint8_t* payload, size_t payloadSize);
+  void sendStatus(ConnHandle clientHandle, const StatusLevel level, const std::string& message);
   void sendStatusAndLogMsg(ConnHandle clientHandle, const StatusLevel level,
                            const std::string& message);
   void unsubscribeParamsWithoutSubscriptions(ConnHandle hdl,
@@ -533,6 +534,17 @@ inline void Server<ServerConfiguration>::sendBinary(ConnHandle hdl, const uint8_
 }
 
 template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::sendStatus(ConnHandle clientHandle,
+                                                    const StatusLevel level,
+                                                    const std::string& message) {
+  sendJson(clientHandle, json{
+                           {"op", "status"},
+                           {"level", static_cast<uint8_t>(level)},
+                           {"message", message},
+                         });
+}
+
+template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::sendStatusAndLogMsg(ConnHandle clientHandle,
                                                              const StatusLevel level,
                                                              const std::string& message) {
@@ -542,11 +554,7 @@ inline void Server<ServerConfiguration>::sendStatusAndLogMsg(ConnHandle clientHa
   auto logger = level == StatusLevel::Error ? _server.get_elog() : _server.get_alog();
   logger.write(logLevel, logMessage);
 
-  sendJson(clientHandle, json{
-                           {"op", "status"},
-                           {"level", static_cast<uint8_t>(level)},
-                           {"message", message},
-                         });
+  sendStatus(clientHandle, level, message);
 }
 
 template <typename ServerConfiguration>
