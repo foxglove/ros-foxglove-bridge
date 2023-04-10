@@ -193,8 +193,10 @@ private:
 
     auto it = _advertisedTopics.find(channelId);
     if (it == _advertisedTopics.end()) {
-      ROS_WARN("Received subscribe request for unknown channel %d", channelId);
-      return;
+      const std::string errMsg =
+        "Received subscribe request for unknown channel " + std::to_string(channelId);
+      ROS_WARN_STREAM(errMsg);
+      throw foxglove::ChannelError(channelId, errMsg);
     }
 
     const auto& channel = it->second;
@@ -208,8 +210,10 @@ private:
 
     if (!firstSubscription &&
         subscriptionsByClient.find(clientHandle) != subscriptionsByClient.end()) {
-      ROS_WARN("Client is already subscribed to channel %d", channelId);
-      return;
+      const std::string errMsg =
+        "Client is already subscribed to channel " + std::to_string(channelId);
+      ROS_WARN_STREAM(errMsg);
+      throw foxglove::ChannelError(channelId, errMsg);
     }
 
     try {
@@ -227,8 +231,10 @@ private:
                  subscriptionsByClient.size(), topic.c_str(), datatype.c_str(), channelId);
       }
     } catch (const std::exception& ex) {
-      ROS_ERROR("Failed to subscribe to topic \"%s\" (%s): %s", topic.c_str(), datatype.c_str(),
-                ex.what());
+      const std::string errMsg =
+        "Failed to subscribe to topic '" + topic + "' (" + datatype + "): " + ex.what();
+      ROS_ERROR_STREAM(errMsg);
+      throw foxglove::ChannelError(channelId, errMsg);
     }
   }
 
@@ -237,25 +243,26 @@ private:
 
     const auto channelIt = _advertisedTopics.find(channelId);
     if (channelIt == _advertisedTopics.end()) {
-      ROS_WARN("Received unsubscribe request for unknown channel %d", channelId);
-      return;
+      const std::string errMsg =
+        "Received unsubscribe request for unknown channel " + std::to_string(channelId);
+      ROS_WARN_STREAM(errMsg);
+      throw foxglove::ChannelError(channelId, errMsg);
     }
     const auto& channel = channelIt->second;
 
     auto subscriptionsIt = _subscriptions.find(channelId);
     if (subscriptionsIt == _subscriptions.end()) {
-      ROS_WARN("Received unsubscribe request for channel %d that was not subscribed to", channelId);
-      return;
+      throw foxglove::ChannelError(channelId, "Received unsubscribe request for channel " +
+                                                std::to_string(channelId) +
+                                                " that was not subscribed to ");
     }
 
     auto& subscriptionsByClient = subscriptionsIt->second;
     const auto clientSubscription = subscriptionsByClient.find(clientHandle);
     if (clientSubscription == subscriptionsByClient.end()) {
-      ROS_WARN(
-        "Received unsubscribe request for channel %d from a client that was not subscribed to this "
-        "channel",
-        channelId);
-      return;
+      throw foxglove::ChannelError(
+        channelId, "Received unsubscribe request for channel " + std::to_string(channelId) +
+                     "from a client that was not subscribed to this channel");
     }
 
     subscriptionsByClient.erase(clientSubscription);
@@ -272,9 +279,9 @@ private:
   void clientAdvertise(const foxglove::ClientAdvertisement& channel,
                        ConnectionHandle clientHandle) {
     if (channel.encoding != ROS1_CHANNEL_ENCODING) {
-      ROS_ERROR("Unsupported encoding. Only '%s' encoding is supported at the moment.",
-                ROS1_CHANNEL_ENCODING);
-      return;
+      throw foxglove::ClientChannelError(
+        channel.channelId, "Unsupported encoding. Only '" + std::string(ROS1_CHANNEL_ENCODING) +
+                             "' encoding is supported at the moment.");
     }
 
     std::unique_lock<std::shared_mutex> lock(_publicationsMutex);
@@ -286,17 +293,17 @@ private:
     auto& clientPublications = clientPublicationsIt->second;
     if (!isFirstPublication &&
         clientPublications.find(channel.channelId) != clientPublications.end()) {
-      ROS_WARN("Received client advertisement from %s for channel %d it had already advertised",
-               _server->remoteEndpointString(clientHandle).c_str(), channel.channelId);
-      return;
+      throw foxglove::ClientChannelError(
+        channel.channelId, "Received client advertisement from " +
+                             _server->remoteEndpointString(clientHandle) + " for channel " +
+                             std::to_string(channel.channelId) + " it had already advertised");
     }
 
     const auto msgDescription = _rosTypeInfoProvider.getMessageDescription(channel.schemaName);
     if (!msgDescription) {
-      ROS_ERROR(
-        "Failed to retrieve type information of data type '%s'. Unable to advertise topic '%s'",
-        channel.schemaName.c_str(), channel.topic.c_str());
-      return;
+      throw foxglove::ClientChannelError(
+        channel.channelId, "Failed to retrieve type information of data type '" +
+                             channel.schemaName + "'. Unable to advertise topic " + channel.topic);
     }
 
     ros::AdvertiseOptions advertiseOptions;
@@ -315,8 +322,10 @@ private:
                _server->remoteEndpointString(clientHandle).c_str(), channel.topic.c_str(),
                channel.schemaName.c_str(), channel.channelId);
     } else {
-      ROS_ERROR("Failed to create publisher for topic \"%s\" (%s)", channel.topic.c_str(),
-                channel.schemaName.c_str());
+      const auto errMsg =
+        "Failed to create publisher for topic " + channel.topic + "(" + channel.schemaName + ")";
+      ROS_ERROR_STREAM(errMsg);
+      throw foxglove::ClientChannelError(channel.channelId, errMsg);
     }
   }
 
@@ -325,22 +334,21 @@ private:
 
     auto clientPublicationsIt = _clientAdvertisedTopics.find(clientHandle);
     if (clientPublicationsIt == _clientAdvertisedTopics.end()) {
-      ROS_DEBUG(
-        "Ignoring client unadvertisement from %s for unknown channel %d, client has no "
-        "advertised topics",
-        _server->remoteEndpointString(clientHandle).c_str(), channelId);
-      return;
+      throw foxglove::ClientChannelError(
+        channelId, "Ignoring client unadvertisement from " +
+                     _server->remoteEndpointString(clientHandle) + " for unknown channel " +
+                     std::to_string(channelId) + ", client has no advertised topics");
     }
 
     auto& clientPublications = clientPublicationsIt->second;
 
     auto channelPublicationIt = clientPublications.find(channelId);
     if (channelPublicationIt == clientPublications.end()) {
-      ROS_WARN(
-        "Ignoring client unadvertisement from %s for unknown channel %d, client has %zu "
-        "advertised topic(s)",
-        _server->remoteEndpointString(clientHandle).c_str(), channelId, clientPublications.size());
-      return;
+      throw foxglove::ClientChannelError(
+        channelId, "Ignoring client unadvertisement from " +
+                     _server->remoteEndpointString(clientHandle) + " for unknown channel " +
+                     std::to_string(channelId) + ", client has " +
+                     std::to_string(clientPublications.size()) + " advertised topic(s)");
     }
 
     const auto& publisher = channelPublicationIt->second;
@@ -363,29 +371,28 @@ private:
 
     auto clientPublicationsIt = _clientAdvertisedTopics.find(clientHandle);
     if (clientPublicationsIt == _clientAdvertisedTopics.end()) {
-      ROS_WARN(
-        "Dropping client message from %s for unknown channel %d, client has no "
-        "advertised topics",
-        _server->remoteEndpointString(clientHandle).c_str(), channelId);
-      return;
+      throw foxglove::ClientChannelError(
+        channelId, "Dropping client message from " + _server->remoteEndpointString(clientHandle) +
+                     " for unknown channel " + std::to_string(channelId) +
+                     ", client has no advertised topics");
     }
 
     auto& clientPublications = clientPublicationsIt->second;
 
     auto channelPublicationIt = clientPublications.find(clientMsg.advertisement.channelId);
     if (channelPublicationIt == clientPublications.end()) {
-      ROS_WARN(
-        "Dropping client message from %s for unknown channel %d, client has %zu "
-        "advertised topic(s)",
-        _server->remoteEndpointString(clientHandle).c_str(), channelId, clientPublications.size());
-      return;
+      throw foxglove::ClientChannelError(
+        channelId, "Dropping client message from " + _server->remoteEndpointString(clientHandle) +
+                     " for unknown channel " + std::to_string(channelId) + ", client has " +
+                     std::to_string(clientPublications.size()) + " advertised topic(s)");
     }
 
     try {
       channelPublicationIt->second.publish(msg);
     } catch (const std::exception& ex) {
-      ROS_ERROR("Failed to publish message on topic '%s': %s",
-                channelPublicationIt->second.getTopic().c_str(), ex.what());
+      throw foxglove::ClientChannelError(channelId, "Failed to publish message on topic '" +
+                                                      channelPublicationIt->second.getTopic() +
+                                                      "': " + ex.what());
     }
   }
 
@@ -617,19 +624,26 @@ private:
 
   void getParameters(const std::vector<std::string>& parameters,
                      const std::optional<std::string>& requestId, ConnectionHandle hdl) {
+    const bool allParametersRequested = parameters.empty();
     std::vector<std::string> parameterNames = parameters;
-    if (parameterNames.empty()) {
+    if (allParametersRequested) {
       if (!getMTNodeHandle().getParamNames(parameterNames)) {
-        ROS_ERROR("Failed to retrieve parameter names");
-        return;
+        const auto errMsg = "Failed to retrieve parameter names";
+        ROS_ERROR_STREAM(errMsg);
+        throw std::runtime_error(errMsg);
       }
     }
 
+    bool success = true;
     std::vector<foxglove::Parameter> params;
     for (const auto& paramName : parameterNames) {
       if (!isWhitelisted(paramName, _paramWhitelistPatterns)) {
-        ROS_WARN("Parameter '%s' is not whitelisted", paramName.c_str());
-        continue;
+        if (allParametersRequested) {
+          continue;
+        } else {
+          ROS_ERROR("Parameter '%s' is not on the allowlist", paramName.c_str());
+          success = false;
+        }
       }
 
       try {
@@ -638,24 +652,34 @@ private:
         params.push_back(fromRosParam(paramName, value));
       } catch (const std::exception& ex) {
         ROS_ERROR("Invalid parameter '%s': %s", paramName.c_str(), ex.what());
+        success = false;
       } catch (const XmlRpc::XmlRpcException& ex) {
         ROS_ERROR("Invalid parameter '%s': %s", paramName.c_str(), ex.getMessage().c_str());
+        success = false;
       } catch (...) {
         ROS_ERROR("Invalid parameter '%s'", paramName.c_str());
+        success = false;
       }
     }
 
     _server->publishParameterValues(hdl, params, requestId);
+
+    if (!success) {
+      throw std::runtime_error("Failed to retrieve one or multiple parameters");
+    }
   }
 
   void setParameters(const std::vector<foxglove::Parameter>& parameters,
                      const std::optional<std::string>& requestId, ConnectionHandle hdl) {
     using foxglove::ParameterType;
     auto nh = this->getMTNodeHandle();
+
+    bool success = true;
     for (const auto& param : parameters) {
       const auto paramName = param.getName();
       if (!isWhitelisted(paramName, _paramWhitelistPatterns)) {
-        ROS_WARN("Parameter '%s' is not whitelisted", paramName.c_str());
+        ROS_ERROR("Parameter '%s' is not on the allowlist", paramName.c_str());
+        success = false;
         continue;
       }
 
@@ -684,6 +708,7 @@ private:
         }
       } catch (const std::exception& ex) {
         ROS_ERROR("Failed to set parameter '%s': %s", paramName.c_str(), ex.what());
+        success = false;
       }
     }
 
@@ -695,13 +720,20 @@ private:
       }
       getParameters(parameterNames, requestId, hdl);
     }
+
+    if (!success) {
+      throw std::runtime_error("Failed to set one or multiple parameters");
+    }
   }
 
   void subscribeParameters(const std::vector<std::string>& parameters,
                            foxglove::ParameterSubscriptionOperation op, ConnectionHandle) {
+    const auto opVerb =
+      (op == foxglove::ParameterSubscriptionOperation::SUBSCRIBE) ? "subscribe" : "unsubscribe";
+    bool success = true;
     for (const auto& paramName : parameters) {
       if (!isWhitelisted(paramName, _paramWhitelistPatterns)) {
-        ROS_WARN("Parameter '%s' is not whitelisted", paramName.c_str());
+        ROS_ERROR("Parameter '%s' is not allowlist", paramName.c_str());
         continue;
       }
 
@@ -710,15 +742,17 @@ private:
       params[1] = xmlrpcServer.getServerURI();
       params[2] = ros::names::resolve(paramName);
 
-      const auto opVerb = (op == foxglove::ParameterSubscriptionOperation::SUBSCRIBE)
-                            ? "subscribeParam"
-                            : "unsubscribeParam";
-
-      if (ros::master::execute(opVerb, params, result, payload, false)) {
-        ROS_DEBUG("%s '%s'", opVerb, paramName.c_str());
+      const std::string opName = std::string(opVerb) + "Param";
+      if (ros::master::execute(opName, params, result, payload, false)) {
+        ROS_DEBUG("%s '%s'", opName.c_str(), paramName.c_str());
       } else {
         ROS_WARN("Failed to %s '%s': %s", opVerb, paramName.c_str(), result.toXml().c_str());
+        success = false;
       }
+    }
+
+    if (!success) {
+      throw std::runtime_error("Failed to " + std::string(opVerb) + " one or multiple parameters.");
     }
   }
 
@@ -778,8 +812,10 @@ private:
     std::shared_lock<std::shared_mutex> lock(_servicesMutex);
     const auto serviceIt = _advertisedServices.find(request.serviceId);
     if (serviceIt == _advertisedServices.end()) {
-      ROS_ERROR("Service with id %d does not exist", request.serviceId);
-      return;
+      const auto errMsg =
+        "Service with id " + std::to_string(request.serviceId) + " does not exist";
+      ROS_ERROR_STREAM(errMsg);
+      throw foxglove::ServiceError(request.serviceId, errMsg);
     }
     const auto& serviceName = serviceIt->second.name;
     const auto& serviceType = serviceIt->second.type;
@@ -787,15 +823,16 @@ private:
               serviceType.c_str());
 
     if (!ros::service::exists(serviceName, false)) {
-      ROS_ERROR("Service '%s' does not exist", serviceName.c_str());
-      return;
+      throw foxglove::ServiceError(request.serviceId,
+                                   "Service '" + serviceName + "' does not exist");
     }
 
     const auto srvDescription = _rosTypeInfoProvider.getServiceDescription(serviceType);
     if (!srvDescription) {
-      ROS_ERROR("Failed to retrieve type information for service %s (%s)", serviceName.c_str(),
-                serviceType.c_str());
-      return;
+      const auto errMsg =
+        "Failed to retrieve type information for service " + serviceName + "(" + serviceType + ")";
+      ROS_ERROR_STREAM(errMsg);
+      throw foxglove::ServiceError(request.serviceId, errMsg);
     }
 
     GenericService genReq, genRes;
@@ -811,7 +848,8 @@ private:
       res.data = genRes.data;
       _server->sendServiceResponse(clientHandle, res);
     } else {
-      ROS_ERROR("Failed to call service %s (%s)", serviceName.c_str(), serviceType.c_str());
+      throw foxglove::ServiceError(
+        request.serviceId, "Failed to call service " + serviceName + "(" + serviceType + ")");
     }
   }
 

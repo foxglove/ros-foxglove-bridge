@@ -475,9 +475,8 @@ private:
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
     auto it = _advertisedTopics.find(channelId);
     if (it == _advertisedTopics.end()) {
-      RCLCPP_WARN(this->get_logger(), "Received subscribe request for unknown channel %d",
-                  channelId);
-      return;
+      throw foxglove::ChannelError(
+        channelId, "Received subscribe request for unknown channel " + std::to_string(channelId));
     }
 
     const auto& channel = it->second;
@@ -491,8 +490,8 @@ private:
 
     if (!firstSubscription &&
         subscriptionsByClient.find(clientHandle) != subscriptionsByClient.end()) {
-      RCLCPP_WARN(this->get_logger(), "Client is already subscribed to channel %d", channelId);
-      return;
+      throw foxglove::ChannelError(
+        channelId, "Client is already subscribed to channel " + std::to_string(channelId));
     }
 
     rclcpp::SubscriptionEventCallbacks eventCallbacks;
@@ -570,8 +569,8 @@ private:
         subscriptionOptions);
       subscriptionsByClient.emplace(clientHandle, std::move(subscriber));
     } catch (const std::exception& ex) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to subscribe to topic \"%s\" (%s): %s",
-                   topic.c_str(), datatype.c_str(), ex.what());
+      throw foxglove::ChannelError(
+        channelId, "Failed to subscribe to topic " + topic + " (" + datatype + "): " + ex.what());
     }
   }
 
@@ -580,29 +579,24 @@ private:
 
     const auto channelIt = _advertisedTopics.find(channelId);
     if (channelIt == _advertisedTopics.end()) {
-      RCLCPP_WARN(this->get_logger(), "Received unsubscribe request for unknown channel %d",
-                  channelId);
-      return;
+      throw foxglove::ChannelError(
+        channelId, "Received unsubscribe request for unknown channel " + std::to_string(channelId));
     }
     const auto& channel = channelIt->second;
 
     auto subscriptionsIt = _subscriptions.find(channelId);
     if (subscriptionsIt == _subscriptions.end()) {
-      RCLCPP_WARN(this->get_logger(),
-                  "Received unsubscribe request for channel %d that was not subscribed to",
-                  channelId);
-      return;
+      throw foxglove::ChannelError(channelId, "Received unsubscribe request for channel " +
+                                                std::to_string(channelId) +
+                                                " that was not subscribed to");
     }
 
     auto& subscriptionsByClient = subscriptionsIt->second;
     const auto clientSubscription = subscriptionsByClient.find(clientHandle);
     if (clientSubscription == subscriptionsByClient.end()) {
-      RCLCPP_WARN(
-        this->get_logger(),
-        "Received unsubscribe request for channel %d from a client that was not subscribed to this "
-        "channel",
-        channelId);
-      return;
+      throw foxglove::ChannelError(
+        channelId, "Received unsubscribe request for channel " + std::to_string(channelId) +
+                     "from a client that was not subscribed to this channel");
     }
 
     subscriptionsByClient.erase(clientSubscription);
@@ -628,10 +622,10 @@ private:
 
     if (!isFirstPublication &&
         clientPublications.find(advertisement.channelId) != clientPublications.end()) {
-      RCLCPP_WARN(this->get_logger(),
-                  "Received client advertisement from %s for channel %d it had already advertised",
-                  _server->remoteEndpointString(hdl).c_str(), advertisement.channelId);
-      return;
+      throw foxglove::ClientChannelError(
+        advertisement.channelId,
+        "Received client advertisement from " + _server->remoteEndpointString(hdl) +
+          " for channel " + std::to_string(advertisement.channelId) + " it had already advertised");
     }
 
     try {
@@ -662,8 +656,8 @@ private:
       // Store the new topic advertisement
       clientPublications.emplace(advertisement.channelId, std::move(publisher));
     } catch (const std::exception& ex) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to create publisher: %s", ex.what());
-      return;
+      throw foxglove::ClientChannelError(advertisement.channelId,
+                                         std::string("Failed to create publisher: ") + ex.what());
     }
   }
 
@@ -672,21 +666,19 @@ private:
 
     auto it = _clientAdvertisedTopics.find(hdl);
     if (it == _clientAdvertisedTopics.end()) {
-      RCLCPP_DEBUG(this->get_logger(),
-                   "Ignoring client unadvertisement from %s for unknown channel %d, client has no "
-                   "advertised topics",
-                   _server->remoteEndpointString(hdl).c_str(), channelId);
-      return;
+      throw foxglove::ClientChannelError(
+        channelId, "Ignoring client unadvertisement from " + _server->remoteEndpointString(hdl) +
+                     " for unknown channel " + std::to_string(channelId) +
+                     ", client has no advertised topics");
     }
 
     auto& clientPublications = it->second;
     auto it2 = clientPublications.find(channelId);
     if (it2 == clientPublications.end()) {
-      RCLCPP_WARN(this->get_logger(),
-                  "Ignoring client unadvertisement from %s for unknown channel %d, client has %zu "
-                  "advertised topic(s)",
-                  _server->remoteEndpointString(hdl).c_str(), channelId, clientPublications.size());
-      return;
+      throw foxglove::ClientChannelError(
+        channelId, "Ignoring client unadvertisement from " + _server->remoteEndpointString(hdl) +
+                     " for unknown channel " + std::to_string(channelId) + ", client has " +
+                     std::to_string(clientPublications.size()) + " advertised topic(s)");
     }
 
     const auto& publisher = it2->second;
@@ -715,22 +707,19 @@ private:
 
       auto it = _clientAdvertisedTopics.find(hdl);
       if (it == _clientAdvertisedTopics.end()) {
-        RCLCPP_WARN(this->get_logger(),
-                    "Dropping client message from %s for unknown channel %d, client has no "
-                    "advertised topics",
-                    _server->remoteEndpointString(hdl).c_str(), channelId);
-        return;
+        throw foxglove::ClientChannelError(
+          channelId, "Dropping client message from " + _server->remoteEndpointString(hdl) +
+                       " for unknown channel " + std::to_string(channelId) +
+                       ", client has no advertised topics");
       }
 
       auto& clientPublications = it->second;
       auto it2 = clientPublications.find(channelId);
       if (it2 == clientPublications.end()) {
-        RCLCPP_WARN(this->get_logger(),
-                    "Dropping client message from %s for unknown channel %d, client has %zu "
-                    "advertised topic(s)",
-                    _server->remoteEndpointString(hdl).c_str(), channelId,
-                    clientPublications.size());
-        return;
+        throw foxglove::ClientChannelError(
+          channelId, "Dropping client message from " + _server->remoteEndpointString(hdl) +
+                       " for unknown channel " + std::to_string(channelId) + ", client has " +
+                       std::to_string(clientPublications.size()) + " advertised topic(s)");
       }
       publisher = it2->second;
     }
@@ -815,8 +804,9 @@ private:
     std::lock_guard<std::mutex> lock(_servicesMutex);
     const auto serviceIt = _advertisedServices.find(request.serviceId);
     if (serviceIt == _advertisedServices.end()) {
-      RCLCPP_ERROR(this->get_logger(), "Service with id '%d' does not exist", request.serviceId);
-      return;
+      throw foxglove::ServiceError(
+        request.serviceId,
+        "Service with id " + std::to_string(request.serviceId) + " does not exist");
     }
 
     auto clientIt = _serviceClients.find(request.serviceId);
@@ -829,17 +819,16 @@ private:
         clientIt = _serviceClients.emplace(request.serviceId, std::move(genClient)).first;
         this->get_node_services_interface()->add_client(clientIt->second, _servicesCallbackGroup);
       } catch (const std::exception& ex) {
-        RCLCPP_ERROR(get_logger(), "Failed to create service client for service %d (%s): %s",
-                     request.serviceId, serviceIt->second.name.c_str(), ex.what());
-        return;
+        throw foxglove::ServiceError(request.serviceId,
+                                     "Failed to create service client for service " +
+                                       serviceIt->second.name + ": " + ex.what());
       }
     }
 
     auto client = clientIt->second;
     if (!client->wait_for_service(1s)) {
-      RCLCPP_ERROR(get_logger(), "Service %d (%s) is not available", request.serviceId,
-                   serviceIt->second.name.c_str());
-      return;
+      throw foxglove::ServiceError(request.serviceId,
+                                   "Service " + serviceIt->second.name + " is not available");
     }
 
     auto reqMessage = std::make_shared<rclcpp::SerializedMessage>(request.data.size());
