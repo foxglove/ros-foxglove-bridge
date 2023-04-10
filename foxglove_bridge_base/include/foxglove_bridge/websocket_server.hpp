@@ -709,8 +709,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
           continue;
         }
         clientPublications.erase(channelIt);
-        if (const auto advertisedChannelIt = clientInfo.advertisedChannels.find(channelId) !=
-                                             clientInfo.advertisedChannels.end()) {
+        const auto advertisedChannelIt = clientInfo.advertisedChannels.find(channelId);
+        if (advertisedChannelIt != clientInfo.advertisedChannels.end()) {
           clientInfo.advertisedChannels.erase(advertisedChannelIt);
         }
 
