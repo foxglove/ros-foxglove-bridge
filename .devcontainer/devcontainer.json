@@ -9,17 +9,30 @@
   "forwardPorts": [
     8765
   ],
-  "settings": {
-    "git.path": "/usr/bin/git"
-  },
-  "postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}",
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-vscode.cpptools",
         "xaver.clang-format",
         "twxs.cmake"
-      ]
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "/bin/bash",
+            "args": [
+              "-l"
+            ],
+            "icon": "terminal-bash"
+          }
+        }
+      }
     }
-  }
+  },
+  "capAdd": [
+    "SYS_PTRACE"
+  ],
+  // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+  "remoteUser": "vscode"
 }
