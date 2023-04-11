@@ -14,6 +14,7 @@ constexpr char PARAM_SEND_BUFFER_LIMIT[] = "send_buffer_limit";
 constexpr char PARAM_USETLS[] = "tls";
 constexpr char PARAM_CERTFILE[] = "certfile";
 constexpr char PARAM_KEYFILE[] = "keyfile";
+constexpr char PARAM_MIN_QOS_DEPTH[] = "min_qos_depth";
 constexpr char PARAM_MAX_QOS_DEPTH[] = "max_qos_depth";
 constexpr char PARAM_TOPIC_WHITELIST[] = "topic_whitelist";
 constexpr char PARAM_SERVICE_WHITELIST[] = "service_whitelist";
@@ -25,6 +26,7 @@ constexpr char PARAM_CLIENT_TOPIC_WHITELIST[] = "client_topic_whitelist";
 constexpr int64_t DEFAULT_PORT = 8765;
 constexpr char DEFAULT_ADDRESS[] = "0.0.0.0";
 constexpr int64_t DEFAULT_SEND_BUFFER_LIMIT = 10000000;
+constexpr int64_t DEFAULT_MIN_QOS_DEPTH = 1;
 constexpr int64_t DEFAULT_MAX_QOS_DEPTH = 10;
 
 void declareParameters(rclcpp::Node* node);

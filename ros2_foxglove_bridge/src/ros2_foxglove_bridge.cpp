@@ -52,6 +52,7 @@ public:
     const auto useTLS = this->get_parameter(PARAM_USETLS).as_bool();
     const auto certfile = this->get_parameter(PARAM_CERTFILE).as_string();
     const auto keyfile = this->get_parameter(PARAM_KEYFILE).as_string();
+    _minQosDepth = static_cast<size_t>(this->get_parameter(PARAM_MIN_QOS_DEPTH).as_int());
     _maxQosDepth = static_cast<size_t>(this->get_parameter(PARAM_MAX_QOS_DEPTH).as_int());
     const auto topicWhiteList = this->get_parameter(PARAM_TOPIC_WHITELIST).as_string_array();
     _topicWhitelistPatterns = parseRegexStrings(this, topicWhiteList);
@@ -441,6 +442,7 @@ private:
   std::mutex _clientAdvertisementsMutex;
   std::mutex _servicesMutex;
   std::unique_ptr<std::thread> _rosgraphPollThread;
+  size_t _minQosDepth = DEFAULT_MIN_QOS_DEPTH;
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
   bool _useSimTime = false;
@@ -556,7 +558,7 @@ private:
       depth = std::min(_maxQosDepth, depth + qos.depth());
     }
 
-    rclcpp::QoS qos{rclcpp::KeepLast(std::max(depth, 1lu))};
+    rclcpp::QoS qos{rclcpp::KeepLast(std::max(depth, _minQosDepth))};
 
     // If all endpoints are reliable, ask for reliable
     if (reliabilityReliableEndpointsCount == publisherInfo.size()) {
