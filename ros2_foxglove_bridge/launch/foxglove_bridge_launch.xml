@@ -8,6 +8,7 @@
   <arg name="param_whitelist"           default="['.*']" />
   <arg name="service_whitelist"         default="['.*']" />
   <arg name="client_topic_whitelist"    default="['.*']" />
+  <arg name="min_qos_depth"             default="1" />
   <arg name="max_qos_depth"             default="10" />
   <arg name="num_threads"               default="0" />
   <arg name="send_buffer_limit"         default="10000000" />
@@ -24,6 +25,7 @@
     <param name="service_whitelist"       value="$(var service_whitelist)" />
     <param name="param_whitelist"         value="$(var param_whitelist)" />
     <param name="client_topic_whitelist"  value="$(var client_topic_whitelist)" />
+    <param name="min_qos_depth"           value="$(var min_qos_depth)" />
     <param name="max_qos_depth"           value="$(var max_qos_depth)" />
     <param name="num_threads"             value="$(var num_threads)" />
     <param name="send_buffer_limit"       value="$(var send_buffer_limit)" />

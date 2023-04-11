@@ -60,6 +60,18 @@ void declareParameters(rclcpp::Node* node) {
   keyfileDescription.read_only = true;
   node->declare_parameter(PARAM_KEYFILE, "", keyfileDescription);
 
+  auto minQosDepthDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  minQosDepthDescription.name = PARAM_MIN_QOS_DEPTH;
+  minQosDepthDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+  minQosDepthDescription.description = "Minimum depth used for the QoS profile of subscriptions.";
+  minQosDepthDescription.read_only = true;
+  minQosDepthDescription.additional_constraints = "Must be a non-negative integer";
+  minQosDepthDescription.integer_range.resize(1);
+  minQosDepthDescription.integer_range[0].from_value = 0;
+  minQosDepthDescription.integer_range[0].to_value = INT32_MAX;
+  minQosDepthDescription.integer_range[0].step = 1;
+  node->declare_parameter(PARAM_MIN_QOS_DEPTH, DEFAULT_MIN_QOS_DEPTH, minQosDepthDescription);
+
   auto maxQosDepthDescription = rcl_interfaces::msg::ParameterDescriptor{};
   maxQosDepthDescription.name = PARAM_MAX_QOS_DEPTH;
   maxQosDepthDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
