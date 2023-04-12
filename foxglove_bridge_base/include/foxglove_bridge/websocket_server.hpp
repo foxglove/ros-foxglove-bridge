@@ -144,7 +144,7 @@ private:
 
     explicit ClientInfo(const std::string& name, ConnHandle handle)
         : name(name)
-        , handle(handle){}
+        , handle(handle) {}
 
     ClientInfo(const ClientInfo&) = delete;
     ClientInfo& operator=(const ClientInfo&) = delete;
