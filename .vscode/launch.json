@@ -4,16 +4,48 @@
   // Hover to view descriptions of existing attributes.
   // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
-  "configurations": [{
-    "name": "C++ Debug",
-    "type": "cppdbg",
-    "request": "launch",
-    "program": "${workspaceFolder}/build/foxglove_bridge/foxglove_bridge",
-    "args": ["--ros-args", "--log-level", "debug"],
-    "stopAtEntry": false,
-    "cwd": "${workspaceFolder}",
-    "environment": [],
-    "externalConsole": false,
-    "MIMode": "lldb",
-  }]
+  "configurations": [
+    {
+      "name": "ROS1 foxglove bridge",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "/ros_ws/install_ros1/lib/foxglove_bridge/foxglove_bridge",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${fileDirname}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    },
+    {
+      "name": "ROS2 foxglove bridge",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "/ros_ws/install_ros2/foxglove_bridge/lib/foxglove_bridge/foxglove_bridge",
+      "args": [
+        "--ros-args",
+        "--log-level",
+        "debug"
+      ],
+      "stopAtEntry": false,
+      "cwd": "${fileDirname}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    },
+  ]
 }
