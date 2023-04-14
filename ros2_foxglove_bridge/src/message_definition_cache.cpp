@@ -123,7 +123,7 @@ static std::vector<std::string> split_string(const std::string& str,
 /// @return A tuple holding goal, result and feedback definitions
 static std::tuple<std::string, std::string, std::string> split_action_msg_definition(
   const std::string& action_definition) {
-  constexpr char SEP[] = "---";
+  constexpr char SEP[] = "\n---\n";
 
   const auto definitions = split_string(action_definition, SEP);
   if (definitions.size() != 3) {
