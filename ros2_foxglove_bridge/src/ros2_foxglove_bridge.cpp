@@ -66,6 +66,7 @@ public:
     const auto clientTopicWhiteList =
       this->get_parameter(PARAM_CLIENT_TOPIC_WHITELIST).as_string_array();
     const auto clientTopicWhiteListPatterns = parseRegexStrings(this, clientTopicWhiteList);
+    _includeHidden = this->get_parameter(PARAM_INCLUDE_HIDDEN).as_bool();
 
     const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
     foxglove::ServerOptions serverOptions;
@@ -192,6 +193,11 @@ public:
     for (const auto& topicNamesAndType : topicNamesAndTypes) {
       const auto& topicName = topicNamesAndType.first;
       const auto& datatypes = topicNamesAndType.second;
+
+      // Ignore hidden topics if not explicitly included
+      if (!_includeHidden && topicName.find("/_") != std::string::npos) {
+        continue;
+      }
 
       // Ignore the topic if it is not on the topic whitelist
       if (isWhitelisted(topicName, _topicWhitelistPatterns)) {
@@ -326,6 +332,11 @@ public:
         continue;
       }
 
+      // Ignore hidden services if not explicitly included
+      if (!_includeHidden && serviceName.find("/_") != std::string::npos) {
+        continue;
+      }
+
       // Ignore the service if it is not on the service whitelist
       if (!isWhitelisted(serviceName, _serviceWhitelistPatterns)) {
         continue;
@@ -448,6 +459,7 @@ private:
   bool _useSimTime = false;
   std::vector<std::string> _capabilities;
   std::atomic<bool> _subscribeGraphUpdates = false;
+  bool _includeHidden = false;
 
   void subscribeHandler(foxglove::ChannelId channelId, ConnectionHandle hdl) {
     _handlerCallbackQueue->addCallback(std::bind(&FoxgloveBridge::subscribe, this, channelId, hdl));
