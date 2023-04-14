@@ -18,7 +18,7 @@ namespace foxglove {
 
 // Match datatype names (foo_msgs/Bar or foo_msgs/msg/Bar or foo_msgs/srv/Bar)
 static const std::regex PACKAGE_TYPENAME_REGEX{
-  R"(^([a-zA-Z0-9_]+)/(?:msg/|srv/|action/)?([a-zA-Z0-9_]+)$)"};
+  R"(^([a-zA-Z0-9_]+)/(?:(msg|srv|action)/)?([a-zA-Z0-9_]+)$)"};
 
 // Match field types from .msg definitions ("foo_msgs/Bar" in "foo_msgs/Bar[] bar")
 static const std::regex MSG_FIELD_TYPE_REGEX{R"((?:^|\n)\s*([a-zA-Z0-9_/]+)(?:\[[^\]]*\])?\s+)"};
@@ -118,6 +118,44 @@ static std::vector<std::string> split_string(const std::string& str,
   return strings;
 }
 
+/// @brief Split an action definition into individual goal, result and feedback definitions.
+/// @param action_definition The full action definition as read from a .action file
+/// @return A tuple holding goal, result and feedback definitions
+static std::tuple<std::string, std::string, std::string> split_action_msg_definition(
+  const std::string& action_definition) {
+  constexpr char SEP[] = "\n---\n";
+
+  const auto definitions = split_string(action_definition, SEP);
+  if (definitions.size() != 3) {
+    throw std::invalid_argument("Invalid action definition:\n" + action_definition);
+  }
+
+  return {definitions[0], definitions[1], definitions[2]};
+}
+
+inline bool ends_with(const std::string& str, const std::string& suffix) {
+  return str.size() >= suffix.size() &&
+         0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
+}
+
+std::string remove_action_subtype(const std::string action_type) {
+  const auto action_subtype_suffixes = {
+    std::string(ACTION_FEEDBACK_MESSAGE_SUFFIX),
+    std::string(ACTION_RESULT_SERVICE_SUFFIX) + SERVICE_REQUEST_MESSAGE_SUFFIX,
+    std::string(ACTION_RESULT_SERVICE_SUFFIX) + SERVICE_RESPONSE_MESSAGE_SUFFIX,
+    std::string(ACTION_GOAL_SERVICE_SUFFIX) + SERVICE_REQUEST_MESSAGE_SUFFIX,
+    std::string(ACTION_GOAL_SERVICE_SUFFIX) + SERVICE_RESPONSE_MESSAGE_SUFFIX,
+  };
+
+  for (const auto& suffix : action_subtype_suffixes) {
+    if (ends_with(action_type, suffix)) {
+      return action_type.substr(0, action_type.length() - suffix.length());
+    }
+  }
+
+  return action_type;
+}
+
 MessageSpec::MessageSpec(MessageDefinitionFormat format, std::string text,
                          const std::string& package_context)
     : dependencies(parse_dependencies(format, text, package_context))
@@ -137,7 +175,16 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
                                 definition_identifier.package_resource_name);
   }
   const std::string package = match[1].str();
-  const std::string filename = match[2].str() + extension_for_format(definition_identifier.format);
+  const std::string subfolder = match[2].str();
+  const std::string type_name = match[3].str();
+  const bool is_action_type = subfolder == "action";
+
+  // The action type name includes the subtype which we have to remove to get the action name.
+  // Type name: Fibonacci_FeedbackMessage -> Action name: Fibonacci
+  const std::string action_name = is_action_type ? remove_action_subtype(type_name) : "";
+  const std::string filename = is_action_type
+                                 ? action_name + ".action"
+                                 : type_name + extension_for_format(definition_identifier.format);
 
   // Get the package share directory, or throw a PackageNotFoundError
   const std::string share_dir = ament_index_cpp::get_package_share_directory(package);
@@ -166,15 +213,56 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
   }
   const std::string contents{std::istreambuf_iterator(file), {}};
 
-  const MessageSpec& spec =
-    msg_specs_by_definition_identifier_
-      .emplace(definition_identifier,
-               MessageSpec(definition_identifier.format, std::move(contents), package))
-      .first->second;
+  if (is_action_type) {
+    if (definition_identifier.format == MessageDefinitionFormat::MSG) {
+      const auto [goalDef, resultDef, feedbackDef] = split_action_msg_definition(contents);
 
-  // "References and pointers to data stored in the container are only invalidated by erasing that
-  // element, even when the corresponding iterator is invalidated."
-  return spec;
+      // Define type definitions for each action subtype.
+      // These type definitions may include additional fields such as the goal_id.
+      // See also https://design.ros2.org/articles/actions.html
+      const std::map<std::string, std::string> action_type_definitions = {
+        {ACTION_FEEDBACK_MESSAGE_SUFFIX, "unique_identifier_msgs/UUID goal_id\n" + feedbackDef},
+        {std::string(ACTION_RESULT_SERVICE_SUFFIX) + SERVICE_REQUEST_MESSAGE_SUFFIX,
+         "unique_identifier_msgs/UUID goal_id\n"},
+        {std::string(ACTION_RESULT_SERVICE_SUFFIX) + SERVICE_RESPONSE_MESSAGE_SUFFIX,
+         "int8 status\n" + resultDef},
+        {std::string(ACTION_GOAL_SERVICE_SUFFIX) + SERVICE_REQUEST_MESSAGE_SUFFIX,
+         "unique_identifier_msgs/UUID goal_id\n" + goalDef},
+        {std::string(ACTION_GOAL_SERVICE_SUFFIX) + SERVICE_RESPONSE_MESSAGE_SUFFIX,
+         "bool accepted\nbuiltin_interfaces/msg/Time stamp"}};
+
+      // Create a MessageSpec instance for every action subtype and add it to the cache.
+      for (const auto& [action_suffix, definition] : action_type_definitions) {
+        DefinitionIdentifier definition_id;
+        definition_id.format = definition_identifier.format;
+        definition_id.package_resource_name = package + "/action/" + action_name + action_suffix;
+        msg_specs_by_definition_identifier_.emplace(
+          definition_id, MessageSpec(definition_id.format, definition, package));
+      }
+
+      // Find the the subtype that was originally requested and return it.
+      const auto it = msg_specs_by_definition_identifier_.find(definition_identifier);
+      if (it == msg_specs_by_definition_identifier_.end()) {
+        throw DefinitionNotFoundError(definition_identifier.package_resource_name);
+      }
+      return it->second;
+    } else {
+      RCUTILS_LOG_ERROR_NAMED("foxglove_bridge",
+                              "Action IDL definitions are currently not supported");
+      throw DefinitionNotFoundError(definition_identifier.package_resource_name);
+    }
+  } else {
+    // Normal message type.
+    const MessageSpec& spec =
+      msg_specs_by_definition_identifier_
+        .emplace(definition_identifier,
+                 MessageSpec(definition_identifier.format, std::move(contents), package))
+        .first->second;
+
+    // "References and pointers to data stored in the container are only invalidated by erasing that
+    // element, even when the corresponding iterator is invalidated."
+    return spec;
+  }
 }
 
 std::pair<MessageDefinitionFormat, std::string> MessageDefinitionCache::get_full_text(

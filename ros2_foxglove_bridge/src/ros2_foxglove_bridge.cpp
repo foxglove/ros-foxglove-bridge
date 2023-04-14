@@ -356,8 +356,10 @@ public:
       service.type = datatypes.front();
 
       try {
-        auto [format, reqSchema] = _messageDefinitionCache.get_full_text(service.type + "_Request");
-        auto resSchema = _messageDefinitionCache.get_full_text(service.type + "_Response").second;
+        const auto requestTypeName = service.type + foxglove::SERVICE_REQUEST_MESSAGE_SUFFIX;
+        const auto responseTypeName = service.type + foxglove::SERVICE_RESPONSE_MESSAGE_SUFFIX;
+        const auto [format, reqSchema] = _messageDefinitionCache.get_full_text(requestTypeName);
+        const auto resSchema = _messageDefinitionCache.get_full_text(responseTypeName).second;
         switch (format) {
           case foxglove::MessageDefinitionFormat::MSG:
             service.requestSchema = reqSchema;
