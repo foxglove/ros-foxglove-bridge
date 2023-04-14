@@ -30,6 +30,15 @@ using ClientPublications = std::unordered_map<foxglove::ClientChannelId, Publica
 using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std::owner_less<>>;
 using foxglove::isWhitelisted;
 
+namespace {
+inline bool isHiddenTopicOrService(const std::string& name) {
+  if (name.empty()) {
+    throw std::invalid_argument("Topic or service name can't be empty");
+  }
+  return name.front() == '_' || name.find("/_") != std::string::npos;
+}
+}  // namespace
+
 namespace foxglove_bridge {
 
 class FoxgloveBridge : public rclcpp::Node {
@@ -195,7 +204,7 @@ public:
       const auto& datatypes = topicNamesAndType.second;
 
       // Ignore hidden topics if not explicitly included
-      if (!_includeHidden && topicName.find("/_") != std::string::npos) {
+      if (!_includeHidden && isHiddenTopicOrService(topicName)) {
         continue;
       }
 
@@ -333,7 +342,7 @@ public:
       }
 
       // Ignore hidden services if not explicitly included
-      if (!_includeHidden && serviceName.find("/_") != std::string::npos) {
+      if (!_includeHidden && isHiddenTopicOrService(serviceName)) {
         continue;
       }
 
