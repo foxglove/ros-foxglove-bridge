@@ -139,6 +139,13 @@ void declareParameters(rclcpp::Node* node) {
   clientTopicWhiteListDescription.read_only = true;
   node->declare_parameter(PARAM_CLIENT_TOPIC_WHITELIST, std::vector<std::string>({".*"}),
                           paramWhiteListDescription);
+
+  auto includeHiddenDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  includeHiddenDescription.name = PARAM_INCLUDE_HIDDEN;
+  includeHiddenDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_BOOL;
+  includeHiddenDescription.description = "Include hidden topics and services";
+  includeHiddenDescription.read_only = true;
+  node->declare_parameter(PARAM_INCLUDE_HIDDEN, false, includeHiddenDescription);
 }
 
 std::vector<std::regex> parseRegexStrings(rclcpp::Node* node,
