@@ -14,6 +14,7 @@
   <arg name="send_buffer_limit"         default="10000000" />
   <arg name="use_sim_time"              default="false" />
   <arg name="capabilities"              default="[clientPublish,parameters,parametersSubscribe,services,connectionGraph]" />
+  <arg name="include_hidden"            default="false" />
 
   <node pkg="foxglove_bridge" exec="foxglove_bridge">
     <param name="port"                    value="$(var port)" />
@@ -31,5 +32,6 @@
     <param name="send_buffer_limit"       value="$(var send_buffer_limit)" />
     <param name="use_sim_time"            value="$(var use_sim_time)" />
     <param name="capabilities"            value="$(var capabilities)" />
+    <param name="include_hidden"          value="$(var include_hidden)" />
   </node>
 </launch>
