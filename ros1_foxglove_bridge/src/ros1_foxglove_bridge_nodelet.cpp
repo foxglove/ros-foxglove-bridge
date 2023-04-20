@@ -708,7 +708,11 @@ private:
         getMTNodeHandle().getParam(paramName, value);
         params.push_back(fromRosParam(paramName, value));
       } catch (const std::exception& ex) {
-        ROS_ERROR("Invalid parameter: %s", ex.what());
+        ROS_ERROR("Invalid parameter '%s': %s", paramName.c_str(), ex.what());
+      } catch (const XmlRpc::XmlRpcException& ex) {
+        ROS_ERROR("Invalid parameter '%s': %s", paramName.c_str(), ex.getMessage().c_str());
+      } catch (...) {
+        ROS_ERROR("Invalid parameter '%s'", paramName.c_str());
       }
     }
 
@@ -805,8 +809,11 @@ private:
       const auto param = fromRosParam(paramName, paramValue);
       _server->updateParameterValues({param});
     } catch (const std::exception& ex) {
-      ROS_ERROR("Failed to convert parameter: %s", ex.what());
-      return;
+      ROS_ERROR("Failed to update parameter: %s", ex.what());
+    } catch (const XmlRpc::XmlRpcException& ex) {
+      ROS_ERROR("Failed to update parameter: %s", ex.getMessage().c_str());
+    } catch (...) {
+      ROS_ERROR("Failed to update parameter");
     }
   }
 
