@@ -63,6 +63,8 @@ private:
           const std::string msg =
             std::string("Caught unhandled exception in calback_queue") + ex.what();
           _logCallback(WebSocketLogLevel::Error, msg.c_str());
+        } catch (...) {
+          _logCallback(WebSocketLogLevel::Error, "Caught unhandled exception in calback_queue");
         }
       }
     }

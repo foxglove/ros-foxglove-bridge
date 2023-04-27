@@ -561,6 +561,9 @@ inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePt
             handleTextMessage(hdl, msg);
           } catch (const std::exception& e) {
             sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+          } catch (...) {
+            sendStatusAndLogMsg(hdl, StatusLevel::Error,
+                                "Exception occurred when executing text message handler");
           }
         });
       } break;
@@ -570,6 +573,9 @@ inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePt
             handleBinaryMessage(hdl, msg);
           } catch (const std::exception& e) {
             sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+          } catch (...) {
+            sendStatusAndLogMsg(hdl, StatusLevel::Error,
+                                "Exception occurred when executing binary message handler");
           }
         });
       } break;
