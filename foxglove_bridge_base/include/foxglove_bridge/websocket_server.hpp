@@ -18,6 +18,7 @@
 #include <websocketpp/config/asio.hpp>
 #include <websocketpp/server.hpp>
 
+#include "callback_queue.hpp"
 #include "common.hpp"
 #include "parameter.hpp"
 #include "regex_utils.hpp"
@@ -158,6 +159,7 @@ private:
   ServerOptions _options;
   ServerType _server;
   std::unique_ptr<std::thread> _serverThread;
+  std::unique_ptr<CallbackQueue> _handlerCallbackQueue;
 
   uint32_t _nextChannelId = 0;
   std::map<ConnHandle, ClientInfo, std::owner_less<>> _clients;
@@ -189,8 +191,8 @@ private:
   void handleConnectionOpened(ConnHandle hdl);
   void handleConnectionClosed(ConnHandle hdl);
   void handleMessage(ConnHandle hdl, MessagePtr msg);
-  void handleTextMessage(ConnHandle hdl, const std::string& msg);
-  void handleBinaryMessage(ConnHandle hdl, const uint8_t* msg, size_t length);
+  void handleTextMessage(ConnHandle hdl, MessagePtr msg);
+  void handleBinaryMessage(ConnHandle hdl, MessagePtr msg);
 
   void sendJson(ConnHandle hdl, json&& payload);
   void sendJsonRaw(ConnHandle hdl, const std::string& payload);
@@ -231,6 +233,9 @@ inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger,
     std::bind(&Server::handleMessage, this, std::placeholders::_1, std::placeholders::_2));
   _server.set_reuse_addr(true);
   _server.set_listen_backlog(128);
+
+  // Callback queue for handling client requests.
+  _handlerCallbackQueue = std::make_unique<CallbackQueue>(_logger, /*numThreads=*/1ul);
 }
 
 template <typename ServerConfiguration>
@@ -551,11 +556,28 @@ inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePt
   try {
     switch (op) {
       case OpCode::TEXT: {
-        handleTextMessage(hdl, msg->get_payload());
+        _handlerCallbackQueue->addCallback([this, hdl, msg]() {
+          try {
+            handleTextMessage(hdl, msg);
+          } catch (const std::exception& e) {
+            sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+          } catch (...) {
+            sendStatusAndLogMsg(hdl, StatusLevel::Error,
+                                "Exception occurred when executing text message handler");
+          }
+        });
       } break;
       case OpCode::BINARY: {
-        const auto& payload = msg->get_payload();
-        handleBinaryMessage(hdl, reinterpret_cast<const uint8_t*>(payload.data()), payload.size());
+        _handlerCallbackQueue->addCallback([this, hdl, msg]() {
+          try {
+            handleBinaryMessage(hdl, msg);
+          } catch (const std::exception& e) {
+            sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+          } catch (...) {
+            sendStatusAndLogMsg(hdl, StatusLevel::Error,
+                                "Exception occurred when executing binary message handler");
+          }
+        });
       } break;
       default:
         break;
@@ -567,8 +589,8 @@ inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePt
 }
 
 template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const std::string& msg) {
-  const json payload = json::parse(msg);
+inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, MessagePtr msg) {
+  const json payload = json::parse(msg->get_payload());
   const std::string& op = payload.at("op").get<std::string>();
 
   const auto requiredCapabilityIt = CAPABILITY_BY_CLIENT_OPERATION.find(op);
@@ -603,6 +625,9 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
 
   switch (Integer(op)) {
     case SUBSCRIBE: {
+      if (!_handlers.subscribeHandler) {
+        return;
+      }
       for (const auto& sub : payload.at("subscriptions")) {
         SubscriptionId subId = sub.at("id");
         ChannelId channelId = sub.at("channelId");
@@ -619,13 +644,21 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
             "Channel " + std::to_string(channelId) + " is not available; ignoring subscription");
           continue;
         }
-        clientInfo.subscriptionsByChannel.emplace(channelId, subId);
-        if (_handlers.subscribeHandler) {
+
+        try {
           _handlers.subscribeHandler(channelId, hdl);
+          clientInfo.subscriptionsByChannel.emplace(channelId, subId);
+        } catch (const ChannelError& e) {
+          sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+        } catch (...) {
+          sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
         }
       }
     } break;
     case UNSUBSCRIBE: {
+      if (!_handlers.unsubscribeHandler) {
+        return;
+      }
       for (const auto& subIdJson : payload.at("subscriptionIds")) {
         SubscriptionId subId = subIdJson;
         const auto& sub = findSubscriptionBySubId(subId);
@@ -635,14 +668,22 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
                                 " did not exist; ignoring unsubscription");
           continue;
         }
+
         ChannelId chanId = sub->first;
-        clientInfo.subscriptionsByChannel.erase(sub);
-        if (_handlers.unsubscribeHandler) {
+        try {
           _handlers.unsubscribeHandler(chanId, hdl);
+          clientInfo.subscriptionsByChannel.erase(sub);
+        } catch (const ChannelError& e) {
+          sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+        } catch (...) {
+          sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
         }
       }
     } break;
     case ADVERTISE: {
+      if (!_handlers.clientAdvertiseHandler) {
+        return;
+      }
       std::unique_lock<std::shared_mutex> clientChannelsLock(_clientChannelsMutex);
       auto [clientPublicationsIt, isFirstPublication] =
         _clientChannels.emplace(hdl, std::unordered_map<ClientChannelId, ClientAdvertisement>());
@@ -669,14 +710,22 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         advertisement.topic = topic;
         advertisement.encoding = chan.at("encoding").get<std::string>();
         advertisement.schemaName = chan.at("schemaName").get<std::string>();
-        clientPublications.emplace(channelId, advertisement);
-        clientInfo.advertisedChannels.emplace(channelId);
-        if (_handlers.clientAdvertiseHandler) {
+
+        try {
           _handlers.clientAdvertiseHandler(advertisement, hdl);
+          clientPublications.emplace(channelId, advertisement);
+          clientInfo.advertisedChannels.emplace(channelId);
+        } catch (const ClientChannelError& e) {
+          sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+        } catch (...) {
+          sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
         }
       }
     } break;
     case UNADVERTISE: {
+      if (!_handlers.clientUnadvertiseHandler) {
+        return;
+      }
       std::unique_lock<std::shared_mutex> clientChannelsLock(_clientChannelsMutex);
       auto clientPublicationsIt = _clientChannels.find(hdl);
       if (clientPublicationsIt == _clientChannels.end()) {
@@ -692,14 +741,18 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         if (channelIt == clientPublications.end()) {
           continue;
         }
-        clientPublications.erase(channelIt);
-        if (const auto advertisedChannelIt = clientInfo.advertisedChannels.find(channelId) !=
-                                             clientInfo.advertisedChannels.end()) {
-          clientInfo.advertisedChannels.erase(advertisedChannelIt);
-        }
 
-        if (_handlers.clientUnadvertiseHandler) {
+        try {
           _handlers.clientUnadvertiseHandler(channelId, hdl);
+          clientPublications.erase(channelIt);
+          const auto advertisedChannelIt = clientInfo.advertisedChannels.find(channelId);
+          if (advertisedChannelIt != clientInfo.advertisedChannels.end()) {
+            clientInfo.advertisedChannels.erase(advertisedChannelIt);
+          }
+        } catch (const ClientChannelError& e) {
+          sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+        } catch (...) {
+          sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
         }
       }
     } break;
@@ -712,7 +765,14 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       const auto requestId = payload.find("id") == payload.end()
                                ? std::nullopt
                                : std::optional<std::string>(payload["id"].get<std::string>());
-      _handlers.parameterRequestHandler(paramNames, requestId, hdl);
+
+      try {
+        _handlers.parameterRequestHandler(paramNames, requestId, hdl);
+      } catch (const std::exception& e) {
+        sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+      } catch (...) {
+        sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
+      }
     } break;
     case SET_PARAMETERS: {
       if (!_handlers.parameterChangeHandler) {
@@ -723,7 +783,13 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       const auto requestId = payload.find("id") == payload.end()
                                ? std::nullopt
                                : std::optional<std::string>(payload["id"].get<std::string>());
-      _handlers.parameterChangeHandler(parameters, requestId, hdl);
+      try {
+        _handlers.parameterChangeHandler(parameters, requestId, hdl);
+      } catch (const std::exception& e) {
+        sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+      } catch (...) {
+        sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
+      }
     } break;
     case SUBSCRIBE_PARAMETER_UPDATES: {
       if (!_handlers.parameterSubscriptionHandler) {
@@ -745,9 +811,17 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
         clientSubscribedParams.insert(paramNames.begin(), paramNames.end());
       }
 
-      if (!paramsToSubscribe.empty()) {
+      if (paramsToSubscribe.empty()) {
+        return;
+      }
+
+      try {
         _handlers.parameterSubscriptionHandler(paramsToSubscribe,
                                                ParameterSubscriptionOperation::SUBSCRIBE, hdl);
+      } catch (const std::exception& e) {
+        sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+      } catch (...) {
+        sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
       }
     } break;
     case UNSUBSCRIBE_PARAMETER_UPDATES: {
@@ -767,10 +841,18 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       unsubscribeParamsWithoutSubscriptions(hdl, paramNames);
     } break;
     case SUBSCRIBE_CONNECTION_GRAPH: {
-      std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
-      _connectionGraph.subscriptionCount++;
+      if (!_handlers.subscribeConnectionGraphHandler) {
+        return;
+      }
 
-      if (_connectionGraph.subscriptionCount == 1 && _handlers.subscribeConnectionGraphHandler) {
+      bool subscribeToConnnectionGraph = false;
+      {
+        std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
+        _connectionGraph.subscriptionCount++;
+        subscribeToConnnectionGraph = _connectionGraph.subscriptionCount == 1;
+      }
+
+      if (subscribeToConnnectionGraph) {
         // First subscriber, let the handler know that we are interested in updates.
         _server.get_alog().write(APP, "Subscribing to connection graph updates.");
         _handlers.subscribeConnectionGraphHandler(true);
@@ -778,14 +860,17 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       }
 
       json::array_t publishedTopicsJson, subscribedTopicsJson, advertisedServicesJson;
-      for (const auto& [name, ids] : _connectionGraph.publishedTopics) {
-        publishedTopicsJson.push_back(nlohmann::json{{"name", name}, {"publisherIds", ids}});
-      }
-      for (const auto& [name, ids] : _connectionGraph.subscribedTopics) {
-        subscribedTopicsJson.push_back(nlohmann::json{{"name", name}, {"subscriberIds", ids}});
-      }
-      for (const auto& [name, ids] : _connectionGraph.advertisedServices) {
-        advertisedServicesJson.push_back(nlohmann::json{{"name", name}, {"providerIds", ids}});
+      {
+        std::shared_lock<std::shared_mutex> lock(_connectionGraphMutex);
+        for (const auto& [name, ids] : _connectionGraph.publishedTopics) {
+          publishedTopicsJson.push_back(nlohmann::json{{"name", name}, {"publisherIds", ids}});
+        }
+        for (const auto& [name, ids] : _connectionGraph.subscribedTopics) {
+          subscribedTopicsJson.push_back(nlohmann::json{{"name", name}, {"subscriberIds", ids}});
+        }
+        for (const auto& [name, ids] : _connectionGraph.advertisedServices) {
+          advertisedServicesJson.push_back(nlohmann::json{{"name", name}, {"providerIds", ids}});
+        }
       }
 
       const json jsonMsg = {
@@ -800,11 +885,19 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
       sendJsonRaw(hdl, jsonMsg.dump());
     } break;
     case UNSUBSCRIBE_CONNECTION_GRAPH: {
+      if (!_handlers.subscribeConnectionGraphHandler) {
+        return;
+      }
+
       if (clientInfo.subscribedToConnectionGraph) {
         clientInfo.subscribedToConnectionGraph = false;
-        std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
-        _connectionGraph.subscriptionCount--;
-        if (_connectionGraph.subscriptionCount == 0 && _handlers.subscribeConnectionGraphHandler) {
+        bool unsubscribeFromConnnectionGraph = false;
+        {
+          std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
+          _connectionGraph.subscriptionCount--;
+          unsubscribeFromConnnectionGraph = _connectionGraph.subscriptionCount == 0;
+        }
+        if (unsubscribeFromConnnectionGraph) {
           _server.get_alog().write(APP, "Unsubscribing from connection graph updates.");
           _handlers.subscribeConnectionGraphHandler(false);
         }
@@ -820,14 +913,17 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, const
 }
 
 template <typename ServerConfiguration>
-inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, const uint8_t* msg,
-                                                             size_t length) {
+inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, MessagePtr msg) {
+  const auto& payload = msg->get_payload();
+  const uint8_t* data = reinterpret_cast<const uint8_t*>(payload.data());
+  const size_t length = payload.size();
+
   if (length < 1) {
     sendStatusAndLogMsg(hdl, StatusLevel::Error, "Received an empty binary message");
     return;
   }
 
-  const auto op = static_cast<ClientBinaryOpcode>(msg[0]);
+  const auto op = static_cast<ClientBinaryOpcode>(data[0]);
 
   const auto requiredCapabilityIt = CAPABILITY_BY_CLIENT_BINARY_OPERATION.find(op);
   if (requiredCapabilityIt != CAPABILITY_BY_CLIENT_BINARY_OPERATION.end() &&
@@ -841,6 +937,10 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
 
   switch (op) {
     case ClientBinaryOpcode::MESSAGE_DATA: {
+      if (!_handlers.clientMessageHandler) {
+        return;
+      }
+
       if (length < 5) {
         sendStatusAndLogMsg(hdl, StatusLevel::Error,
                             "Invalid message length " + std::to_string(length));
@@ -849,7 +949,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
       const auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
                                std::chrono::high_resolution_clock::now().time_since_epoch())
                                .count();
-      const ClientChannelId channelId = *reinterpret_cast<const ClientChannelId*>(msg + 1);
+      const ClientChannelId channelId = *reinterpret_cast<const ClientChannelId*>(data + 1);
       std::shared_lock<std::shared_mutex> lock(_clientChannelsMutex);
 
       auto clientPublicationsIt = _clientChannels.find(hdl);
@@ -866,7 +966,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
         return;
       }
 
-      if (_handlers.clientMessageHandler) {
+      try {
         const auto& advertisement = channelIt->second;
         const uint32_t sequence = 0;
         const ClientMessage clientMessage{static_cast<uint64_t>(timestamp),
@@ -874,8 +974,12 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
                                           sequence,
                                           advertisement,
                                           length,
-                                          msg};
+                                          data};
         _handlers.clientMessageHandler(clientMessage, hdl);
+      } catch (const ServiceError& e) {
+        sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+      } catch (...) {
+        sendStatusAndLogMsg(hdl, StatusLevel::Error, "callService: Failed to execute handler");
       }
     } break;
     case ClientBinaryOpcode::SERVICE_CALL_REQUEST: {
@@ -886,7 +990,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, con
         return;
       }
 
-      request.read(msg + 1, length - 1);
+      request.read(data + 1, length - 1);
 
       {
         std::shared_lock<std::shared_mutex> lock(_servicesMutex);
@@ -1244,8 +1348,16 @@ inline void Server<ServerConfiguration>::unsubscribeParamsWithoutSubscriptions(
     for (const auto& param : paramsToUnsubscribe) {
       _server.get_alog().write(APP, "Unsubscribing from parameter '" + param + "'.");
     }
-    _handlers.parameterSubscriptionHandler(paramsToUnsubscribe,
-                                           ParameterSubscriptionOperation::UNSUBSCRIBE, hdl);
+
+    try {
+      _handlers.parameterSubscriptionHandler(paramsToUnsubscribe,
+                                             ParameterSubscriptionOperation::UNSUBSCRIBE, hdl);
+    } catch (const std::exception& e) {
+      sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+    } catch (...) {
+      sendStatusAndLogMsg(hdl, StatusLevel::Error,
+                          "Failed to unsubscribe from one more more parameters");
+    }
   }
 }
 
