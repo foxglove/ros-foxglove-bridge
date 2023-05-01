@@ -685,29 +685,20 @@ private:
 
       try {
         const auto paramType = param.getType();
-        if (paramType == ParameterType::PARAMETER_BOOL) {
-          nh.setParam(paramName, param.getValue<bool>());
-        } else if (paramType == ParameterType::PARAMETER_INTEGER) {
-          nh.setParam(paramName, static_cast<int>(param.getValue<int64_t>()));
-        } else if (paramType == ParameterType::PARAMETER_DOUBLE) {
-          nh.setParam(paramName, param.getValue<double>());
-        } else if (paramType == ParameterType::PARAMETER_STRING) {
-          nh.setParam(paramName, param.getValue<std::string>());
-        } else if (paramType == ParameterType::PARAMETER_BOOL_ARRAY) {
-          nh.setParam(paramName, param.getValue<std::vector<bool>>());
-        } else if (paramType == ParameterType::PARAMETER_INTEGER_ARRAY) {
-          const auto int64Vec = param.getValue<std::vector<int64_t>>();
-          std::vector<int> intVec(int64Vec.begin(), int64Vec.end());
-          nh.setParam(paramName, intVec);
-        } else if (paramType == ParameterType::PARAMETER_DOUBLE_ARRAY) {
-          nh.setParam(paramName, param.getValue<std::vector<double>>());
-        } else if (paramType == ParameterType::PARAMETER_STRING_ARRAY) {
-          nh.setParam(paramName, param.getValue<std::vector<std::string>>());
-        } else if (paramType == ParameterType::PARAMETER_NOT_SET) {
+        const auto paramValue = param.getValue();
+        if (paramType == ParameterType::PARAMETER_NOT_SET) {
           nh.deleteParam(paramName);
+        } else {
+          nh.setParam(paramName, toRosParam(paramValue));
         }
       } catch (const std::exception& ex) {
         ROS_ERROR("Failed to set parameter '%s': %s", paramName.c_str(), ex.what());
+        success = false;
+      } catch (const XmlRpc::XmlRpcException& ex) {
+        ROS_ERROR("Failed to set parameter '%s': %s", paramName.c_str(), ex.getMessage().c_str());
+        success = false;
+      } catch (...) {
+        ROS_ERROR("Failed to set parameter '%s'", paramName.c_str());
         success = false;
       }
     }
