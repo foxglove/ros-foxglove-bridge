@@ -25,26 +25,52 @@ static rclcpp::Parameter toRosParam(const foxglove::Parameter& p) {
   using foxglove::ParameterType;
 
   const auto paramType = p.getType();
+  const auto value = p.getValue();
+
   if (paramType == ParameterType::PARAMETER_BOOL) {
-    return rclcpp::Parameter(p.getName(), p.getValue<bool>());
+    return rclcpp::Parameter(p.getName(), value.getValue<bool>());
   } else if (paramType == ParameterType::PARAMETER_INTEGER) {
-    return rclcpp::Parameter(p.getName(), p.getValue<int64_t>());
+    return rclcpp::Parameter(p.getName(), value.getValue<int64_t>());
   } else if (paramType == ParameterType::PARAMETER_DOUBLE) {
-    return rclcpp::Parameter(p.getName(), p.getValue<double>());
+    return rclcpp::Parameter(p.getName(), value.getValue<double>());
   } else if (paramType == ParameterType::PARAMETER_STRING) {
-    return rclcpp::Parameter(p.getName(), p.getValue<std::string>());
+    return rclcpp::Parameter(p.getName(), value.getValue<std::string>());
   } else if (paramType == ParameterType::PARAMETER_BYTE_ARRAY) {
-    return rclcpp::Parameter(p.getName(), p.getValue<std::vector<unsigned char>>());
-  } else if (paramType == ParameterType::PARAMETER_BOOL_ARRAY) {
-    return rclcpp::Parameter(p.getName(), p.getValue<std::vector<bool>>());
-  } else if (paramType == ParameterType::PARAMETER_INTEGER_ARRAY) {
-    return rclcpp::Parameter(p.getName(), p.getValue<std::vector<int64_t>>());
-  } else if (paramType == ParameterType::PARAMETER_DOUBLE_ARRAY) {
-    return rclcpp::Parameter(p.getName(), p.getValue<std::vector<double>>());
-  } else if (paramType == ParameterType::PARAMETER_STRING_ARRAY) {
-    return rclcpp::Parameter(p.getName(), p.getValue<std::vector<std::string>>());
+    return rclcpp::Parameter(p.getName(), value.getValue<std::vector<unsigned char>>());
+  } else if (paramType == ParameterType::PARAMETER_ARRAY) {
+    const auto paramVec = value.getValue<std::vector<foxglove::ParameterValue>>();
+
+    const auto elementType = paramVec.front().getType();
+    if (elementType == ParameterType::PARAMETER_BOOL) {
+      std::vector<bool> vec;
+      for (const auto& paramValue : paramVec) {
+        vec.push_back(paramValue.getValue<bool>());
+      }
+      return rclcpp::Parameter(p.getName(), vec);
+    } else if (elementType == ParameterType::PARAMETER_INTEGER) {
+      std::vector<int64_t> vec;
+      for (const auto& paramValue : paramVec) {
+        vec.push_back(paramValue.getValue<int64_t>());
+      }
+      return rclcpp::Parameter(p.getName(), vec);
+    } else if (elementType == ParameterType::PARAMETER_DOUBLE) {
+      std::vector<double> vec;
+      for (const auto& paramValue : paramVec) {
+        vec.push_back(paramValue.getValue<double>());
+      }
+      return rclcpp::Parameter(p.getName(), vec);
+    } else if (elementType == ParameterType::PARAMETER_STRING) {
+      std::vector<std::string> vec;
+      for (const auto& paramValue : paramVec) {
+        vec.push_back(paramValue.getValue<std::string>());
+      }
+      return rclcpp::Parameter(p.getName(), vec);
+    }
+    throw std::runtime_error("Unsupported parameter type");
   } else if (paramType == ParameterType::PARAMETER_NOT_SET) {
     return rclcpp::Parameter(p.getName());
+  } else {
+    throw std::runtime_error("Unsupported parameter type");
   }
 
   return rclcpp::Parameter();
@@ -54,7 +80,7 @@ static foxglove::Parameter fromRosParam(const rclcpp::Parameter& p) {
   const auto type = p.get_type();
 
   if (type == rclcpp::ParameterType::PARAMETER_NOT_SET) {
-    return foxglove::Parameter(p.get_name());
+    return foxglove::Parameter(p.get_name(), foxglove::ParameterValue());
   } else if (type == rclcpp::ParameterType::PARAMETER_BOOL) {
     return foxglove::Parameter(p.get_name(), p.as_bool());
   } else if (type == rclcpp::ParameterType::PARAMETER_INTEGER) {
@@ -66,13 +92,29 @@ static foxglove::Parameter fromRosParam(const rclcpp::Parameter& p) {
   } else if (type == rclcpp::ParameterType::PARAMETER_BYTE_ARRAY) {
     return foxglove::Parameter(p.get_name(), p.as_byte_array());
   } else if (type == rclcpp::ParameterType::PARAMETER_BOOL_ARRAY) {
-    return foxglove::Parameter(p.get_name(), p.as_bool_array());
+    std::vector<foxglove::ParameterValue> paramVec;
+    for (const auto value : p.as_bool_array()) {
+      paramVec.push_back(value);
+    }
+    return foxglove::Parameter(p.get_name(), paramVec);
   } else if (type == rclcpp::ParameterType::PARAMETER_INTEGER_ARRAY) {
-    return foxglove::Parameter(p.get_name(), p.as_integer_array());
+    std::vector<foxglove::ParameterValue> paramVec;
+    for (const auto value : p.as_integer_array()) {
+      paramVec.push_back(value);
+    }
+    return foxglove::Parameter(p.get_name(), paramVec);
   } else if (type == rclcpp::ParameterType::PARAMETER_DOUBLE_ARRAY) {
-    return foxglove::Parameter(p.get_name(), p.as_double_array());
+    std::vector<foxglove::ParameterValue> paramVec;
+    for (const auto value : p.as_double_array()) {
+      paramVec.push_back(value);
+    }
+    return foxglove::Parameter(p.get_name(), paramVec);
   } else if (type == rclcpp::ParameterType::PARAMETER_STRING_ARRAY) {
-    return foxglove::Parameter(p.get_name(), p.as_string_array());
+    std::vector<foxglove::ParameterValue> paramVec;
+    for (const auto& value : p.as_string_array()) {
+      paramVec.push_back(value);
+    }
+    return foxglove::Parameter(p.get_name(), paramVec);
   } else {
     throw std::runtime_error("Unsupported parameter type");
   }

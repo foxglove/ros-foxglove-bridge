@@ -254,16 +254,22 @@ TEST_F(ParameterTest, testGetParameters) {
     return param.getName() == p2;
   });
   ASSERT_NE(p1Iter, params.end());
-  EXPECT_EQ(PARAM_1_DEFAULT_VALUE, p1Iter->getValue<PARAM_1_TYPE>());
+  EXPECT_EQ(PARAM_1_DEFAULT_VALUE, p1Iter->getValue().getValue<PARAM_1_TYPE>());
   ASSERT_NE(p2Iter, params.end());
-  EXPECT_EQ(PARAM_2_DEFAULT_VALUE, p2Iter->getValue<PARAM_2_TYPE>());
+
+  std::vector<int64_t> int_array_val;
+  const auto array_params = p2Iter->getValue().getValue<std::vector<foxglove::ParameterValue>>();
+  for (const auto& paramValue : array_params) {
+    int_array_val.push_back(paramValue.getValue<int64_t>());
+  }
+  EXPECT_EQ(int_array_val, PARAM_2_DEFAULT_VALUE);
 }
 
 TEST_F(ParameterTest, testSetParameters) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
   const auto p2 = NODE_2_NAME + "." + PARAM_2_NAME;
   const PARAM_1_TYPE newP1value = "world";
-  const PARAM_2_TYPE newP2value = {4, 5, 6};
+  const std::vector<foxglove::ParameterValue> newP2value = {4, 5, 6};
 
   const std::vector<foxglove::Parameter> parameters = {
     foxglove::Parameter(p1, newP1value),
@@ -285,9 +291,16 @@ TEST_F(ParameterTest, testSetParameters) {
     return param.getName() == p2;
   });
   ASSERT_NE(p1Iter, params.end());
-  EXPECT_EQ(newP1value, p1Iter->getValue<PARAM_1_TYPE>());
+  EXPECT_EQ(newP1value, p1Iter->getValue().getValue<PARAM_1_TYPE>());
   ASSERT_NE(p2Iter, params.end());
-  EXPECT_EQ(newP2value, p2Iter->getValue<PARAM_2_TYPE>());
+
+  std::vector<int64_t> int_array_val;
+  const auto array_params = p2Iter->getValue().getValue<std::vector<foxglove::ParameterValue>>();
+  for (const auto& paramValue : array_params) {
+    int_array_val.push_back(paramValue.getValue<int64_t>());
+  }
+  const std::vector<int64_t> expected_value = {4, 5, 6};
+  EXPECT_EQ(int_array_val, expected_value);
 }
 
 TEST_F(ParameterTest, testSetParametersWithReqId) {

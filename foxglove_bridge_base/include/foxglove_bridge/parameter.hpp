@@ -3,6 +3,7 @@
 #include <any>
 #include <stdint.h>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace foxglove {
@@ -18,33 +19,23 @@ enum class ParameterType {
   PARAMETER_INTEGER,
   PARAMETER_DOUBLE,
   PARAMETER_STRING,
-  PARAMETER_BYTE_ARRAY,
-  PARAMETER_BOOL_ARRAY,
-  PARAMETER_INTEGER_ARRAY,
-  PARAMETER_DOUBLE_ARRAY,
-  PARAMETER_STRING_ARRAY,
+  PARAMETER_ARRAY,
+  PARAMETER_STRUCT,      // ROS 1 only
+  PARAMETER_BYTE_ARRAY,  // ROS 2 only
 };
 
-class Parameter {
+class ParameterValue {
 public:
-  Parameter();
-  Parameter(const std::string& name);
-  Parameter(const std::string& name, bool value);
-  Parameter(const std::string& name, int value);
-  Parameter(const std::string& name, int64_t value);
-  Parameter(const std::string& name, double value);
-  Parameter(const std::string& name, std::string value);
-  Parameter(const std::string& name, const char* value);
-  Parameter(const std::string& name, const std::vector<unsigned char>& value);
-  Parameter(const std::string& name, const std::vector<bool>& value);
-  Parameter(const std::string& name, const std::vector<int>& value);
-  Parameter(const std::string& name, const std::vector<int64_t>& value);
-  Parameter(const std::string& name, const std::vector<double>& value);
-  Parameter(const std::string& name, const std::vector<std::string>& value);
-
-  inline const std::string& getName() const {
-    return _name;
-  }
+  ParameterValue();
+  ParameterValue(bool value);
+  ParameterValue(int value);
+  ParameterValue(int64_t value);
+  ParameterValue(double value);
+  ParameterValue(const std::string& value);
+  ParameterValue(const char* value);
+  ParameterValue(const std::vector<unsigned char>& value);
+  ParameterValue(const std::vector<ParameterValue>& value);
+  ParameterValue(const std::unordered_map<std::string, ParameterValue>& value);
 
   inline ParameterType getType() const {
     return _type;
@@ -56,9 +47,31 @@ public:
   }
 
 private:
-  std::string _name;
   ParameterType _type;
   std::any _value;
+};
+
+class Parameter {
+public:
+  Parameter();
+  Parameter(const std::string& name);
+  Parameter(const std::string& name, const ParameterValue& value);
+
+  inline const std::string& getName() const {
+    return _name;
+  }
+
+  inline ParameterType getType() const {
+    return _value.getType();
+  }
+
+  inline const ParameterValue& getValue() const {
+    return _value;
+  }
+
+private:
+  std::string _name;
+  ParameterValue _value;
 };
 
 }  // namespace foxglove
