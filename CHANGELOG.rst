@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.6.0 (2023-05-04)
+------------------
 * Add support for nested parameters (ROS1) (`#221 <https://github.com/foxglove/ros-foxglove-bridge/issues/221>`_)
 * Catch exceptions thrown in handler functions, send status to client (`#210 <https://github.com/foxglove/ros-foxglove-bridge/issues/210>`_)
 * Fix unhandled xmlrpc exception (`#218 <https://github.com/foxglove/ros-foxglove-bridge/issues/218>`_)
