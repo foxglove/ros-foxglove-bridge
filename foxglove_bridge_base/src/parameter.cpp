@@ -2,70 +2,42 @@
 
 namespace foxglove {
 
-Parameter::Parameter()
-    : _name("")
-    , _type(ParameterType::PARAMETER_NOT_SET)
-    , _value() {}
+ParameterValue::ParameterValue()
+    : _type(ParameterType::PARAMETER_NOT_SET) {}
+ParameterValue::ParameterValue(bool value)
+    : _type(ParameterType::PARAMETER_BOOL)
+    , _value(value) {}
+ParameterValue::ParameterValue(int value)
+    : _type(ParameterType::PARAMETER_INTEGER)
+    , _value(static_cast<int64_t>(value)) {}
+ParameterValue::ParameterValue(int64_t value)
+    : _type(ParameterType::PARAMETER_INTEGER)
+    , _value(value) {}
+ParameterValue::ParameterValue(double value)
+    : _type(ParameterType::PARAMETER_DOUBLE)
+    , _value(value) {}
+ParameterValue::ParameterValue(const std::string& value)
+    : _type(ParameterType::PARAMETER_STRING)
+    , _value(value) {}
+ParameterValue::ParameterValue(const char* value)
+    : _type(ParameterType::PARAMETER_STRING)
+    , _value(std::string(value)) {}
+ParameterValue::ParameterValue(const std::vector<unsigned char>& value)
+    : _type(ParameterType::PARAMETER_BYTE_ARRAY)
+    , _value(value) {}
+ParameterValue::ParameterValue(const std::vector<ParameterValue>& value)
+    : _type(ParameterType::PARAMETER_ARRAY)
+    , _value(value) {}
+ParameterValue::ParameterValue(const std::unordered_map<std::string, ParameterValue>& value)
+    : _type(ParameterType::PARAMETER_STRUCT)
+    , _value(value) {}
 
+Parameter::Parameter() {}
 Parameter::Parameter(const std::string& name)
     : _name(name)
-    , _type(ParameterType::PARAMETER_NOT_SET)
-    , _value() {}
-
-Parameter::Parameter(const std::string& name, bool value)
+    , _value(ParameterValue()) {}
+Parameter::Parameter(const std::string& name, const ParameterValue& value)
     : _name(name)
-    , _type(ParameterType::PARAMETER_BOOL)
-    , _value(value) {}
-
-Parameter::Parameter(const std::string& name, int value)
-    : Parameter(name, static_cast<int64_t>(value)) {}
-
-Parameter::Parameter(const std::string& name, int64_t value)
-    : _name(name)
-    , _type(ParameterType::PARAMETER_INTEGER)
-    , _value(value) {}
-
-Parameter::Parameter(const std::string& name, double value)
-    : _name(name)
-    , _type(ParameterType::PARAMETER_DOUBLE)
-    , _value(value) {}
-
-Parameter::Parameter(const std::string& name, const char* value)
-    : Parameter(name, std::string(value)) {}
-
-Parameter::Parameter(const std::string& name, std::string value)
-    : _name(name)
-    , _type(ParameterType::PARAMETER_STRING)
-    , _value(value) {}
-
-Parameter::Parameter(const std::string& name, const std::vector<unsigned char>& value)
-    : _name(name)
-    , _type(ParameterType::PARAMETER_BYTE_ARRAY)
-    , _value(value) {}
-
-Parameter::Parameter(const std::string& name, const std::vector<bool>& value)
-    : _name(name)
-    , _type(ParameterType::PARAMETER_BOOL_ARRAY)
-    , _value(value) {}
-
-Parameter::Parameter(const std::string& name, const std::vector<int>& value)
-    : _name(name)
-    , _type(ParameterType::PARAMETER_INTEGER_ARRAY)
-    , _value(std::vector<int64_t>(value.begin(), value.end())) {}
-
-Parameter::Parameter(const std::string& name, const std::vector<int64_t>& value)
-    : _name(name)
-    , _type(ParameterType::PARAMETER_INTEGER_ARRAY)
-    , _value(value) {}
-
-Parameter::Parameter(const std::string& name, const std::vector<double>& value)
-    : _name(name)
-    , _type(ParameterType::PARAMETER_DOUBLE_ARRAY)
-    , _value(value) {}
-
-Parameter::Parameter(const std::string& name, const std::vector<std::string>& value)
-    : _name(name)
-    , _type(ParameterType::PARAMETER_STRING_ARRAY)
     , _value(value) {}
 
 }  // namespace foxglove
