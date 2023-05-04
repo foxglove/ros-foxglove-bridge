@@ -2,6 +2,20 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.0 (2023-05-04)
+------------------
+* Add support for nested parameters (ROS1) (`#221 <https://github.com/foxglove/ros-foxglove-bridge/issues/221>`_)
+* Catch exceptions thrown in handler functions, send status to client (`#210 <https://github.com/foxglove/ros-foxglove-bridge/issues/210>`_)
+* Fix unhandled xmlrpc exception (`#218 <https://github.com/foxglove/ros-foxglove-bridge/issues/218>`_)
+* Add support for action topic and services (ROS2) (`#214 <https://github.com/foxglove/ros-foxglove-bridge/issues/214>`_)
+* Add parameter to include hidden topics and services (ROS 2) (`#216 <https://github.com/foxglove/ros-foxglove-bridge/issues/216>`_)
+* Add workaround for publishers not being cleaned up after they got destroyed (`#215 <https://github.com/foxglove/ros-foxglove-bridge/issues/215>`_)
+* Fix error when compiling with C++20 (`#212 <https://github.com/foxglove/ros-foxglove-bridge/issues/212>`_)
+* Devcontainer improvements (`#213 <https://github.com/foxglove/ros-foxglove-bridge/issues/213>`_)
+* Add parameter for minimum subscription QoS depth (`#211 <https://github.com/foxglove/ros-foxglove-bridge/issues/211>`_)
+* Log version and commit hash when node is started (`#209 <https://github.com/foxglove/ros-foxglove-bridge/issues/209>`_)
+* Contributors: Hans-Joachim Krauch
+
 0.5.3 (2023-03-31)
 ------------------
 * Fix publishers being created with invalid QoS profile (`#205 <https://github.com/foxglove/ros-foxglove-bridge/issues/205>`_)
