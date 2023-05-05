@@ -539,7 +539,7 @@ inline void Server<ServerConfiguration>::sendStatusAndLogMsg(ConnHandle clientHa
   const std::string endpoint = remoteEndpointString(clientHandle);
   const std::string logMessage = endpoint + ": " + message;
   const auto logLevel = StatusLevelToLogLevel(level);
-  auto logger = level == StatusLevel::Error ? _server.get_elog() : _server.get_alog();
+  auto logger = level == StatusLevel::Info ? _server.get_alog() : _server.get_elog();
   logger.write(logLevel, logMessage);
 
   sendJson(clientHandle, json{
