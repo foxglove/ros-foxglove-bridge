@@ -2,6 +2,11 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Fix warning messages not being logged (`#224 <https://github.com/foxglove/ros-foxglove-bridge/issues/224>`_)
+* Contributors: Hans-Joachim Krauch
+
 0.6.0 (2023-05-04)
 ------------------
 * Add support for nested parameters (ROS1) (`#221 <https://github.com/foxglove/ros-foxglove-bridge/issues/221>`_)
