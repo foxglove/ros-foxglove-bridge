@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.6.1 (2023-05-05)
+------------------
 * Fix warning messages not being logged (`#224 <https://github.com/foxglove/ros-foxglove-bridge/issues/224>`_)
 * Contributors: Hans-Joachim Krauch
 
