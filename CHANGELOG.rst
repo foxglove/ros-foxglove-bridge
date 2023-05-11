@@ -2,6 +2,11 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.2 (2023-05-11)
+------------------
+* Fix connection graph updates to due incorrect use of std::set_difference (`#226 <https://github.com/foxglove/ros-foxglove-bridge/issues/226>`_)
+* Contributors: Ivan Nenakhov
+
 0.6.1 (2023-05-05)
 ------------------
 * Fix warning messages not being logged (`#224 <https://github.com/foxglove/ros-foxglove-bridge/issues/224>`_)
