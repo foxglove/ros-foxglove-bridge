@@ -1291,10 +1291,14 @@ inline void Server<ServerConfiguration>::updateConnectionGraph(
   }
 
   std::vector<std::string> removedTopics, removedServices;
-  std::set_difference(knownTopicNames.begin(), knownTopicNames.end(), topicNames.begin(),
-                      topicNames.end(), std::back_inserter(removedTopics));
-  std::set_difference(knownServiceNames.begin(), knownServiceNames.end(), serviceNames.begin(),
-                      serviceNames.end(), std::back_inserter(removedServices));
+  std::copy_if(knownTopicNames.begin(), knownTopicNames.end(), std::back_inserter(removedTopics),
+               [&topicNames](const std::string& topic) {
+                 return topicNames.find(topic) == topicNames.end();
+               });
+  std::copy_if(knownServiceNames.begin(), knownServiceNames.end(),
+               std::back_inserter(removedServices), [&serviceNames](const std::string& service) {
+                 return serviceNames.find(service) == serviceNames.end();
+               });
 
   if (publisherDiff.empty() && subscriberDiff.empty() && servicesDiff.empty() &&
       removedTopics.empty() && removedServices.empty()) {
