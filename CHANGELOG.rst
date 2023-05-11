@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.6.2 (2023-05-11)
+------------------
 * Fix connection graph updates to due incorrect use of std::set_difference (`#226 <https://github.com/foxglove/ros-foxglove-bridge/issues/226>`_)
 * Contributors: Ivan Nenakhov
 
