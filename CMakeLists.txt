@@ -244,7 +244,7 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
       DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
     )
 elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
-    install(FILES ros2_foxglove_bridge/include/foxglove_bridge/foxglove_bridge.hpp
+    install(FILES ros2_foxglove_bridge/include/foxglove_bridge/ros2_foxglove_bridge.hpp
       DESTINATION include/${PROJECT_NAME}/
     )
     install(TARGETS foxglove_bridge
