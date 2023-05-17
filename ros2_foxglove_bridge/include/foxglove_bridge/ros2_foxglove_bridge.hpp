@@ -3,7 +3,6 @@
 #include <memory>
 #include <regex>
 #include <thread>
-// #include <unordered_set>
 
 #include <rclcpp/rclcpp.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>

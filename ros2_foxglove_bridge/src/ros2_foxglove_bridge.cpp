@@ -1,5 +1,7 @@
 #include <foxglove_bridge/ros2_foxglove_bridge.hpp>
 
+#include <unordered_set>
+
 namespace foxglove_bridge {
 namespace {
 inline bool isHiddenTopicOrService(const std::string& name) {
