@@ -10,6 +10,15 @@ inline bool isHiddenTopicOrService(const std::string& name) {
   }
   return name.front() == '_' || name.find("/_") != std::string::npos;
 }
+
+std::string getRosDistro() {
+  const char* rosDistro = std::getenv("ROS_DISTRO");
+  if (rosDistro == nullptr) {
+    return "unknown";
+  }
+  return rosDistro;
+}
+
 }  // namespace
 
 using namespace std::chrono_literals;
@@ -18,8 +27,8 @@ using foxglove::isWhitelisted;
 
 FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
     : Node("foxglove_bridge", options) {
-  const char* rosDistro = std::getenv("ROS_DISTRO");
-  RCLCPP_INFO(this->get_logger(), "Starting foxglove_bridge (%s, %s@%s) with %s", rosDistro,
+  const auto rosDistro = getRosDistro();
+  RCLCPP_INFO(this->get_logger(), "Starting foxglove_bridge (%s, %s@%s) with %s", rosDistro.c_str(),
               foxglove::FOXGLOVE_BRIDGE_VERSION, foxglove::FOXGLOVE_BRIDGE_GIT_HASH,
               foxglove::WebSocketUserAgent());
 
