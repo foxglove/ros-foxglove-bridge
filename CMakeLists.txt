@@ -27,10 +27,9 @@ endmacro()
 find_package(nlohmann_json QUIET)
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
-set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} "/usr/lib/x86_64-linux-gnu/cmake/websocketpp/")
-set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} "/usr/lib/aarch64-linux-gnu/cmake/websocketpp/")
-include_directories(/usr/local/include)
 find_package(websocketpp REQUIRED)
+find_path(WEBSOCKETPP_INCLUDE_DIR NAMES websocketpp/websocketpp.hpp)
+message(STATUS "WEBSOCKETPP_INCLUDE_DIR: " ${WEBSOCKETPP_INCLUDE_DIR})
 find_package(ZLIB REQUIRED)
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -74,6 +73,7 @@ target_include_directories(foxglove_bridge_base
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
     $<INSTALL_INTERFACE:include>
 )
+target_include_directories(foxglove_bridge_base SYSTEM PUBLIC ${WEBSOCKETPP_INCLUDE_DIR})
 target_link_libraries(foxglove_bridge_base
   OpenSSL::Crypto
   OpenSSL::SSL
