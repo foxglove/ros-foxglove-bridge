@@ -7,6 +7,7 @@
 #include <thread>
 
 #include <rclcpp/rclcpp.hpp>
+#include <resource_retriever/retriever.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
 #include <websocketpp/common/connection_hdl.hpp>
 
@@ -59,6 +60,7 @@ private:
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;
+  std::vector<std::regex> _assetUriWhitelistPatterns;
   std::shared_ptr<ParameterInterface> _paramInterface;
   std::unordered_map<foxglove::ChannelId, foxglove::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove::ServiceId, foxglove::ServiceWithoutId> _advertisedServices;
@@ -79,6 +81,7 @@ private:
   std::vector<std::string> _capabilities;
   std::atomic<bool> _subscribeGraphUpdates = false;
   bool _includeHidden = false;
+  resource_retriever::Retriever _resource_retriever;
 
   void subscribeConnectionGraph(bool subscribe);
 
@@ -109,6 +112,8 @@ private:
                          std::shared_ptr<rclcpp::SerializedMessage> msg);
 
   void serviceRequest(const foxglove::ServiceRequest& request, ConnectionHandle clientHandle);
+
+  void fetchAsset(const std::string& assetId, uint32_t requestId, ConnectionHandle clientHandle);
 
   bool hasCapability(const std::string& capability);
 };

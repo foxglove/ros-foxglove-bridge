@@ -132,7 +132,35 @@ std::future<Channel> waitForChannel(std::shared_ptr<ClientInterface> client,
         }
       }
     });
+  return future;
+}
 
+std::future<FetchAssetResponse> waitForFetchAssetResponse(std::shared_ptr<ClientInterface> client) {
+  auto promise = std::make_shared<std::promise<FetchAssetResponse>>();
+  auto future = promise->get_future();
+
+  client->setBinaryMessageHandler(
+    [promise = std::move(promise)](const uint8_t* data, size_t dataLength) mutable {
+      if (static_cast<BinaryOpcode>(data[0]) != BinaryOpcode::FETCH_ASSET_RESPONSE) {
+        return;
+      }
+
+      foxglove::FetchAssetResponse response;
+      size_t offset = 1;
+      response.requestId = ReadUint32LE(data + offset);
+      offset += 4;
+      response.status = static_cast<foxglove::FetchAssetStatus>(data[offset]);
+      offset += 1;
+      const size_t errorMsgLength = static_cast<size_t>(ReadUint32LE(data + offset));
+      offset += 4;
+      response.errorMessage =
+        std::string(reinterpret_cast<const char*>(data + offset), errorMsgLength);
+      offset += errorMsgLength;
+      const auto payloadLength = dataLength - offset;
+      response.data.resize(payloadLength);
+      std::memcpy(response.data.data(), data + offset, payloadLength);
+      promise->set_value(response);
+    });
   return future;
 }
 

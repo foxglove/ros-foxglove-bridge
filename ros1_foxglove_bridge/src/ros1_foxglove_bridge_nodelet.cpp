@@ -9,6 +9,7 @@
 
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.h>
+#include <resource_retriever/retriever.h>
 #include <ros/message_event.h>
 #include <ros/ros.h>
 #include <ros/xmlrpc_manager.h>
@@ -100,6 +101,13 @@ public:
       ROS_ERROR("Failed to parse one or more service whitelist patterns");
     }
 
+    const auto assetUriWhitelist =
+      nhp.param<std::vector<std::string>>("asset_uri_whitelist", {"package://.*", "file://.*"});
+    _assetUriWhitelistPatterns = parseRegexPatterns(assetUriWhitelist);
+    if (assetUriWhitelist.size() != _assetUriWhitelistPatterns.size()) {
+      ROS_ERROR("Failed to parse one or more asset URI whitelist patterns");
+    }
+
     const char* rosDistro = std::getenv("ROS_DISTRO");
     ROS_INFO("Starting foxglove_bridge (%s, %s@%s) with %s", rosDistro,
              foxglove::FOXGLOVE_BRIDGE_VERSION, foxglove::FOXGLOVE_BRIDGE_GIT_HASH,
@@ -151,6 +159,13 @@ public:
       hdlrs.subscribeConnectionGraphHandler = [this](bool subscribe) {
         _subscribeGraphUpdates = subscribe;
       };
+
+      if (hasCapability(foxglove::CAPABILITY_ASSETS)) {
+        hdlrs.fetchAssetHandler =
+          std::bind(&FoxgloveBridge::fetchAsset, this, std::placeholders::_1, std::placeholders::_2,
+                    std::placeholders::_3);
+      }
+
       _server->setHandlers(std::move(hdlrs));
 
       _server->start(address, static_cast<uint16_t>(port));
@@ -844,6 +859,29 @@ private:
     }
   }
 
+  void fetchAsset(const std::string& uri, uint32_t requestId, ConnectionHandle clientHandle) {
+    foxglove::FetchAssetResponse response;
+    response.requestId = requestId;
+
+    try {
+      if (!isWhitelisted(uri, _assetUriWhitelistPatterns)) {
+        throw std::runtime_error("Asset URI not allowed: " + uri);
+      }
+
+      const resource_retriever::MemoryResource memoryResource = _resource_retriever.get(uri);
+      response.status = foxglove::FetchAssetStatus::Success;
+      response.errorMessage = "";
+      response.data.resize(memoryResource.size);
+      std::memcpy(response.data.data(), memoryResource.data.get(), memoryResource.size);
+    } catch (const resource_retriever::Exception& ex) {
+      ROS_WARN("Failed to retrieve asset '%s': %s", uri.c_str(), ex.what());
+      response.status = foxglove::FetchAssetStatus::Error;
+      response.errorMessage = "Failed to retrieve asset " + uri;
+    }
+
+    _server->sendFetchAssetResponse(clientHandle, response);
+  }
+
   bool hasCapability(const std::string& capability) {
     return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
   }
@@ -853,6 +891,7 @@ private:
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _paramWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;
+  std::vector<std::regex> _assetUriWhitelistPatterns;
   ros::XMLRPCManager xmlrpcServer;
   std::unordered_map<foxglove::ChannelId, foxglove::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
@@ -868,6 +907,7 @@ private:
   bool _useSimTime = false;
   std::vector<std::string> _capabilities;
   std::atomic<bool> _subscribeGraphUpdates = false;
+  resource_retriever::Retriever _resource_retriever;
 };
 
 }  // namespace foxglove_bridge

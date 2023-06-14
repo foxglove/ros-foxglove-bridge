@@ -47,6 +47,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
     this->get_parameter(PARAM_CLIENT_TOPIC_WHITELIST).as_string_array();
   const auto clientTopicWhiteListPatterns = parseRegexStrings(this, clientTopicWhiteList);
   _includeHidden = this->get_parameter(PARAM_INCLUDE_HIDDEN).as_bool();
+  const auto assetUriWhitelist = this->get_parameter(PARAM_ASSET_URI_WHITELIST).as_string_array();
+  _assetUriWhitelistPatterns = parseRegexStrings(this, assetUriWhitelist);
 
   const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
   foxglove::ServerOptions serverOptions;
@@ -86,6 +88,10 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
 
     _paramInterface = std::make_shared<ParameterInterface>(this, paramWhitelistPatterns);
     _paramInterface->setParamUpdateCallback(std::bind(&FoxgloveBridge::parameterUpdates, this, _1));
+  }
+
+  if (hasCapability(foxglove::CAPABILITY_ASSETS)) {
+    hdlrs.fetchAssetHandler = std::bind(&FoxgloveBridge::fetchAsset, this, _1, _2, _3);
   }
 
   _server->setHandlers(std::move(hdlrs));
@@ -812,6 +818,30 @@ void FoxgloveBridge::serviceRequest(const foxglove::ServiceRequest& request,
     _server->sendServiceResponse(clientHandle, response);
   };
   client->async_send_request(reqMessage, responseReceivedCallback);
+}
+
+void FoxgloveBridge::fetchAsset(const std::string& uri, uint32_t requestId,
+                                ConnectionHandle clientHandle) {
+  foxglove::FetchAssetResponse response;
+  response.requestId = requestId;
+
+  try {
+    if (!isWhitelisted(uri, _assetUriWhitelistPatterns)) {
+      throw std::runtime_error("Asset URI not allowed: " + uri);
+    }
+
+    const resource_retriever::MemoryResource memoryResource = _resource_retriever.get(uri);
+    response.status = foxglove::FetchAssetStatus::Success;
+    response.errorMessage = "";
+    response.data.resize(memoryResource.size);
+    std::memcpy(response.data.data(), memoryResource.data.get(), memoryResource.size);
+  } catch (const resource_retriever::Exception& ex) {
+    RCLCPP_WARN(this->get_logger(), "Failed to retrieve asset '%s': %s", uri.c_str(), ex.what());
+    response.status = foxglove::FetchAssetStatus::Error;
+    response.errorMessage = "Failed to retrieve asset " + uri;
+  }
+
+  _server->sendFetchAssetResponse(clientHandle, response);
 }
 
 bool FoxgloveBridge::hasCapability(const std::string& capability) {

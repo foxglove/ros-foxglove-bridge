@@ -43,6 +43,7 @@
     <exec_depend>openssl</exec_depend>
     <exec_depend>zlib</exec_depend>
 
+    <depend>resource_retriever</depend>
     <depend>rosgraph_msgs</depend>
 
     <!-- The export tag contains other, unspecified, tags -->
