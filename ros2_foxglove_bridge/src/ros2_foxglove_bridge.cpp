@@ -580,11 +580,11 @@ void FoxgloveBridge::clientAdvertise(const foxglove::ClientAdvertisement& advert
                      return endpoint.node_name() != this->get_name() ||
                             endpoint.node_namespace() != this->get_namespace();
                    });
-    const rclcpp::QoS qos = otherPublisherIt == otherPublishers.end()
-                              ? rclcpp::SystemDefaultsQoS()
-                              : rclcpp::QoS(otherPublisherIt->qos_profile())
-                                  // Override the history policy as it can be `unknown`
-                                  .history(rclcpp::HistoryPolicy::SystemDefault);
+    rclcpp::QoS qos = otherPublisherIt == otherPublishers.end() ? rclcpp::SystemDefaultsQoS()
+                                                                : otherPublisherIt->qos_profile();
+    if (qos.history() == rclcpp::HistoryPolicy::Unknown) {
+      qos.history(rclcpp::HistoryPolicy::SystemDefault);
+    }
     rclcpp::PublisherOptions publisherOptions{};
     publisherOptions.callback_group = _clientPublishCallbackGroup;
     auto publisher = this->create_generic_publisher(topicName, topicType, qos, publisherOptions);
