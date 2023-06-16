@@ -26,6 +26,7 @@ jobs:
           - ros_distribution: noetic
           - ros_distribution: galactic
           - ros_distribution: humble
+          - ros_distribution: iron
           - ros_distribution: rolling
 
     name: Test (ROS ${{ matrix.ros_distribution }})
