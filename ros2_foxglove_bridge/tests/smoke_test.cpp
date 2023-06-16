@@ -108,6 +108,32 @@ protected:
   std::shared_ptr<foxglove::Client<websocketpp::config::asio_client>> _wsClient;
 };
 
+class ExistingPublisherTest : public ::testing::Test {
+public:
+  inline static const std::string TOPIC_NAME = "/some_topic";
+
+protected:
+  void SetUp() override {
+    _node = rclcpp::Node::make_shared("node");
+    _publisher =
+      _node->create_publisher<std_msgs::msg::String>(TOPIC_NAME, rclcpp::SystemDefaultsQoS());
+    _executor.add_node(_node);
+    _executorThread = std::thread([this]() {
+      _executor.spin();
+    });
+  }
+
+  void TearDown() override {
+    _executor.cancel();
+    _executorThread.join();
+  }
+
+  rclcpp::executors::SingleThreadedExecutor _executor;
+  rclcpp::Node::SharedPtr _node;
+  rclcpp::PublisherBase::SharedPtr _publisher;
+  std::thread _executorThread;
+};
+
 template <class T>
 std::shared_ptr<rclcpp::SerializedMessage> serializeMsg(const T* msg) {
   using rosidl_typesupport_cpp::get_message_type_support_handle;
@@ -187,6 +213,38 @@ TEST(SmokeTest, testPublishing) {
   foxglove::ClientAdvertisement advertisement;
   advertisement.channelId = 1;
   advertisement.topic = "/foo";
+  advertisement.encoding = "cdr";
+  advertisement.schemaName = "std_msgs/String";
+
+  // Set up a ROS node with a subscriber
+  std::promise<std::string> msgPromise;
+  auto msgFuture = msgPromise.get_future();
+  auto node = rclcpp::Node::make_shared("tester");
+  auto sub = node->create_subscription<std_msgs::msg::String>(
+    advertisement.topic, 10, [&msgPromise](const std_msgs::msg::String::SharedPtr msg) {
+      msgPromise.set_value(msg->data);
+    });
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+
+  // Set up the client, advertise and publish the binary message
+  foxglove::Client<websocketpp::config::asio_client> wsClient;
+  ASSERT_EQ(std::future_status::ready, wsClient.connect(URI).wait_for(DEFAULT_TIMEOUT));
+  wsClient.advertise({advertisement});
+  std::this_thread::sleep_for(ONE_SECOND);
+  wsClient.publish(advertisement.channelId, HELLO_WORLD_BINARY, sizeof(HELLO_WORLD_BINARY));
+  wsClient.unadvertise({advertisement.channelId});
+
+  // Ensure that we have received the correct message via our ROS subscriber
+  const auto ret = executor.spin_until_future_complete(msgFuture, ONE_SECOND);
+  ASSERT_EQ(rclcpp::FutureReturnCode::SUCCESS, ret);
+  EXPECT_EQ("hello world", msgFuture.get());
+}
+
+TEST_F(ExistingPublisherTest, testPublishingWithExistingPublisher) {
+  foxglove::ClientAdvertisement advertisement;
+  advertisement.channelId = 1;
+  advertisement.topic = TOPIC_NAME;
   advertisement.encoding = "cdr";
   advertisement.schemaName = "std_msgs/String";
 
