@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.6.3 (2023-06-16)
+------------------
 * Add iron build to CI (`#234 <https://github.com/foxglove/ros-foxglove-bridge/issues/234>`_)
 * Fix QoS history being unknown when copied from existing publisher (`#233 <https://github.com/foxglove/ros-foxglove-bridge/issues/233>`_)
 * Extract ROS 2 bridge header (`#228 <https://github.com/foxglove/ros-foxglove-bridge/issues/228>`_)
