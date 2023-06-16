@@ -24,6 +24,10 @@ galactic:
 humble:
 	docker build -t foxglove_bridge_humble --pull -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=humble .
 
+.PHONY: iron
+iron:
+	docker build -t foxglove_bridge_iron --pull -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=iron .
+
 .PHONY: rolling
 rolling:
 	docker build -t foxglove_bridge_rolling --pull -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=rolling .
@@ -39,6 +43,7 @@ clean:
 	docker rmi -f foxglove_bridge_noetic
 	docker rmi -f foxglove_bridge_galactic
 	docker rmi -f foxglove_bridge_humble
+	docker rmi -f foxglove_bridge_iron
 	docker rmi -f foxglove_bridge_rolling
 	docker rmi -f foxglove_bridge_rosdev
 
@@ -57,6 +62,10 @@ galactic-test: galactic
 .PHONY: humble-test
 humble-test: humble
 	docker run -t --rm foxglove_bridge_humble colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
+
+.PHONY: iron-test
+iron-test: iron
+	docker run -t --rm foxglove_bridge_iron colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
 
 .PHONY: rolling-test
 rolling-test: rolling
