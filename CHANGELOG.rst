@@ -2,6 +2,13 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.3 (2023-06-16)
+------------------
+* Add iron build to CI (`#234 <https://github.com/foxglove/ros-foxglove-bridge/issues/234>`_)
+* Fix QoS history being unknown when copied from existing publisher (`#233 <https://github.com/foxglove/ros-foxglove-bridge/issues/233>`_)
+* Extract ROS 2 bridge header (`#228 <https://github.com/foxglove/ros-foxglove-bridge/issues/228>`_)
+* Contributors: Hans-Joachim Krauch, Milan Vukov
+
 0.6.2 (2023-05-11)
 ------------------
 * Fix connection graph updates to due incorrect use of std::set_difference (`#226 <https://github.com/foxglove/ros-foxglove-bridge/issues/226>`_)
