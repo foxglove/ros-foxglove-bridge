@@ -80,7 +80,7 @@ Parameters are provided to configure the behavior of the bridge. These parameter
  * (ROS 1) __max_update_ms__: The maximum number of milliseconds to wait in between polling `roscore` for new topics, services, or parameters. Defaults to `5000`.
  * (ROS 2) __num_threads__: The number of threads to use for the ROS node executor. This controls the number of subscriptions that can be processed in parallel. 0 means one thread per CPU core. Defaults to `0`.
  * (ROS 2) __min_qos_depth__: Minimum depth used for the QoS profile of subscriptions. Defaults to `1`. This is to set a lower limit for a subscriber's QoS depth which is computed by summing up depths of all publishers. See also [#208](https://github.com/foxglove/ros-foxglove-bridge/issues/208).
- * (ROS 2) __max_qos_depth__: Maximum depth used for the QoS profile of subscriptions. Defaults to `10`.
+ * (ROS 2) __max_qos_depth__: Maximum depth used for the QoS profile of subscriptions. Defaults to `25`.
  * (ROS 2) __include_hidden__: Include hidden topics and services. Defaults to `false`.
 
 ## Building from source

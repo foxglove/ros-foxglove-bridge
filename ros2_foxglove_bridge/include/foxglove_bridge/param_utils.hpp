@@ -28,7 +28,7 @@ constexpr int64_t DEFAULT_PORT = 8765;
 constexpr char DEFAULT_ADDRESS[] = "0.0.0.0";
 constexpr int64_t DEFAULT_SEND_BUFFER_LIMIT = 10000000;
 constexpr int64_t DEFAULT_MIN_QOS_DEPTH = 1;
-constexpr int64_t DEFAULT_MAX_QOS_DEPTH = 10;
+constexpr int64_t DEFAULT_MAX_QOS_DEPTH = 25;
 
 void declareParameters(rclcpp::Node* node);
 
