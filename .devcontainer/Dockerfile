@@ -60,7 +60,7 @@ USER $USERNAME
 COPY --chown=$USERNAME:$USERNAME package.xml /ros_ws/src/ros-foxglove-bridge/package.xml
 
 # Initialize rosdep
-RUN sudo rosdep init && rosdep update
+RUN sudo rosdep init && rosdep update --include-eol-distros
 
 # Install rosdep dependencies for ROS 1
 RUN . /opt/ros/noetic/setup.sh && \
@@ -71,7 +71,7 @@ RUN . /opt/ros/noetic/setup.sh && \
 
 # Install rosdep dependencies for ROS 2
 RUN . /opt/ros/galactic/setup.sh && \
-    sudo apt-get update && rosdep update && rosdep install -y \
+    sudo apt-get update && rosdep update --include-eol-distros && rosdep install -y \
       --from-paths /ros_ws/src \
       --ignore-src \
     && sudo rm -rf /var/lib/apt/lists/*
