@@ -465,10 +465,19 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
     // https://github.com/foxglove/ros-foxglove-bridge/issues/238 and
     // https://github.com/foxglove/ros-foxglove-bridge/issues/208
     const size_t publisherHistoryDepth = std::max(1ul, qos.depth());
-    depth = std::min(_maxQosDepth, depth + publisherHistoryDepth);
+    depth = depth + publisherHistoryDepth;
   }
 
-  rclcpp::QoS qos{rclcpp::KeepLast(std::max(depth, _minQosDepth))};
+  depth = std::max(depth, _minQosDepth);
+  if (depth > _maxQosDepth) {
+    RCLCPP_WARN(this->get_logger(),
+                "Limiting history depth for topic '%s' to %zu (was %zu). You may want to increase "
+                "the max_qos_depth parameter value.",
+                topic.c_str(), _maxQosDepth, depth);
+    depth = _maxQosDepth;
+  }
+
+  rclcpp::QoS qos{rclcpp::KeepLast(depth)};
 
   // If all endpoints are reliable, ask for reliable
   if (reliabilityReliableEndpointsCount == publisherInfo.size()) {
