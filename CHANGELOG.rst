@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.6.4 (2023-07-05)
+------------------
 * Assume publisher qos depth of 1 if the middleware reports the qos history as unknown (`#239 <https://github.com/foxglove/ros-foxglove-bridge/issues/239>`_)
 * devcontainer: Use `--include-eol-distros` for `rosdep update` (`#237 <https://github.com/foxglove/ros-foxglove-bridge/issues/237>`_)
 * Contributors: Hans-Joachim Krauch
