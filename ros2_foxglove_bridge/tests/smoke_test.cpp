@@ -496,6 +496,53 @@ TEST_F(ServiceTest, testCallServiceParallel) {
   }
 }
 
+TEST(SmokeTest, receiveMessagesOfMultipleTransientLocalPublishers) {
+  const std::string topicName = "/latched";
+  auto node = rclcpp::Node::make_shared("node");
+  rclcpp::QoS qos = rclcpp::QoS(rclcpp::KeepLast(1));
+  qos.transient_local();
+  qos.reliable();
+
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+  auto spinnerThread = std::thread([&executor]() {
+    executor.spin();
+  });
+
+  constexpr size_t nPubs = 15;
+  std::vector<rclcpp::Publisher<std_msgs::msg::String>::SharedPtr> pubs;
+  for (size_t i = 0; i < nPubs; ++i) {
+    auto pub = pubs.emplace_back(node->create_publisher<std_msgs::msg::String>(topicName, qos));
+    std_msgs::msg::String msg;
+    msg.data = "Hello";
+    pub->publish(msg);
+  }
+
+  // Set up a client and subscribe to the channel.
+  auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  auto channelFuture = foxglove::waitForChannel(client, topicName);
+  ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
+  ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(ONE_SECOND));
+  const foxglove::Channel channel = channelFuture.get();
+  const foxglove::SubscriptionId subscriptionId = 1;
+
+  // Set up binary message handler to resolve the promise when all nPub message have been received
+  std::promise<void> promise;
+  size_t nReceivedMessages = 0;
+  client->setBinaryMessageHandler([&promise, &nReceivedMessages](const uint8_t*, size_t) {
+    if (++nReceivedMessages == nPubs) {
+      promise.set_value();
+    }
+  });
+
+  // Subscribe to the channel and confirm that the promise resolves
+  client->subscribe({{subscriptionId, channel.id}});
+  ASSERT_EQ(std::future_status::ready, promise.get_future().wait_for(ONE_SECOND));
+
+  executor.cancel();
+  spinnerThread.join();
+}
+
 // Run all the tests that were declared with TEST()
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);

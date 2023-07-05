@@ -457,10 +457,27 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
     if (qos.durability() == rclcpp::DurabilityPolicy::TransientLocal) {
       ++durabilityTransientLocalEndpointsCount;
     }
-    depth = std::min(_maxQosDepth, depth + qos.depth());
+    // Some RMWs do not retrieve history information of the publisher endpoint in which case the
+    // history depth is 0. We use a lower limit of 1 here, so that the history depth is at least
+    // equal to the number of publishers. This covers the case where there are multiple
+    // transient_local publishers with a depth of 1 (e.g. multiple tf_static transform
+    // broadcasters). See also
+    // https://github.com/foxglove/ros-foxglove-bridge/issues/238 and
+    // https://github.com/foxglove/ros-foxglove-bridge/issues/208
+    const size_t publisherHistoryDepth = std::max(1ul, qos.depth());
+    depth = depth + publisherHistoryDepth;
   }
 
-  rclcpp::QoS qos{rclcpp::KeepLast(std::max(depth, _minQosDepth))};
+  depth = std::max(depth, _minQosDepth);
+  if (depth > _maxQosDepth) {
+    RCLCPP_WARN(this->get_logger(),
+                "Limiting history depth for topic '%s' to %zu (was %zu). You may want to increase "
+                "the max_qos_depth parameter value.",
+                topic.c_str(), _maxQosDepth, depth);
+    depth = _maxQosDepth;
+  }
+
+  rclcpp::QoS qos{rclcpp::KeepLast(depth)};
 
   // If all endpoints are reliable, ask for reliable
   if (reliabilityReliableEndpointsCount == publisherInfo.size()) {
