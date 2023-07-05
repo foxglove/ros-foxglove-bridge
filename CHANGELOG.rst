@@ -2,6 +2,12 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Assume publisher qos depth of 1 if the middleware reports the qos history as unknown (`#239 <https://github.com/foxglove/ros-foxglove-bridge/issues/239>`_)
+* devcontainer: Use `--include-eol-distros` for `rosdep update` (`#237 <https://github.com/foxglove/ros-foxglove-bridge/issues/237>`_)
+* Contributors: Hans-Joachim Krauch
+
 0.6.3 (2023-06-16)
 ------------------
 * Add iron build to CI (`#234 <https://github.com/foxglove/ros-foxglove-bridge/issues/234>`_)
