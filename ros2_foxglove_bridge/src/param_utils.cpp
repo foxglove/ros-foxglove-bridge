@@ -153,7 +153,8 @@ void declareParameters(rclcpp::Node* node) {
   assetUriWhiteListDescription.description =
     "List of regular expressions (ECMAScript) of whitelisted asset URIs.";
   assetUriWhiteListDescription.read_only = true;
-  node->declare_parameter(PARAM_ASSET_URI_WHITELIST, std::vector<std::string>({"package://.*"}),
+  node->declare_parameter(PARAM_ASSET_URI_WHITELIST,
+                          std::vector<std::string>({"package://(/?\\w+)+\\.(dae|stl|urdf|xacro)"}),
                           paramWhiteListDescription);
 }
 

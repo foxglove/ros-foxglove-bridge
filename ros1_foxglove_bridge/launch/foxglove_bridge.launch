@@ -13,7 +13,7 @@
   <arg name="nodelet_manager"           default="foxglove_nodelet_manager" />
   <arg name="num_threads"               default="0" />
   <arg name="capabilities"              default="[clientPublish,parameters,parametersSubscribe,services,connectionGraph,assets]" />
-  <arg name="asset_uri_whitelist"       default="['package://.*']" />
+  <arg name="asset_uri_whitelist"       default="['package://(/?\w+)+\.(dae|stl|urdf|xacro)']" />
 
   <node pkg="nodelet" type="nodelet" name="foxglove_nodelet_manager" args="manager"
         if="$(eval nodelet_manager == 'foxglove_nodelet_manager')">

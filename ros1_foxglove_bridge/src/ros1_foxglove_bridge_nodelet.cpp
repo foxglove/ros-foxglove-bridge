@@ -101,8 +101,8 @@ public:
       ROS_ERROR("Failed to parse one or more service whitelist patterns");
     }
 
-    const auto assetUriWhitelist =
-      nhp.param<std::vector<std::string>>("asset_uri_whitelist", {"package://.*", "file://.*"});
+    const auto assetUriWhitelist = nhp.param<std::vector<std::string>>(
+      "asset_uri_whitelist", {"package://(/?\\w+)+\\.(dae|stl|urdf|xacro)"});
     _assetUriWhitelistPatterns = parseRegexPatterns(assetUriWhitelist);
     if (assetUriWhitelist.size() != _assetUriWhitelistPatterns.size()) {
       ROS_ERROR("Failed to parse one or more asset URI whitelist patterns");
@@ -873,7 +873,7 @@ private:
       response.errorMessage = "";
       response.data.resize(memoryResource.size);
       std::memcpy(response.data.data(), memoryResource.data.get(), memoryResource.size);
-    } catch (const resource_retriever::Exception& ex) {
+    } catch (const std::exception& ex) {
       ROS_WARN("Failed to retrieve asset '%s': %s", uri.c_str(), ex.what());
       response.status = foxglove::FetchAssetStatus::Error;
       response.errorMessage = "Failed to retrieve asset " + uri;

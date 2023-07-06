@@ -835,7 +835,7 @@ void FoxgloveBridge::fetchAsset(const std::string& uri, uint32_t requestId,
     response.errorMessage = "";
     response.data.resize(memoryResource.size);
     std::memcpy(response.data.data(), memoryResource.data.get(), memoryResource.size);
-  } catch (const resource_retriever::Exception& ex) {
+  } catch (const std::exception& ex) {
     RCLCPP_WARN(this->get_logger(), "Failed to retrieve asset '%s': %s", uri.c_str(), ex.what());
     response.status = foxglove::FetchAssetStatus::Error;
     response.errorMessage = "Failed to retrieve asset " + uri;
