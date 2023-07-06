@@ -147,8 +147,8 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
       paramNamesByNodeName[nodeName].push_back(paramName);
     }
 
-    RCLCPP_INFO(_node->get_logger(), "Getting %zu parameters from %zu nodes...", paramNames.size(),
-                paramNamesByNodeName.size());
+    RCLCPP_DEBUG(_node->get_logger(), "Getting %zu parameters from %zu nodes...", paramNames.size(),
+                 paramNamesByNodeName.size());
   } else {
     // Make a map of node names to empty parameter lists
     // Only consider nodes that offer services to list & get parameters.
@@ -181,8 +181,8 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
     }
 
     if (!paramNamesByNodeName.empty()) {
-      RCLCPP_INFO(_node->get_logger(), "Getting all parameters from %zu nodes...",
-                  paramNamesByNodeName.size());
+      RCLCPP_DEBUG(_node->get_logger(), "Getting all parameters from %zu nodes...",
+                   paramNamesByNodeName.size());
     }
   }
 
