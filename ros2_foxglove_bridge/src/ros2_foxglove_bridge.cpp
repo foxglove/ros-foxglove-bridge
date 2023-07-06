@@ -47,7 +47,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
     this->get_parameter(PARAM_CLIENT_TOPIC_WHITELIST).as_string_array();
   const auto clientTopicWhiteListPatterns = parseRegexStrings(this, clientTopicWhiteList);
   _includeHidden = this->get_parameter(PARAM_INCLUDE_HIDDEN).as_bool();
-  const auto assetUriWhitelist = this->get_parameter(PARAM_ASSET_URI_WHITELIST).as_string_array();
+  const auto assetUriWhitelist = this->get_parameter(PARAM_ASSET_URI_ALLOWLIST).as_string_array();
   _assetUriWhitelistPatterns = parseRegexStrings(this, assetUriWhitelist);
 
   const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);

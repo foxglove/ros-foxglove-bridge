@@ -606,7 +606,7 @@ int main(int argc, char** argv) {
   auto componentFactory = componentManager.create_component_factory(componentResources.front());
   rclcpp::NodeOptions nodeOptions;
   // Explicitly allow file:// asset URIs for testing purposes.
-  nodeOptions.append_parameter_override("asset_uri_whitelist",
+  nodeOptions.append_parameter_override("asset_uri_allowlist",
                                         std::vector<std::string>({"file://.*"}));
   auto node = componentFactory->create_node_instance(nodeOptions);
   executor->add_node(node.get_node_base_interface());
