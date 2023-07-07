@@ -864,7 +864,12 @@ private:
     response.requestId = requestId;
 
     try {
-      if (!isWhitelisted(uri, _assetUriWhitelistPatterns)) {
+      // We reject URIs that are not on the allowlist or that contain two consecutive dots. The
+      // latter can be utilized to construct URIs for retrieving confidential files that should not
+      // be accessible over the WebSocket connection. Example:
+      // `package://<pkg_name>/../../../secret.txt`. This is an extra security measure and should
+      // not be necessary if the allowlist is strict enough.
+      if (uri.find("..") != std::string::npos || !isWhitelisted(uri, _assetUriWhitelistPatterns)) {
         throw std::runtime_error("Asset URI not allowed: " + uri);
       }
 
