@@ -101,10 +101,10 @@ public:
       ROS_ERROR("Failed to parse one or more service whitelist patterns");
     }
 
-    const auto assetUriWhitelist = nhp.param<std::vector<std::string>>(
+    const auto assetUriAllowlist = nhp.param<std::vector<std::string>>(
       "asset_uri_allowlist", {"package://(/?\\w+)+\\.(dae|stl|urdf|xacro)"});
-    _assetUriWhitelistPatterns = parseRegexPatterns(assetUriWhitelist);
-    if (assetUriWhitelist.size() != _assetUriWhitelistPatterns.size()) {
+    _assetUriAllowlistPatterns = parseRegexPatterns(assetUriAllowlist);
+    if (assetUriAllowlist.size() != _assetUriAllowlistPatterns.size()) {
       ROS_ERROR("Failed to parse one or more asset URI whitelist patterns");
     }
 
@@ -869,7 +869,7 @@ private:
       // be accessible over the WebSocket connection. Example:
       // `package://<pkg_name>/../../../secret.txt`. This is an extra security measure and should
       // not be necessary if the allowlist is strict enough.
-      if (uri.find("..") != std::string::npos || !isWhitelisted(uri, _assetUriWhitelistPatterns)) {
+      if (uri.find("..") != std::string::npos || !isWhitelisted(uri, _assetUriAllowlistPatterns)) {
         throw std::runtime_error("Asset URI not allowed: " + uri);
       }
 
@@ -896,7 +896,7 @@ private:
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _paramWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;
-  std::vector<std::regex> _assetUriWhitelistPatterns;
+  std::vector<std::regex> _assetUriAllowlistPatterns;
   ros::XMLRPCManager xmlrpcServer;
   std::unordered_map<foxglove::ChannelId, foxglove::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;

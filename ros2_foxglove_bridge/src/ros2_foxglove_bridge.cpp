@@ -47,8 +47,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
     this->get_parameter(PARAM_CLIENT_TOPIC_WHITELIST).as_string_array();
   const auto clientTopicWhiteListPatterns = parseRegexStrings(this, clientTopicWhiteList);
   _includeHidden = this->get_parameter(PARAM_INCLUDE_HIDDEN).as_bool();
-  const auto assetUriWhitelist = this->get_parameter(PARAM_ASSET_URI_ALLOWLIST).as_string_array();
-  _assetUriWhitelistPatterns = parseRegexStrings(this, assetUriWhitelist);
+  const auto assetUriAllowlist = this->get_parameter(PARAM_ASSET_URI_ALLOWLIST).as_string_array();
+  _assetUriAllowlistPatterns = parseRegexStrings(this, assetUriAllowlist);
 
   const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
   foxglove::ServerOptions serverOptions;
@@ -831,7 +831,7 @@ void FoxgloveBridge::fetchAsset(const std::string& uri, uint32_t requestId,
     // accessible over the WebSocket connection. Example:
     // `package://<pkg_name>/../../../secret.txt`. This is an extra security measure and should not
     // be necessary if the allowlist is strict enough.
-    if (uri.find("..") != std::string::npos || !isWhitelisted(uri, _assetUriWhitelistPatterns)) {
+    if (uri.find("..") != std::string::npos || !isWhitelisted(uri, _assetUriAllowlistPatterns)) {
       throw std::runtime_error("Asset URI not allowed: " + uri);
     }
 
