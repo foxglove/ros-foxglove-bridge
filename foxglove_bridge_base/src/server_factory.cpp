@@ -1,8 +1,6 @@
 #include <websocketpp/common/connection_hdl.hpp>
 
 #include <foxglove_bridge/server_factory.hpp>
-
-#define ASIO_STANDALONE
 #include <foxglove_bridge/websocket_notls.hpp>
 #include <foxglove_bridge/websocket_server.hpp>
 #include <foxglove_bridge/websocket_tls.hpp>

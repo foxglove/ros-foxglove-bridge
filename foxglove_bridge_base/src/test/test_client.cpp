@@ -1,6 +1,5 @@
 #include <chrono>
 
-#define ASIO_STANDALONE
 #include <websocketpp/config/asio_client.hpp>
 
 #include <foxglove_bridge/serialization.hpp>
