@@ -7,10 +7,10 @@
 #include <thread>
 
 #include <rclcpp/rclcpp.hpp>
-#include <resource_retriever/retriever.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
 #include <websocketpp/common/connection_hdl.hpp>
 
+#include <foxglove_bridge/callback_queue.hpp>
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/generic_client.hpp>
 #include <foxglove_bridge/message_definition_cache.hpp>
@@ -81,7 +81,7 @@ private:
   std::vector<std::string> _capabilities;
   std::atomic<bool> _subscribeGraphUpdates = false;
   bool _includeHidden = false;
-  resource_retriever::Retriever _resource_retriever;
+  std::unique_ptr<foxglove::CallbackQueue> _fetchAssetQueue;
 
   void subscribeConnectionGraph(bool subscribe);
 

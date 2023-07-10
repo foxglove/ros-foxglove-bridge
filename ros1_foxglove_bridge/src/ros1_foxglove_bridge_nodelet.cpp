@@ -132,6 +132,9 @@ public:
       const auto logHandler =
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);
 
+      // Fetching of assets may be blocking, hence we fetch them in a separate thread.
+      _fetchAssetQueue = std::make_unique<foxglove::CallbackQueue>(logHandler, 1 /* num_threads */);
+
       _server = foxglove::ServerFactory::createServer<ConnectionHandle>("foxglove_bridge",
                                                                         logHandler, serverOptions);
       foxglove::ServerHandlers<ConnectionHandle> hdlrs;
@@ -161,9 +164,11 @@ public:
       };
 
       if (hasCapability(foxglove::CAPABILITY_ASSETS)) {
-        hdlrs.fetchAssetHandler =
-          std::bind(&FoxgloveBridge::fetchAsset, this, std::placeholders::_1, std::placeholders::_2,
-                    std::placeholders::_3);
+        hdlrs.fetchAssetHandler = [this](const std::string& uri, uint32_t requestId,
+                                         foxglove::ConnHandle hdl) {
+          _fetchAssetQueue->addCallback(
+            std::bind(&FoxgloveBridge::fetchAsset, this, uri, requestId, hdl));
+        };
       }
 
       _server->setHandlers(std::move(hdlrs));
@@ -873,7 +878,8 @@ private:
         throw std::runtime_error("Asset URI not allowed: " + uri);
       }
 
-      const resource_retriever::MemoryResource memoryResource = _resource_retriever.get(uri);
+      resource_retriever::Retriever resource_retriever;
+      const resource_retriever::MemoryResource memoryResource = resource_retriever.get(uri);
       response.status = foxglove::FetchAssetStatus::Success;
       response.errorMessage = "";
       response.data.resize(memoryResource.size);
@@ -884,7 +890,9 @@ private:
       response.errorMessage = "Failed to retrieve asset " + uri;
     }
 
-    _server->sendFetchAssetResponse(clientHandle, response);
+    if (_server) {
+      _server->sendFetchAssetResponse(clientHandle, response);
+    }
   }
 
   bool hasCapability(const std::string& capability) {
@@ -912,7 +920,7 @@ private:
   bool _useSimTime = false;
   std::vector<std::string> _capabilities;
   std::atomic<bool> _subscribeGraphUpdates = false;
-  resource_retriever::Retriever _resource_retriever;
+  std::unique_ptr<foxglove::CallbackQueue> _fetchAssetQueue;
 };
 
 }  // namespace foxglove_bridge

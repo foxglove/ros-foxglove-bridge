@@ -1,5 +1,7 @@
 #include <unordered_set>
 
+#include <resource_retriever/retriever.hpp>
+
 #include <foxglove_bridge/ros2_foxglove_bridge.hpp>
 
 namespace foxglove_bridge {
@@ -51,6 +53,9 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   _assetUriAllowlistPatterns = parseRegexStrings(this, assetUriAllowlist);
 
   const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
+  // Fetching of assets may be blocking, hence we fetch them in a separate thread.
+  _fetchAssetQueue = std::make_unique<foxglove::CallbackQueue>(logHandler, 1 /* num_threads */);
+
   foxglove::ServerOptions serverOptions;
   serverOptions.capabilities = _capabilities;
   if (_useSimTime) {
@@ -91,7 +96,11 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   }
 
   if (hasCapability(foxglove::CAPABILITY_ASSETS)) {
-    hdlrs.fetchAssetHandler = std::bind(&FoxgloveBridge::fetchAsset, this, _1, _2, _3);
+    hdlrs.fetchAssetHandler = [this](const std::string& uri, uint32_t requestId,
+                                     ConnectionHandle hdl) {
+      _fetchAssetQueue->addCallback(
+        std::bind(&FoxgloveBridge::fetchAsset, this, uri, requestId, hdl));
+    };
   }
 
   _server->setHandlers(std::move(hdlrs));
@@ -835,7 +844,8 @@ void FoxgloveBridge::fetchAsset(const std::string& uri, uint32_t requestId,
       throw std::runtime_error("Asset URI not allowed: " + uri);
     }
 
-    const resource_retriever::MemoryResource memoryResource = _resource_retriever.get(uri);
+    resource_retriever::Retriever resource_retriever;
+    const resource_retriever::MemoryResource memoryResource = resource_retriever.get(uri);
     response.status = foxglove::FetchAssetStatus::Success;
     response.errorMessage = "";
     response.data.resize(memoryResource.size);
@@ -846,7 +856,9 @@ void FoxgloveBridge::fetchAsset(const std::string& uri, uint32_t requestId,
     response.errorMessage = "Failed to retrieve asset " + uri;
   }
 
-  _server->sendFetchAssetResponse(clientHandle, response);
+  if (_server) {
+    _server->sendFetchAssetResponse(clientHandle, response);
+  }
 }
 
 bool FoxgloveBridge::hasCapability(const std::string& capability) {
