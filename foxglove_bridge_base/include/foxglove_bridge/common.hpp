@@ -147,7 +147,7 @@ struct ServiceResponse {
 
 using ServiceRequest = ServiceResponse;
 
-enum FetchAssetStatus {
+enum class FetchAssetStatus : uint8_t {
   Success = 0,
   Error = 1,
 };

@@ -1399,8 +1399,10 @@ inline void Server<ServerConfiguration>::sendFetchAssetResponse(
     return;
   }
 
+  const size_t errMsgSize =
+    response.status == FetchAssetStatus::Error ? response.errorMessage.size() : 0ul;
   const size_t dataSize = response.status == FetchAssetStatus::Success ? response.data.size() : 0ul;
-  const size_t messageSize = 1 + 4 + 1 + 4 + response.errorMessage.size() + dataSize;
+  const size_t messageSize = 1 + 4 + 1 + 4 + errMsgSize + dataSize;
 
   auto message = con->get_message(OpCode::BINARY, messageSize);
 
@@ -1416,7 +1418,7 @@ inline void Server<ServerConfiguration>::sendFetchAssetResponse(
 
   foxglove::WriteUint32LE(uint32Data.data(), response.errorMessage.size());
   message->append_payload(uint32Data.data(), uint32Data.size());
-  message->append_payload(response.errorMessage);
+  message->append_payload(response.errorMessage.data(), errMsgSize);
 
   message->append_payload(response.data.data(), dataSize);
   con->send(message);
