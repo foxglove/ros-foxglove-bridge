@@ -73,6 +73,7 @@ struct ServerHandlers {
     parameterSubscriptionHandler;
   std::function<void(const ServiceRequest&, ConnectionHandle)> serviceRequestHandler;
   std::function<void(bool)> subscribeConnectionGraphHandler;
+  std::function<void(const std::string&, uint32_t, ConnectionHandle)> fetchAssetHandler;
 };
 
 template <typename ConnectionHandle>
@@ -101,6 +102,8 @@ public:
   virtual void updateConnectionGraph(const MapOfSets& publishedTopics,
                                      const MapOfSets& subscribedTopics,
                                      const MapOfSets& advertisedServices) = 0;
+  virtual void sendFetchAssetResponse(ConnectionHandle clientHandle,
+                                      const FetchAssetResponse& response) = 0;
 
   virtual uint16_t getPort() = 0;
   virtual std::string remoteEndpointString(ConnectionHandle clientHandle) = 0;

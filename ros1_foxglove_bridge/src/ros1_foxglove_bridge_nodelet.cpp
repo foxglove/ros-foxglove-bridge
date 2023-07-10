@@ -9,6 +9,7 @@
 
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.h>
+#include <resource_retriever/retriever.h>
 #include <ros/message_event.h>
 #include <ros/ros.h>
 #include <ros/xmlrpc_manager.h>
@@ -100,6 +101,13 @@ public:
       ROS_ERROR("Failed to parse one or more service whitelist patterns");
     }
 
+    const auto assetUriAllowlist = nhp.param<std::vector<std::string>>(
+      "asset_uri_allowlist", {"package://(/?\\w+)+\\.(dae|stl|urdf|xacro)"});
+    _assetUriAllowlistPatterns = parseRegexPatterns(assetUriAllowlist);
+    if (assetUriAllowlist.size() != _assetUriAllowlistPatterns.size()) {
+      ROS_ERROR("Failed to parse one or more asset URI whitelist patterns");
+    }
+
     const char* rosDistro = std::getenv("ROS_DISTRO");
     ROS_INFO("Starting foxglove_bridge (%s, %s@%s) with %s", rosDistro,
              foxglove::FOXGLOVE_BRIDGE_VERSION, foxglove::FOXGLOVE_BRIDGE_GIT_HASH,
@@ -123,6 +131,9 @@ public:
 
       const auto logHandler =
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);
+
+      // Fetching of assets may be blocking, hence we fetch them in a separate thread.
+      _fetchAssetQueue = std::make_unique<foxglove::CallbackQueue>(logHandler, 1 /* num_threads */);
 
       _server = foxglove::ServerFactory::createServer<ConnectionHandle>("foxglove_bridge",
                                                                         logHandler, serverOptions);
@@ -151,6 +162,15 @@ public:
       hdlrs.subscribeConnectionGraphHandler = [this](bool subscribe) {
         _subscribeGraphUpdates = subscribe;
       };
+
+      if (hasCapability(foxglove::CAPABILITY_ASSETS)) {
+        hdlrs.fetchAssetHandler = [this](const std::string& uri, uint32_t requestId,
+                                         foxglove::ConnHandle hdl) {
+          _fetchAssetQueue->addCallback(
+            std::bind(&FoxgloveBridge::fetchAsset, this, uri, requestId, hdl));
+        };
+      }
+
       _server->setHandlers(std::move(hdlrs));
 
       _server->start(address, static_cast<uint16_t>(port));
@@ -844,6 +864,37 @@ private:
     }
   }
 
+  void fetchAsset(const std::string& uri, uint32_t requestId, ConnectionHandle clientHandle) {
+    foxglove::FetchAssetResponse response;
+    response.requestId = requestId;
+
+    try {
+      // We reject URIs that are not on the allowlist or that contain two consecutive dots. The
+      // latter can be utilized to construct URIs for retrieving confidential files that should not
+      // be accessible over the WebSocket connection. Example:
+      // `package://<pkg_name>/../../../secret.txt`. This is an extra security measure and should
+      // not be necessary if the allowlist is strict enough.
+      if (uri.find("..") != std::string::npos || !isWhitelisted(uri, _assetUriAllowlistPatterns)) {
+        throw std::runtime_error("Asset URI not allowed: " + uri);
+      }
+
+      resource_retriever::Retriever resource_retriever;
+      const resource_retriever::MemoryResource memoryResource = resource_retriever.get(uri);
+      response.status = foxglove::FetchAssetStatus::Success;
+      response.errorMessage = "";
+      response.data.resize(memoryResource.size);
+      std::memcpy(response.data.data(), memoryResource.data.get(), memoryResource.size);
+    } catch (const std::exception& ex) {
+      ROS_WARN("Failed to retrieve asset '%s': %s", uri.c_str(), ex.what());
+      response.status = foxglove::FetchAssetStatus::Error;
+      response.errorMessage = "Failed to retrieve asset " + uri;
+    }
+
+    if (_server) {
+      _server->sendFetchAssetResponse(clientHandle, response);
+    }
+  }
+
   bool hasCapability(const std::string& capability) {
     return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
   }
@@ -853,6 +904,7 @@ private:
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _paramWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;
+  std::vector<std::regex> _assetUriAllowlistPatterns;
   ros::XMLRPCManager xmlrpcServer;
   std::unordered_map<foxglove::ChannelId, foxglove::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
@@ -868,6 +920,7 @@ private:
   bool _useSimTime = false;
   std::vector<std::string> _capabilities;
   std::atomic<bool> _subscribeGraphUpdates = false;
+  std::unique_ptr<foxglove::CallbackQueue> _fetchAssetQueue;
 };
 
 }  // namespace foxglove_bridge
