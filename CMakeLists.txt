@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.10.2)
 
 if(POLICY CMP0048)
   cmake_policy(SET CMP0048 NEW)
@@ -13,7 +13,7 @@ project(foxglove_bridge LANGUAGES CXX VERSION 0.6.4)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_compile_definitions(ASIO_STANDALONE)
+add_definitions(-DASIO_STANDALONE)
 
 macro(enable_strict_compiler_warnings target)
   if (MSVC)
