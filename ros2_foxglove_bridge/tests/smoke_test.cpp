@@ -1,5 +1,3 @@
-#define ASIO_STANDALONE
-
 #include <chrono>
 #include <future>
 #include <thread>
