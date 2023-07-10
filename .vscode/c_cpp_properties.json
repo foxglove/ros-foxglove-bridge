@@ -17,7 +17,6 @@
           "/usr/include"
         ]
       },
-      "defines": ["ASIO_STANDALONE"],
       "cppStandard": "c++17"
     }
   ],

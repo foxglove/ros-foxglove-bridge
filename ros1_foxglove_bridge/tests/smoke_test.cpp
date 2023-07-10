@@ -1,5 +1,3 @@
-#define ASIO_STANDALONE
-
 #include <chrono>
 #include <future>
 #include <thread>
@@ -343,6 +341,49 @@ TEST_F(ServiceTest, testCallServiceParallel) {
     EXPECT_EQ(response.encoding, request.encoding);
     EXPECT_EQ(response.data, expectedSerializedResponse);
   }
+}
+
+TEST(FetchAssetTest, fetchExistingAsset) {
+  auto wsClient = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  EXPECT_EQ(std::future_status::ready, wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
+
+  const auto tmpFilePath = std::tmpnam(nullptr) + std::string(".txt");
+  constexpr char content[] = "Hello, world";
+  FILE* tmpAssetFile = std::fopen(tmpFilePath.c_str(), "w");
+  std::fputs(content, tmpAssetFile);
+  std::fclose(tmpAssetFile);
+
+  const std::string uri = std::string("file://") + tmpFilePath;
+  const uint32_t requestId = 123;
+
+  auto future = foxglove::waitForFetchAssetResponse(wsClient);
+  wsClient->fetchAsset(uri, requestId);
+  ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
+  const foxglove::FetchAssetResponse response = future.get();
+
+  EXPECT_EQ(response.requestId, requestId);
+  EXPECT_EQ(response.status, foxglove::FetchAssetStatus::Success);
+  // +1 since NULL terminator is not written to file.
+  ASSERT_EQ(response.data.size() + 1ul, sizeof(content));
+  EXPECT_EQ(0, std::memcmp(content, response.data.data(), response.data.size()));
+  std::remove(tmpFilePath.c_str());
+}
+
+TEST(FetchAssetTest, fetchNonExistingAsset) {
+  auto wsClient = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  EXPECT_EQ(std::future_status::ready, wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
+
+  const std::string assetId = "file:///foo/bar";
+  const uint32_t requestId = 456;
+
+  auto future = foxglove::waitForFetchAssetResponse(wsClient);
+  wsClient->fetchAsset(assetId, requestId);
+  ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
+  const foxglove::FetchAssetResponse response = future.get();
+
+  EXPECT_EQ(response.requestId, requestId);
+  EXPECT_EQ(response.status, foxglove::FetchAssetStatus::Error);
+  EXPECT_FALSE(response.errorMessage.empty());
 }
 
 // Run all the tests that were declared with TEST()
