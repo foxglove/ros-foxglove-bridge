@@ -17,12 +17,6 @@ $(1)-boost-asio:
 .PHONY: $(1)-test-boost-asio
 $(1)-test-boost-asio: $(1)-boost-asio
 	docker run -t --rm foxglove_bridge_$(1)_boost_asio bash -c "catkin_make run_tests && catkin_test_results"
-
-.PHONY: $(1)-standalone-asio
-$(1)-standalone-asio: $(1)
-
-.PHONY: $(1)-test-standalone-asio
-$(1)-test-standalone-asio: $(1)-test
 endef
 
 define generate_ros2_targets
@@ -41,12 +35,6 @@ $(1)-boost-asio:
 .PHONY: $(1)-test-boost-asio
 $(1)-test-boost-asio: $(1)-boost-asio
 	docker run -t --rm foxglove_bridge_$(1)-boost-asio colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
-
-.PHONY: $(1)-standalone-asio
-$(1)-standalone-asio: $(1)
-
-.PHONY: $(1)-test-standalone-asio
-$(1)-test-standalone-asio: $(1)-test
 endef
 
 $(foreach distribution,$(ROS1_DISTRIBUTIONS),$(eval $(call generate_ros1_targets,$(strip $(distribution)))))
