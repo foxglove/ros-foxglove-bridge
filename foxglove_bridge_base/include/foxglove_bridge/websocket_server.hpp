@@ -217,7 +217,7 @@ inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger,
   _server.get_alog().set_callback(_logger);
   _server.get_elog().set_callback(_logger);
 
-  std::error_code ec;
+  websocketpp::lib::error_code ec;
   _server.init_asio(ec);
   if (ec) {
     throw std::runtime_error("Failed to initialize websocket server: " + ec.message());
@@ -245,7 +245,7 @@ inline Server<ServerConfiguration>::~Server() {}
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::socketInit(ConnHandle hdl) {
-  std::error_code ec;
+  websocketpp::lib::asio::error_code ec;
   _server.get_con_from_hdl(hdl)->get_raw_socket().set_option(Tcp::no_delay(true), ec);
   if (ec) {
     _server.get_elog().write(RECOVERABLE, "Failed to set TCP_NODELAY: " + ec.message());
@@ -394,7 +394,7 @@ inline void Server<ServerConfiguration>::stop() {
   }
 
   _server.get_alog().write(APP, "Stopping WebSocket server");
-  std::error_code ec;
+  websocketpp::lib::error_code ec;
 
   _server.stop_perpetual();
 
@@ -471,7 +471,7 @@ inline void Server<ServerConfiguration>::start(const std::string& host, uint16_t
     throw std::runtime_error("Server already started");
   }
 
-  std::error_code ec;
+  websocketpp::lib::error_code ec;
 
   _server.listen(host, std::to_string(port), ec);
   if (ec) {
@@ -494,8 +494,9 @@ inline void Server<ServerConfiguration>::start(const std::string& host, uint16_t
     throw std::runtime_error("WebSocket server failed to listen on port " + std::to_string(port));
   }
 
-  auto endpoint = _server.get_local_endpoint(ec);
-  if (ec) {
+  websocketpp::lib::asio::error_code asioEc;
+  auto endpoint = _server.get_local_endpoint(asioEc);
+  if (asioEc) {
     throw std::runtime_error("Failed to resolve the local endpoint: " + ec.message());
   }
 
@@ -1182,7 +1183,7 @@ template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, ChannelId chanId,
                                                      uint64_t timestamp, const uint8_t* payload,
                                                      size_t payloadSize) {
-  std::error_code ec;
+  websocketpp::lib::error_code ec;
   const auto con = _server.get_con_from_hdl(clientHandle, ec);
   if (ec || !con) {
     return;
@@ -1252,7 +1253,7 @@ inline void Server<ServerConfiguration>::sendServiceResponse(ConnHandle clientHa
 
 template <typename ServerConfiguration>
 inline uint16_t Server<ServerConfiguration>::getPort() {
-  std::error_code ec;
+  websocketpp::lib::asio::error_code ec;
   auto endpoint = _server.get_local_endpoint(ec);
   if (ec) {
     throw std::runtime_error("Server not listening on any port. Has it been started before?");
@@ -1341,7 +1342,7 @@ inline void Server<ServerConfiguration>::updateConnectionGraph(
 
 template <typename ServerConfiguration>
 inline std::string Server<ServerConfiguration>::remoteEndpointString(ConnHandle clientHandle) {
-  std::error_code ec;
+  websocketpp::lib::error_code ec;
   const auto con = _server.get_con_from_hdl(clientHandle, ec);
   return con ? con->get_remote_endpoint() : "(unknown)";
 }
@@ -1393,7 +1394,7 @@ inline bool Server<ServerConfiguration>::hasCapability(const std::string& capabi
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::sendFetchAssetResponse(
   ConnHandle clientHandle, const FetchAssetResponse& response) {
-  std::error_code ec;
+  websocketpp::lib::error_code ec;
   const auto con = _server.get_con_from_hdl(clientHandle, ec);
   if (ec || !con) {
     return;

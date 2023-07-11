@@ -17,6 +17,7 @@ WORKDIR $ROS_WS
 RUN apt-get update && apt-get install -y --no-install-recommends \
   nlohmann-json3-dev \
   libasio-dev \
+  libboost-all-dev \
   libssl-dev \
   libwebsocketpp-dev \
   && rm -rf /var/lib/apt/lists/*
@@ -37,9 +38,11 @@ COPY CMakeLists.txt src/ros-foxglove-bridge/CMakeLists.txt
 COPY foxglove_bridge_base src/ros-foxglove-bridge/foxglove_bridge_base
 COPY ros2_foxglove_bridge src/ros-foxglove-bridge/ros2_foxglove_bridge
 
+ARG USE_ASIO_STANDALONE=ON
+
 # Build the ROS 2 workspace
 RUN . /opt/ros/$ROS_DISTRO/setup.sh \
-  && colcon build --event-handlers console_direct+
+  && colcon build --event-handlers console_direct+ --cmake-args -DUSE_ASIO_STANDALONE=$USE_ASIO_STANDALONE
 
 # source workspace from entrypoint
 RUN sed --in-place \
