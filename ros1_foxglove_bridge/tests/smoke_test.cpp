@@ -1,8 +1,8 @@
 #include <chrono>
-#include <filesystem>
 #include <future>
 #include <thread>
 
+#include <boost/filesystem.hpp>
 #include <gtest/gtest.h>
 #include <ros/ros.h>
 #include <std_msgs/builtin_string.h>
@@ -351,7 +351,7 @@ TEST(FetchAssetTest, fetchExistingAsset) {
   const auto millisSinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(
     std::chrono::system_clock::now().time_since_epoch());
   const auto tmpFilePath =
-    std::filesystem::temp_directory_path() / std::to_string(millisSinceEpoch.count());
+    boost::filesystem::temp_directory_path() / std::to_string(millisSinceEpoch.count());
   constexpr char content[] = "Hello, world";
   FILE* tmpAssetFile = std::fopen(tmpFilePath.c_str(), "w");
   std::fputs(content, tmpAssetFile);
