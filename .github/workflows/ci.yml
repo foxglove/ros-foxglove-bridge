@@ -21,17 +21,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - ros_distribution: melodic
-          - ros_distribution: noetic
-          - ros_distribution: galactic
-          - ros_distribution: humble
-          - ros_distribution: iron
-          - ros_distribution: rolling
+        distro: [melodic, noetic, galactic, humble, iron, rolling]
+        asio: [standalone, boost]
 
-    name: Test (ROS ${{ matrix.ros_distribution }})
+    name: Test (ROS ${{ matrix.ros_distribution }}-${{ matrix.ros_distribution }}-asio)
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
-      - run: make ${{ matrix.ros_distribution }}-test
+      - run: make ${{ matrix.ros_distribution }}-test-${{ matrix.ros_distribution }}-asio

@@ -41,6 +41,7 @@ if(USE_ASIO_STANDALONE)
   add_definitions(-DASIO_STANDALONE)
 else()
   message(STATUS "Using Boost ASIO")
+  find_package(Boost REQUIRED)
 endif(USE_ASIO_STANDALONE)
 
 # Detect big-endian architectures
