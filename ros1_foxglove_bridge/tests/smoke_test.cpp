@@ -1,4 +1,5 @@
 #include <chrono>
+#include <filesystem>
 #include <future>
 #include <thread>
 
@@ -347,13 +348,16 @@ TEST(FetchAssetTest, fetchExistingAsset) {
   auto wsClient = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
   EXPECT_EQ(std::future_status::ready, wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
 
-  const auto tmpFilePath = std::tmpnam(nullptr) + std::string(".txt");
+  const auto millisSinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(
+    std::chrono::system_clock::now().time_since_epoch());
+  const auto tmpFilePath =
+    std::filesystem::temp_directory_path() / std::to_string(millisSinceEpoch.count());
   constexpr char content[] = "Hello, world";
   FILE* tmpAssetFile = std::fopen(tmpFilePath.c_str(), "w");
   std::fputs(content, tmpAssetFile);
   std::fclose(tmpAssetFile);
 
-  const std::string uri = std::string("file://") + tmpFilePath;
+  const std::string uri = std::string("file://") + tmpFilePath.string();
   const uint32_t requestId = 123;
 
   auto future = foxglove::waitForFetchAssetResponse(wsClient);
