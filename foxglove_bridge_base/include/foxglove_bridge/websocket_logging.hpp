@@ -2,7 +2,7 @@
 
 #include <functional>
 
-#include <asio/ip/address.hpp>
+#include <websocketpp/common/asio.hpp>
 #include <websocketpp/logger/levels.hpp>
 
 #include "common.hpp"
@@ -11,7 +11,7 @@ namespace foxglove {
 
 using LogCallback = std::function<void(WebSocketLogLevel, char const*)>;
 
-inline std::string IPAddressToString(const asio::ip::address& addr) {
+inline std::string IPAddressToString(const websocketpp::lib::asio::ip::address& addr) {
   if (addr.is_v6()) {
     return "[" + addr.to_string() + "]";
   }
