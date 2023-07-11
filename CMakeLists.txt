@@ -13,7 +13,6 @@ project(foxglove_bridge LANGUAGES CXX VERSION 0.6.4)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_definitions(-DASIO_STANDALONE)
 
 macro(enable_strict_compiler_warnings target)
   if (MSVC)
@@ -34,6 +33,16 @@ find_package(ZLIB REQUIRED)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
+
+# Determine wheter to use standalone or boost asio
+option(USE_ASIO_STANDALONE "Build with standalone ASIO" ON)
+if(USE_ASIO_STANDALONE)
+  message(STATUS "Using standalone ASIO")
+  add_definitions(-DASIO_STANDALONE)
+else()
+  message(STATUS "Using Boost ASIO")
+  find_package(Boost REQUIRED)
+endif(USE_ASIO_STANDALONE)
 
 # Detect big-endian architectures
 include(TestBigEndian)
@@ -179,17 +188,18 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
       find_package(GTest REQUIRED)
     endif()
     find_package(rostest REQUIRED)
+    find_package(Boost REQUIRED COMPONENTS system)
 
     catkin_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
-    target_link_libraries(version_test foxglove_bridge_base)
+    target_link_libraries(version_test foxglove_bridge_base ${Boost_LIBRARIES})
     enable_strict_compiler_warnings(version_test)
 
     catkin_add_gtest(serialization_test foxglove_bridge_base/tests/serialization_test.cpp)
-    target_link_libraries(serialization_test foxglove_bridge_base)
+    target_link_libraries(serialization_test foxglove_bridge_base ${Boost_LIBRARIES})
     enable_strict_compiler_warnings(foxglove_bridge)
 
     catkin_add_gtest(base64_test foxglove_bridge_base/tests/base64_test.cpp)
-    target_link_libraries(base64_test foxglove_bridge_base)
+    target_link_libraries(base64_test foxglove_bridge_base ${Boost_LIBRARIES})
     enable_strict_compiler_warnings(foxglove_bridge)
 
     add_rostest_gtest(smoke_test ros1_foxglove_bridge/tests/smoke.test ros1_foxglove_bridge/tests/smoke_test.cpp)

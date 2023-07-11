@@ -30,9 +30,11 @@ COPY foxglove_bridge_base src/ros-foxglove-bridge/foxglove_bridge_base
 COPY nodelets.xml src/ros-foxglove-bridge/nodelets.xml
 COPY ros1_foxglove_bridge src/ros-foxglove-bridge/ros1_foxglove_bridge
 
+ARG USE_ASIO_STANDALONE=ON
+
 # Build the Catkin workspace
 RUN . /opt/ros/$ROS_DISTRO/setup.sh \
-  && catkin_make
+  && catkin_make -DUSE_ASIO_STANDALONE=$USE_ASIO_STANDALONE
 
 # source workspace from entrypoint
 RUN sed --in-place \
