@@ -54,7 +54,7 @@ $ ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
 ```xml
 <launch>
   <!-- Including in another launch file -->
-  <include file="$(find-pkg-share foxglove_bridge)/foxglove_bridge_launch.xml"/>
+  <include file="$(find-pkg-share foxglove_bridge)/launch/foxglove_bridge_launch.xml"/>
     <arg name="port" value="8765"/>
     <!-- ... other arguments ... -->
   </include>
