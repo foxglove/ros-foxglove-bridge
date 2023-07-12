@@ -255,8 +255,8 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
       LIBRARY DESTINATION lib
       RUNTIME DESTINATION bin
     )
-    install(DIRECTORY ros2_foxglove_bridge/launch/
-      DESTINATION share/${PROJECT_NAME}
+    install(DIRECTORY ros2_foxglove_bridge/launch
+      DESTINATION share/${PROJECT_NAME}/
     )
     ament_export_libraries(foxglove_bridge_base foxglove_bridge_component)
     ament_package()
