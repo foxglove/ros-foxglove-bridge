@@ -2,6 +2,16 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.0 (2023-07-12)
+------------------
+* Fix ROS2 launch file install rule not installing launch subfolder (`#243 <https://github.com/foxglove/ros-foxglove-bridge/issues/243>`_)
+* Support building with boost asio (`#247 <https://github.com/foxglove/ros-foxglove-bridge/issues/247>`_)
+* Avoid usage of tmpnam() for creating random filename (`#246 <https://github.com/foxglove/ros-foxglove-bridge/issues/246>`_)
+* Implement ws-protocol's `fetchAsset` specification (`#232 <https://github.com/foxglove/ros-foxglove-bridge/issues/232>`_)
+* Use `--include-eol-distros` for `rosdep` to fix melodic builds (`#244 <https://github.com/foxglove/ros-foxglove-bridge/issues/244>`_)
+* Reduce logging severity for parameter retrieval logs (`#240 <https://github.com/foxglove/ros-foxglove-bridge/issues/240>`_)
+* Contributors: Hans-Joachim Krauch, Micah Guttman
+
 0.6.4 (2023-07-05)
 ------------------
 * Assume publisher qos depth of 1 if the middleware reports the qos history as unknown (`#239 <https://github.com/foxglove/ros-foxglove-bridge/issues/239>`_)
