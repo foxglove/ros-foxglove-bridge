@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.7.0 (2023-07-12)
+------------------
 * Fix ROS2 launch file install rule not installing launch subfolder (`#243 <https://github.com/foxglove/ros-foxglove-bridge/issues/243>`_)
 * Support building with boost asio (`#247 <https://github.com/foxglove/ros-foxglove-bridge/issues/247>`_)
 * Avoid usage of tmpnam() for creating random filename (`#246 <https://github.com/foxglove/ros-foxglove-bridge/issues/246>`_)
