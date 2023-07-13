@@ -38,6 +38,29 @@
     }                                                                                          \
   }
 
+namespace {
+
+constexpr uint32_t Integer(const std::string_view str) {
+  uint32_t result = 0x811C9DC5;  // FNV-1a 32-bit algorithm
+  for (char c : str) {
+    result = (static_cast<uint32_t>(c) ^ result) * 0x01000193;
+  }
+  return result;
+}
+
+constexpr auto SUBSCRIBE = Integer("subscribe");
+constexpr auto UNSUBSCRIBE = Integer("unsubscribe");
+constexpr auto ADVERTISE = Integer("advertise");
+constexpr auto UNADVERTISE = Integer("unadvertise");
+constexpr auto GET_PARAMETERS = Integer("getParameters");
+constexpr auto SET_PARAMETERS = Integer("setParameters");
+constexpr auto SUBSCRIBE_PARAMETER_UPDATES = Integer("subscribeParameterUpdates");
+constexpr auto UNSUBSCRIBE_PARAMETER_UPDATES = Integer("unsubscribeParameterUpdates");
+constexpr auto SUBSCRIBE_CONNECTION_GRAPH = Integer("subscribeConnectionGraph");
+constexpr auto UNSUBSCRIBE_CONNECTION_GRAPH = Integer("unsubscribeConnectionGraph");
+constexpr auto FETCH_ASSET = Integer("fetchAsset");
+}  // namespace
+
 namespace foxglove {
 
 using json = nlohmann::json;
@@ -48,14 +71,6 @@ using OpCode = websocketpp::frame::opcode::value;
 static const websocketpp::log::level APP = websocketpp::log::alevel::app;
 static const websocketpp::log::level WARNING = websocketpp::log::elevel::warn;
 static const websocketpp::log::level RECOVERABLE = websocketpp::log::elevel::rerror;
-
-constexpr uint32_t Integer(const std::string_view str) {
-  uint32_t result = 0x811C9DC5;  // FNV-1a 32-bit algorithm
-  for (char c : str) {
-    result = (static_cast<uint32_t>(c) ^ result) * 0x01000193;
-  }
-  return result;
-}
 
 /// Map of required capability by client operation (text).
 const std::unordered_map<std::string, std::string> CAPABILITY_BY_CLIENT_OPERATION = {
@@ -205,6 +220,7 @@ private:
                                              const std::unordered_set<std::string>& paramNames);
   bool isParameterSubscribed(const std::string& paramName) const;
   bool hasCapability(const std::string& capability) const;
+  bool hasHandler(uint32_t op) const;
 };
 
 template <typename ServerConfiguration>
@@ -614,6 +630,13 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
     return;
   }
 
+  if (!hasHandler(Integer(op))) {
+    sendStatusAndLogMsg(
+      hdl, StatusLevel::Error,
+      "Operation '" + op + "' not supported as server handler function is missing");
+    return;
+  }
+
   const auto findSubscriptionBySubId =
     [](const std::unordered_map<ChannelId, SubscriptionId>& subscriptionsByChannel,
        SubscriptionId subId) {
@@ -623,24 +646,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
                           });
     };
 
-  constexpr auto SUBSCRIBE = Integer("subscribe");
-  constexpr auto UNSUBSCRIBE = Integer("unsubscribe");
-  constexpr auto ADVERTISE = Integer("advertise");
-  constexpr auto UNADVERTISE = Integer("unadvertise");
-  constexpr auto GET_PARAMETERS = Integer("getParameters");
-  constexpr auto SET_PARAMETERS = Integer("setParameters");
-  constexpr auto SUBSCRIBE_PARAMETER_UPDATES = Integer("subscribeParameterUpdates");
-  constexpr auto UNSUBSCRIBE_PARAMETER_UPDATES = Integer("unsubscribeParameterUpdates");
-  constexpr auto SUBSCRIBE_CONNECTION_GRAPH = Integer("subscribeConnectionGraph");
-  constexpr auto UNSUBSCRIBE_CONNECTION_GRAPH = Integer("unsubscribeConnectionGraph");
-  constexpr auto FETCH_ASSET = Integer("fetchAsset");
-
   switch (Integer(op)) {
     case SUBSCRIBE: {
-      if (!_handlers.subscribeHandler) {
-        return;
-      }
-
       std::unordered_map<ChannelId, SubscriptionId> clientSubscriptionsByChannel;
       {
         std::shared_lock<std::shared_mutex> clientsLock(_clientsMutex);
@@ -677,10 +684,6 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
       }
     } break;
     case UNSUBSCRIBE: {
-      if (!_handlers.unsubscribeHandler) {
-        return;
-      }
-
       std::unordered_map<ChannelId, SubscriptionId> clientSubscriptionsByChannel;
       {
         std::shared_lock<std::shared_mutex> clientsLock(_clientsMutex);
@@ -710,9 +713,6 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
       }
     } break;
     case ADVERTISE: {
-      if (!_handlers.clientAdvertiseHandler) {
-        return;
-      }
       std::unique_lock<std::shared_mutex> clientChannelsLock(_clientChannelsMutex);
       auto [clientPublicationsIt, isFirstPublication] =
         _clientChannels.emplace(hdl, std::unordered_map<ClientChannelId, ClientAdvertisement>());
@@ -753,9 +753,6 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
       }
     } break;
     case UNADVERTISE: {
-      if (!_handlers.clientUnadvertiseHandler) {
-        return;
-      }
       std::unique_lock<std::shared_mutex> clientChannelsLock(_clientChannelsMutex);
       auto clientPublicationsIt = _clientChannels.find(hdl);
       if (clientPublicationsIt == _clientChannels.end()) {
@@ -789,10 +786,6 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
       }
     } break;
     case GET_PARAMETERS: {
-      if (!_handlers.parameterRequestHandler) {
-        return;
-      }
-
       const auto paramNames = payload.at("parameterNames").get<std::vector<std::string>>();
       const auto requestId = payload.find("id") == payload.end()
                                ? std::nullopt
@@ -807,10 +800,6 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
       }
     } break;
     case SET_PARAMETERS: {
-      if (!_handlers.parameterChangeHandler) {
-        return;
-      }
-
       const auto parameters = payload.at("parameters").get<std::vector<Parameter>>();
       const auto requestId = payload.find("id") == payload.end()
                                ? std::nullopt
@@ -824,10 +813,6 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
       }
     } break;
     case SUBSCRIBE_PARAMETER_UPDATES: {
-      if (!_handlers.parameterSubscriptionHandler) {
-        return;
-      }
-
       const auto paramNames = payload.at("parameterNames").get<std::unordered_set<std::string>>();
       std::vector<std::string> paramsToSubscribe;
       {
@@ -857,10 +842,6 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
       }
     } break;
     case UNSUBSCRIBE_PARAMETER_UPDATES: {
-      if (!_handlers.parameterSubscriptionHandler) {
-        return;
-      }
-
       const auto paramNames = payload.at("parameterNames").get<std::unordered_set<std::string>>();
       {
         std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
@@ -873,10 +854,6 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
       unsubscribeParamsWithoutSubscriptions(hdl, paramNames);
     } break;
     case SUBSCRIBE_CONNECTION_GRAPH: {
-      if (!_handlers.subscribeConnectionGraphHandler) {
-        return;
-      }
-
       bool subscribeToConnnectionGraph = false;
       {
         std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
@@ -918,10 +895,6 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
       sendJsonRaw(hdl, jsonMsg.dump());
     } break;
     case UNSUBSCRIBE_CONNECTION_GRAPH: {
-      if (!_handlers.subscribeConnectionGraphHandler) {
-        return;
-      }
-
       bool clientWasSubscribed = false;
       {
         std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
@@ -949,10 +922,6 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
       }
     } break;
     case FETCH_ASSET: {
-      if (!_handlers.fetchAssetHandler) {
-        return;
-      }
-
       const auto uri = payload.at("uri").get<std::string>();
       const auto requestId = payload.at("requestId").get<uint32_t>();
 
@@ -1427,6 +1396,34 @@ template <typename ServerConfiguration>
 inline bool Server<ServerConfiguration>::hasCapability(const std::string& capability) const {
   return std::find(_options.capabilities.begin(), _options.capabilities.end(), capability) !=
          _options.capabilities.end();
+}
+
+template <typename ServerConfiguration>
+inline bool Server<ServerConfiguration>::hasHandler(uint32_t op) const {
+  switch (op) {
+    case SUBSCRIBE:
+      return static_cast<bool>(_handlers.subscribeHandler);
+    case UNSUBSCRIBE:
+      return static_cast<bool>(_handlers.unsubscribeHandler);
+    case ADVERTISE:
+      return static_cast<bool>(_handlers.clientAdvertiseHandler);
+    case UNADVERTISE:
+      return static_cast<bool>(_handlers.clientUnadvertiseHandler);
+    case GET_PARAMETERS:
+      return static_cast<bool>(_handlers.parameterRequestHandler);
+    case SET_PARAMETERS:
+      return static_cast<bool>(_handlers.parameterChangeHandler);
+    case SUBSCRIBE_PARAMETER_UPDATES:
+    case UNSUBSCRIBE_PARAMETER_UPDATES:
+      return static_cast<bool>(_handlers.parameterSubscriptionHandler);
+    case SUBSCRIBE_CONNECTION_GRAPH:
+    case UNSUBSCRIBE_CONNECTION_GRAPH:
+      return static_cast<bool>(_handlers.subscribeConnectionGraphHandler);
+    case FETCH_ASSET:
+      return static_cast<bool>(_handlers.fetchAssetHandler);
+    default:
+      throw std::runtime_error("Unknown operation: " + std::to_string(op));
+  }
 }
 
 template <typename ServerConfiguration>
