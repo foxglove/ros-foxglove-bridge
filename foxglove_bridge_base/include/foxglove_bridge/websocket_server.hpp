@@ -844,9 +844,17 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
       if (subscribeToConnnectionGraph) {
         // First subscriber, let the handler know that we are interested in updates.
         _server.get_alog().write(APP, "Subscribing to connection graph updates.");
-        _handlers.subscribeConnectionGraphHandler(true);
-        std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
-        _clients.at(hdl).subscribedToConnectionGraph = true;
+        try {
+          _handlers.subscribeConnectionGraphHandler(true);
+          std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+          _clients.at(hdl).subscribedToConnectionGraph = true;
+        } catch (const std::exception& e) {
+          sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+          return;
+        } catch (...) {
+          sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
+          return;
+        }
       }
 
       json::array_t publishedTopicsJson, subscribedTopicsJson, advertisedServicesJson;
@@ -894,7 +902,13 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
         }
         if (unsubscribeFromConnnectionGraph) {
           _server.get_alog().write(APP, "Unsubscribing from connection graph updates.");
-          _handlers.subscribeConnectionGraphHandler(false);
+          try {
+            _handlers.subscribeConnectionGraphHandler(false);
+          } catch (const std::exception& e) {
+            sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+          } catch (...) {
+            sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
+          }
         }
       } else {
         sendStatusAndLogMsg(hdl, StatusLevel::Error,
