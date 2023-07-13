@@ -345,7 +345,10 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
     _server.get_alog().write(APP, "Client " + clientName + " unadvertising channel " +
                                     std::to_string(clientChannelId) + " due to disconnect");
     if (_handlers.clientUnadvertiseHandler) {
-      _handlers.clientUnadvertiseHandler(clientChannelId, hdl);
+      try {
+        _handlers.clientUnadvertiseHandler(clientChannelId, hdl);
+      } catch (...) {
+      }
     }
   }
 
@@ -358,7 +361,10 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
   if (_handlers.unsubscribeHandler) {
     for (const auto& [chanId, subs] : oldSubscriptionsByChannel) {
       (void)subs;
-      _handlers.unsubscribeHandler(chanId, hdl);
+      try {
+        _handlers.unsubscribeHandler(chanId, hdl);
+      } catch (...) {
+      }
     }
   }
 
@@ -376,7 +382,10 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
     _connectionGraph.subscriptionCount--;
     if (_connectionGraph.subscriptionCount == 0 && _handlers.subscribeConnectionGraphHandler) {
       _server.get_alog().write(APP, "Unsubscribing from connection graph updates.");
-      _handlers.subscribeConnectionGraphHandler(false);
+      try {
+        _handlers.subscribeConnectionGraphHandler(false);
+      } catch (...) {
+      }
     }
   }
 
@@ -605,15 +614,14 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
     return;
   }
 
-  std::shared_lock<std::shared_mutex> clientsLock(_clientsMutex);
-  auto& clientInfo = _clients.at(hdl);
-
-  const auto findSubscriptionBySubId = [&clientInfo](SubscriptionId subId) {
-    return std::find_if(clientInfo.subscriptionsByChannel.begin(),
-                        clientInfo.subscriptionsByChannel.end(), [&subId](const auto& mo) {
-                          return mo.second == subId;
-                        });
-  };
+  const auto findSubscriptionBySubId =
+    [](const std::unordered_map<ChannelId, SubscriptionId>& subscriptionsByChannel,
+       SubscriptionId subId) {
+      return std::find_if(subscriptionsByChannel.begin(), subscriptionsByChannel.end(),
+                          [&subId](const auto& mo) {
+                            return mo.second == subId;
+                          });
+    };
 
   constexpr auto SUBSCRIBE = Integer("subscribe");
   constexpr auto UNSUBSCRIBE = Integer("unsubscribe");
@@ -632,10 +640,18 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
       if (!_handlers.subscribeHandler) {
         return;
       }
+
+      std::unordered_map<ChannelId, SubscriptionId> clientSubscriptionsByChannel;
+      {
+        std::shared_lock<std::shared_mutex> clientsLock(_clientsMutex);
+        clientSubscriptionsByChannel = _clients.at(hdl).subscriptionsByChannel;
+      }
+
       for (const auto& sub : payload.at("subscriptions")) {
         SubscriptionId subId = sub.at("id");
         ChannelId channelId = sub.at("channelId");
-        if (findSubscriptionBySubId(subId) != clientInfo.subscriptionsByChannel.end()) {
+        if (findSubscriptionBySubId(clientSubscriptionsByChannel, subId) !=
+            clientSubscriptionsByChannel.end()) {
           sendStatusAndLogMsg(hdl, StatusLevel::Error,
                               "Client subscription id " + std::to_string(subId) +
                                 " was already used; ignoring subscription");
@@ -651,7 +667,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
 
         try {
           _handlers.subscribeHandler(channelId, hdl);
-          clientInfo.subscriptionsByChannel.emplace(channelId, subId);
+          std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+          _clients.at(hdl).subscriptionsByChannel.emplace(channelId, subId);
         } catch (const ChannelError& e) {
           sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
         } catch (...) {
@@ -663,10 +680,17 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
       if (!_handlers.unsubscribeHandler) {
         return;
       }
+
+      std::unordered_map<ChannelId, SubscriptionId> clientSubscriptionsByChannel;
+      {
+        std::shared_lock<std::shared_mutex> clientsLock(_clientsMutex);
+        clientSubscriptionsByChannel = _clients.at(hdl).subscriptionsByChannel;
+      }
+
       for (const auto& subIdJson : payload.at("subscriptionIds")) {
         SubscriptionId subId = subIdJson;
-        const auto& sub = findSubscriptionBySubId(subId);
-        if (sub == clientInfo.subscriptionsByChannel.end()) {
+        const auto& sub = findSubscriptionBySubId(clientSubscriptionsByChannel, subId);
+        if (sub == clientSubscriptionsByChannel.end()) {
           sendStatusAndLogMsg(hdl, StatusLevel::Warning,
                               "Client subscription id " + std::to_string(subId) +
                                 " did not exist; ignoring unsubscription");
@@ -676,7 +700,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
         ChannelId chanId = sub->first;
         try {
           _handlers.unsubscribeHandler(chanId, hdl);
-          clientInfo.subscriptionsByChannel.erase(sub);
+          std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+          _clients.at(hdl).subscriptionsByChannel.erase(sub);
         } catch (const ChannelError& e) {
           sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
         } catch (...) {
@@ -717,8 +742,9 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
 
         try {
           _handlers.clientAdvertiseHandler(advertisement, hdl);
+          std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+          _clients.at(hdl).advertisedChannels.emplace(channelId);
           clientPublications.emplace(channelId, advertisement);
-          clientInfo.advertisedChannels.emplace(channelId);
         } catch (const ClientChannelError& e) {
           sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
         } catch (...) {
@@ -748,6 +774,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
 
         try {
           _handlers.clientUnadvertiseHandler(channelId, hdl);
+          std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+          auto& clientInfo = _clients.at(hdl);
           clientPublications.erase(channelIt);
           const auto advertisedChannelIt = clientInfo.advertisedChannels.find(channelId);
           if (advertisedChannelIt != clientInfo.advertisedChannels.end()) {
@@ -860,7 +888,8 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
         // First subscriber, let the handler know that we are interested in updates.
         _server.get_alog().write(APP, "Subscribing to connection graph updates.");
         _handlers.subscribeConnectionGraphHandler(true);
-        clientInfo.subscribedToConnectionGraph = true;
+        std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+        _clients.at(hdl).subscribedToConnectionGraph = true;
       }
 
       json::array_t publishedTopicsJson, subscribedTopicsJson, advertisedServicesJson;
@@ -893,8 +922,17 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
         return;
       }
 
-      if (clientInfo.subscribedToConnectionGraph) {
-        clientInfo.subscribedToConnectionGraph = false;
+      bool clientWasSubscribed = false;
+      {
+        std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+        auto& clientInfo = _clients.at(hdl);
+        if (clientInfo.subscribedToConnectionGraph) {
+          clientWasSubscribed = true;
+          clientInfo.subscribedToConnectionGraph = false;
+        }
+      }
+
+      if (clientWasSubscribed) {
         bool unsubscribeFromConnnectionGraph = false;
         {
           std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
