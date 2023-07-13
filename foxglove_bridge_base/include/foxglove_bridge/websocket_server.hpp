@@ -580,40 +580,20 @@ inline void Server<ServerConfiguration>::sendStatusAndLogMsg(ConnHandle clientHa
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePtr msg) {
   const OpCode op = msg->get_opcode();
-
-  try {
-    switch (op) {
-      case OpCode::TEXT: {
-        _handlerCallbackQueue->addCallback([this, hdl, msg]() {
-          try {
-            handleTextMessage(hdl, msg);
-          } catch (const std::exception& e) {
-            sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
-          } catch (...) {
-            sendStatusAndLogMsg(hdl, StatusLevel::Error,
-                                "Exception occurred when executing text message handler");
-          }
-        });
-      } break;
-      case OpCode::BINARY: {
-        _handlerCallbackQueue->addCallback([this, hdl, msg]() {
-          try {
-            handleBinaryMessage(hdl, msg);
-          } catch (const std::exception& e) {
-            sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
-          } catch (...) {
-            sendStatusAndLogMsg(hdl, StatusLevel::Error,
-                                "Exception occurred when executing binary message handler");
-          }
-        });
-      } break;
-      default:
-        break;
+  _handlerCallbackQueue->addCallback([this, hdl, msg, op]() {
+    try {
+      if (op == OpCode::TEXT) {
+        handleTextMessage(hdl, msg);
+      } else if (op == OpCode::BINARY) {
+        handleBinaryMessage(hdl, msg);
+      }
+    } catch (const std::exception& e) {
+      sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+    } catch (...) {
+      sendStatusAndLogMsg(hdl, StatusLevel::Error,
+                          "Exception occurred when executing message handler");
     }
-  } catch (std::exception const& ex) {
-    sendStatusAndLogMsg(hdl, StatusLevel::Error,
-                        std::string{"Error parsing message: "} + ex.what());
-  }
+  });
 }
 
 template <typename ServerConfiguration>
