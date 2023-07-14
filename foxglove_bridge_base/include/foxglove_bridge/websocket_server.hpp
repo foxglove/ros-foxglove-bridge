@@ -40,7 +40,7 @@
 
 namespace {
 
-constexpr uint32_t Integer(const std::string_view str) {
+constexpr uint32_t StringHash(const std::string_view str) {
   uint32_t result = 0x811C9DC5;  // FNV-1a 32-bit algorithm
   for (char c : str) {
     result = (static_cast<uint32_t>(c) ^ result) * 0x01000193;
@@ -48,17 +48,17 @@ constexpr uint32_t Integer(const std::string_view str) {
   return result;
 }
 
-constexpr auto SUBSCRIBE = Integer("subscribe");
-constexpr auto UNSUBSCRIBE = Integer("unsubscribe");
-constexpr auto ADVERTISE = Integer("advertise");
-constexpr auto UNADVERTISE = Integer("unadvertise");
-constexpr auto GET_PARAMETERS = Integer("getParameters");
-constexpr auto SET_PARAMETERS = Integer("setParameters");
-constexpr auto SUBSCRIBE_PARAMETER_UPDATES = Integer("subscribeParameterUpdates");
-constexpr auto UNSUBSCRIBE_PARAMETER_UPDATES = Integer("unsubscribeParameterUpdates");
-constexpr auto SUBSCRIBE_CONNECTION_GRAPH = Integer("subscribeConnectionGraph");
-constexpr auto UNSUBSCRIBE_CONNECTION_GRAPH = Integer("unsubscribeConnectionGraph");
-constexpr auto FETCH_ASSET = Integer("fetchAsset");
+constexpr auto SUBSCRIBE = StringHash("subscribe");
+constexpr auto UNSUBSCRIBE = StringHash("unsubscribe");
+constexpr auto ADVERTISE = StringHash("advertise");
+constexpr auto UNADVERTISE = StringHash("unadvertise");
+constexpr auto GET_PARAMETERS = StringHash("getParameters");
+constexpr auto SET_PARAMETERS = StringHash("setParameters");
+constexpr auto SUBSCRIBE_PARAMETER_UPDATES = StringHash("subscribeParameterUpdates");
+constexpr auto UNSUBSCRIBE_PARAMETER_UPDATES = StringHash("unsubscribeParameterUpdates");
+constexpr auto SUBSCRIBE_CONNECTION_GRAPH = StringHash("subscribeConnectionGraph");
+constexpr auto UNSUBSCRIBE_CONNECTION_GRAPH = StringHash("unsubscribeConnectionGraph");
+constexpr auto FETCH_ASSET = StringHash("fetchAsset");
 }  // namespace
 
 namespace foxglove {
@@ -374,7 +374,11 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
     if (_handlers.clientUnadvertiseHandler) {
       try {
         _handlers.clientUnadvertiseHandler(clientChannelId, hdl);
+      } catch (const std::exception& ex) {
+        _server.get_elog().write(
+          RECOVERABLE, "Exception caught when closing connection: " + std::string(ex.what()));
       } catch (...) {
+        _server.get_elog().write(RECOVERABLE, "Exception caught when closing connection");
       }
     }
   }
@@ -390,7 +394,11 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
       (void)subs;
       try {
         _handlers.unsubscribeHandler(chanId, hdl);
+      } catch (const std::exception& ex) {
+        _server.get_elog().write(
+          RECOVERABLE, "Exception caught when closing connection: " + std::string(ex.what()));
       } catch (...) {
+        _server.get_elog().write(RECOVERABLE, "Exception caught when closing connection");
       }
     }
   }
@@ -411,7 +419,11 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
       _server.get_alog().write(APP, "Unsubscribing from connection graph updates.");
       try {
         _handlers.subscribeConnectionGraphHandler(false);
+      } catch (const std::exception& ex) {
+        _server.get_elog().write(
+          RECOVERABLE, "Exception caught when closing connection: " + std::string(ex.what()));
       } catch (...) {
+        _server.get_elog().write(RECOVERABLE, "Exception caught when closing connection");
       }
     }
   }
@@ -621,7 +633,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
     return;
   }
 
-  if (!hasHandler(Integer(op))) {
+  if (!hasHandler(StringHash(op))) {
     sendStatusAndLogMsg(
       hdl, StatusLevel::Error,
       "Operation '" + op + "' not supported as server handler function is missing");
@@ -629,31 +641,43 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
   }
 
   try {
-    const auto intOp = Integer(op);
-    if (intOp == SUBSCRIBE) {
-      handleSubscribe(payload, hdl);
-    } else if (intOp == UNSUBSCRIBE) {
-      handleUnsubscribe(payload, hdl);
-    } else if (intOp == ADVERTISE) {
-      handleAdvertise(payload, hdl);
-    } else if (intOp == UNADVERTISE) {
-      handleUnadvertise(payload, hdl);
-    } else if (intOp == GET_PARAMETERS) {
-      handleGetParameters(payload, hdl);
-    } else if (intOp == SET_PARAMETERS) {
-      handleSetParameters(payload, hdl);
-    } else if (intOp == SUBSCRIBE_PARAMETER_UPDATES) {
-      handleSubscribeParameterUpdates(payload, hdl);
-    } else if (intOp == UNSUBSCRIBE_PARAMETER_UPDATES) {
-      handleUnsubscribeParameterUpdates(payload, hdl);
-    } else if (intOp == SUBSCRIBE_CONNECTION_GRAPH) {
-      handleSubscribeConnectionGraph(hdl);
-    } else if (intOp == UNSUBSCRIBE_CONNECTION_GRAPH) {
-      handleUnsubscribeConnectionGraph(hdl);
-    } else if (intOp == FETCH_ASSET) {
-      handleFetchAsset(payload, hdl);
-    } else {
-      sendStatusAndLogMsg(hdl, StatusLevel::Error, "Unrecognized client opcode \"" + op + "\"");
+    switch (StringHash(op)) {
+      case SUBSCRIBE:
+        handleSubscribe(payload, hdl);
+        break;
+      case UNSUBSCRIBE:
+        handleUnsubscribe(payload, hdl);
+        break;
+      case ADVERTISE:
+        handleAdvertise(payload, hdl);
+        break;
+      case UNADVERTISE:
+        handleUnadvertise(payload, hdl);
+        break;
+      case GET_PARAMETERS:
+        handleGetParameters(payload, hdl);
+        break;
+      case SET_PARAMETERS:
+        handleSetParameters(payload, hdl);
+        break;
+      case SUBSCRIBE_PARAMETER_UPDATES:
+        handleSubscribeParameterUpdates(payload, hdl);
+        break;
+      case UNSUBSCRIBE_PARAMETER_UPDATES:
+        handleUnsubscribeParameterUpdates(payload, hdl);
+        break;
+      case SUBSCRIBE_CONNECTION_GRAPH:
+        handleSubscribeConnectionGraph(hdl);
+        break;
+      case UNSUBSCRIBE_CONNECTION_GRAPH:
+        handleUnsubscribeConnectionGraph(hdl);
+        break;
+      case FETCH_ASSET:
+        handleFetchAsset(payload, hdl);
+        break;
+      default:
+        sendStatusAndLogMsg(hdl, StatusLevel::Error, "Unrecognized client opcode \"" + op + "\"");
+        break;
     }
   } catch (const ChannelError& e) {
     sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
@@ -1125,25 +1149,25 @@ template <typename ServerConfiguration>
 inline bool Server<ServerConfiguration>::hasHandler(uint32_t op) const {
   switch (op) {
     case SUBSCRIBE:
-      return static_cast<bool>(_handlers.subscribeHandler);
+      return bool(_handlers.subscribeHandler);
     case UNSUBSCRIBE:
-      return static_cast<bool>(_handlers.unsubscribeHandler);
+      return bool(_handlers.unsubscribeHandler);
     case ADVERTISE:
-      return static_cast<bool>(_handlers.clientAdvertiseHandler);
+      return bool(_handlers.clientAdvertiseHandler);
     case UNADVERTISE:
-      return static_cast<bool>(_handlers.clientUnadvertiseHandler);
+      return bool(_handlers.clientUnadvertiseHandler);
     case GET_PARAMETERS:
-      return static_cast<bool>(_handlers.parameterRequestHandler);
+      return bool(_handlers.parameterRequestHandler);
     case SET_PARAMETERS:
-      return static_cast<bool>(_handlers.parameterChangeHandler);
+      return bool(_handlers.parameterChangeHandler);
     case SUBSCRIBE_PARAMETER_UPDATES:
     case UNSUBSCRIBE_PARAMETER_UPDATES:
-      return static_cast<bool>(_handlers.parameterSubscriptionHandler);
+      return bool(_handlers.parameterSubscriptionHandler);
     case SUBSCRIBE_CONNECTION_GRAPH:
     case UNSUBSCRIBE_CONNECTION_GRAPH:
-      return static_cast<bool>(_handlers.subscribeConnectionGraphHandler);
+      return bool(_handlers.subscribeConnectionGraphHandler);
     case FETCH_ASSET:
-      return static_cast<bool>(_handlers.fetchAssetHandler);
+      return bool(_handlers.fetchAssetHandler);
     default:
       throw std::runtime_error("Unknown operation: " + std::to_string(op));
   }
