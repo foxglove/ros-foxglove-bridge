@@ -38,6 +38,29 @@
     }                                                                                          \
   }
 
+namespace {
+
+constexpr uint32_t StringHash(const std::string_view str) {
+  uint32_t result = 0x811C9DC5;  // FNV-1a 32-bit algorithm
+  for (char c : str) {
+    result = (static_cast<uint32_t>(c) ^ result) * 0x01000193;
+  }
+  return result;
+}
+
+constexpr auto SUBSCRIBE = StringHash("subscribe");
+constexpr auto UNSUBSCRIBE = StringHash("unsubscribe");
+constexpr auto ADVERTISE = StringHash("advertise");
+constexpr auto UNADVERTISE = StringHash("unadvertise");
+constexpr auto GET_PARAMETERS = StringHash("getParameters");
+constexpr auto SET_PARAMETERS = StringHash("setParameters");
+constexpr auto SUBSCRIBE_PARAMETER_UPDATES = StringHash("subscribeParameterUpdates");
+constexpr auto UNSUBSCRIBE_PARAMETER_UPDATES = StringHash("unsubscribeParameterUpdates");
+constexpr auto SUBSCRIBE_CONNECTION_GRAPH = StringHash("subscribeConnectionGraph");
+constexpr auto UNSUBSCRIBE_CONNECTION_GRAPH = StringHash("unsubscribeConnectionGraph");
+constexpr auto FETCH_ASSET = StringHash("fetchAsset");
+}  // namespace
+
 namespace foxglove {
 
 using json = nlohmann::json;
@@ -48,14 +71,6 @@ using OpCode = websocketpp::frame::opcode::value;
 static const websocketpp::log::level APP = websocketpp::log::alevel::app;
 static const websocketpp::log::level WARNING = websocketpp::log::elevel::warn;
 static const websocketpp::log::level RECOVERABLE = websocketpp::log::elevel::rerror;
-
-constexpr uint32_t Integer(const std::string_view str) {
-  uint32_t result = 0x811C9DC5;  // FNV-1a 32-bit algorithm
-  for (char c : str) {
-    result = (static_cast<uint32_t>(c) ^ result) * 0x01000193;
-  }
-  return result;
-}
 
 /// Map of required capability by client operation (text).
 const std::unordered_map<std::string, std::string> CAPABILITY_BY_CLIENT_OPERATION = {
@@ -205,6 +220,18 @@ private:
                                              const std::unordered_set<std::string>& paramNames);
   bool isParameterSubscribed(const std::string& paramName) const;
   bool hasCapability(const std::string& capability) const;
+  bool hasHandler(uint32_t op) const;
+  void handleSubscribe(const nlohmann::json& payload, ConnHandle hdl);
+  void handleUnsubscribe(const nlohmann::json& payload, ConnHandle hdl);
+  void handleAdvertise(const nlohmann::json& payload, ConnHandle hdl);
+  void handleUnadvertise(const nlohmann::json& payload, ConnHandle hdl);
+  void handleGetParameters(const nlohmann::json& payload, ConnHandle hdl);
+  void handleSetParameters(const nlohmann::json& payload, ConnHandle hdl);
+  void handleSubscribeParameterUpdates(const nlohmann::json& payload, ConnHandle hdl);
+  void handleUnsubscribeParameterUpdates(const nlohmann::json& payload, ConnHandle hdl);
+  void handleSubscribeConnectionGraph(ConnHandle hdl);
+  void handleUnsubscribeConnectionGraph(ConnHandle hdl);
+  void handleFetchAsset(const nlohmann::json& payload, ConnHandle hdl);
 };
 
 template <typename ServerConfiguration>
@@ -345,7 +372,14 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
     _server.get_alog().write(APP, "Client " + clientName + " unadvertising channel " +
                                     std::to_string(clientChannelId) + " due to disconnect");
     if (_handlers.clientUnadvertiseHandler) {
-      _handlers.clientUnadvertiseHandler(clientChannelId, hdl);
+      try {
+        _handlers.clientUnadvertiseHandler(clientChannelId, hdl);
+      } catch (const std::exception& ex) {
+        _server.get_elog().write(
+          RECOVERABLE, "Exception caught when closing connection: " + std::string(ex.what()));
+      } catch (...) {
+        _server.get_elog().write(RECOVERABLE, "Exception caught when closing connection");
+      }
     }
   }
 
@@ -358,7 +392,14 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
   if (_handlers.unsubscribeHandler) {
     for (const auto& [chanId, subs] : oldSubscriptionsByChannel) {
       (void)subs;
-      _handlers.unsubscribeHandler(chanId, hdl);
+      try {
+        _handlers.unsubscribeHandler(chanId, hdl);
+      } catch (const std::exception& ex) {
+        _server.get_elog().write(
+          RECOVERABLE, "Exception caught when closing connection: " + std::string(ex.what()));
+      } catch (...) {
+        _server.get_elog().write(RECOVERABLE, "Exception caught when closing connection");
+      }
     }
   }
 
@@ -376,7 +417,14 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
     _connectionGraph.subscriptionCount--;
     if (_connectionGraph.subscriptionCount == 0 && _handlers.subscribeConnectionGraphHandler) {
       _server.get_alog().write(APP, "Unsubscribing from connection graph updates.");
-      _handlers.subscribeConnectionGraphHandler(false);
+      try {
+        _handlers.subscribeConnectionGraphHandler(false);
+      } catch (const std::exception& ex) {
+        _server.get_elog().write(
+          RECOVERABLE, "Exception caught when closing connection: " + std::string(ex.what()));
+      } catch (...) {
+        _server.get_elog().write(RECOVERABLE, "Exception caught when closing connection");
+      }
     }
   }
 
@@ -555,40 +603,20 @@ inline void Server<ServerConfiguration>::sendStatusAndLogMsg(ConnHandle clientHa
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePtr msg) {
   const OpCode op = msg->get_opcode();
-
-  try {
-    switch (op) {
-      case OpCode::TEXT: {
-        _handlerCallbackQueue->addCallback([this, hdl, msg]() {
-          try {
-            handleTextMessage(hdl, msg);
-          } catch (const std::exception& e) {
-            sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
-          } catch (...) {
-            sendStatusAndLogMsg(hdl, StatusLevel::Error,
-                                "Exception occurred when executing text message handler");
-          }
-        });
-      } break;
-      case OpCode::BINARY: {
-        _handlerCallbackQueue->addCallback([this, hdl, msg]() {
-          try {
-            handleBinaryMessage(hdl, msg);
-          } catch (const std::exception& e) {
-            sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
-          } catch (...) {
-            sendStatusAndLogMsg(hdl, StatusLevel::Error,
-                                "Exception occurred when executing binary message handler");
-          }
-        });
-      } break;
-      default:
-        break;
+  _handlerCallbackQueue->addCallback([this, hdl, msg, op]() {
+    try {
+      if (op == OpCode::TEXT) {
+        handleTextMessage(hdl, msg);
+      } else if (op == OpCode::BINARY) {
+        handleBinaryMessage(hdl, msg);
+      }
+    } catch (const std::exception& e) {
+      sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+    } catch (...) {
+      sendStatusAndLogMsg(hdl, StatusLevel::Error,
+                          "Exception occurred when executing message handler");
     }
-  } catch (std::exception const& ex) {
-    sendStatusAndLogMsg(hdl, StatusLevel::Error,
-                        std::string{"Error parsing message: "} + ex.what());
-  }
+  });
 }
 
 template <typename ServerConfiguration>
@@ -605,332 +633,58 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
     return;
   }
 
-  std::shared_lock<std::shared_mutex> clientsLock(_clientsMutex);
-  auto& clientInfo = _clients.at(hdl);
-
-  const auto findSubscriptionBySubId = [&clientInfo](SubscriptionId subId) {
-    return std::find_if(clientInfo.subscriptionsByChannel.begin(),
-                        clientInfo.subscriptionsByChannel.end(), [&subId](const auto& mo) {
-                          return mo.second == subId;
-                        });
-  };
-
-  constexpr auto SUBSCRIBE = Integer("subscribe");
-  constexpr auto UNSUBSCRIBE = Integer("unsubscribe");
-  constexpr auto ADVERTISE = Integer("advertise");
-  constexpr auto UNADVERTISE = Integer("unadvertise");
-  constexpr auto GET_PARAMETERS = Integer("getParameters");
-  constexpr auto SET_PARAMETERS = Integer("setParameters");
-  constexpr auto SUBSCRIBE_PARAMETER_UPDATES = Integer("subscribeParameterUpdates");
-  constexpr auto UNSUBSCRIBE_PARAMETER_UPDATES = Integer("unsubscribeParameterUpdates");
-  constexpr auto SUBSCRIBE_CONNECTION_GRAPH = Integer("subscribeConnectionGraph");
-  constexpr auto UNSUBSCRIBE_CONNECTION_GRAPH = Integer("unsubscribeConnectionGraph");
-  constexpr auto FETCH_ASSET = Integer("fetchAsset");
-
-  switch (Integer(op)) {
-    case SUBSCRIBE: {
-      if (!_handlers.subscribeHandler) {
-        return;
-      }
-      for (const auto& sub : payload.at("subscriptions")) {
-        SubscriptionId subId = sub.at("id");
-        ChannelId channelId = sub.at("channelId");
-        if (findSubscriptionBySubId(subId) != clientInfo.subscriptionsByChannel.end()) {
-          sendStatusAndLogMsg(hdl, StatusLevel::Error,
-                              "Client subscription id " + std::to_string(subId) +
-                                " was already used; ignoring subscription");
-          continue;
-        }
-        const auto& channelIt = _channels.find(channelId);
-        if (channelIt == _channels.end()) {
-          sendStatusAndLogMsg(
-            hdl, StatusLevel::Warning,
-            "Channel " + std::to_string(channelId) + " is not available; ignoring subscription");
-          continue;
-        }
-
-        try {
-          _handlers.subscribeHandler(channelId, hdl);
-          clientInfo.subscriptionsByChannel.emplace(channelId, subId);
-        } catch (const ChannelError& e) {
-          sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
-        } catch (...) {
-          sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
-        }
-      }
-    } break;
-    case UNSUBSCRIBE: {
-      if (!_handlers.unsubscribeHandler) {
-        return;
-      }
-      for (const auto& subIdJson : payload.at("subscriptionIds")) {
-        SubscriptionId subId = subIdJson;
-        const auto& sub = findSubscriptionBySubId(subId);
-        if (sub == clientInfo.subscriptionsByChannel.end()) {
-          sendStatusAndLogMsg(hdl, StatusLevel::Warning,
-                              "Client subscription id " + std::to_string(subId) +
-                                " did not exist; ignoring unsubscription");
-          continue;
-        }
-
-        ChannelId chanId = sub->first;
-        try {
-          _handlers.unsubscribeHandler(chanId, hdl);
-          clientInfo.subscriptionsByChannel.erase(sub);
-        } catch (const ChannelError& e) {
-          sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
-        } catch (...) {
-          sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
-        }
-      }
-    } break;
-    case ADVERTISE: {
-      if (!_handlers.clientAdvertiseHandler) {
-        return;
-      }
-      std::unique_lock<std::shared_mutex> clientChannelsLock(_clientChannelsMutex);
-      auto [clientPublicationsIt, isFirstPublication] =
-        _clientChannels.emplace(hdl, std::unordered_map<ClientChannelId, ClientAdvertisement>());
-
-      auto& clientPublications = clientPublicationsIt->second;
-
-      for (const auto& chan : payload.at("channels")) {
-        ClientChannelId channelId = chan.at("id");
-        if (!isFirstPublication && clientPublications.find(channelId) != clientPublications.end()) {
-          sendStatusAndLogMsg(hdl, StatusLevel::Error,
-                              "Channel " + std::to_string(channelId) + " was already advertised");
-          continue;
-        }
-
-        const auto topic = chan.at("topic").get<std::string>();
-        if (!isWhitelisted(topic, _options.clientTopicWhitelistPatterns)) {
-          sendStatusAndLogMsg(hdl, StatusLevel::Error,
-                              "Can't advertise channel " + std::to_string(channelId) + ", topic '" +
-                                topic + "' not whitelisted");
-          continue;
-        }
-        ClientAdvertisement advertisement{};
-        advertisement.channelId = channelId;
-        advertisement.topic = topic;
-        advertisement.encoding = chan.at("encoding").get<std::string>();
-        advertisement.schemaName = chan.at("schemaName").get<std::string>();
-
-        try {
-          _handlers.clientAdvertiseHandler(advertisement, hdl);
-          clientPublications.emplace(channelId, advertisement);
-          clientInfo.advertisedChannels.emplace(channelId);
-        } catch (const ClientChannelError& e) {
-          sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
-        } catch (...) {
-          sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
-        }
-      }
-    } break;
-    case UNADVERTISE: {
-      if (!_handlers.clientUnadvertiseHandler) {
-        return;
-      }
-      std::unique_lock<std::shared_mutex> clientChannelsLock(_clientChannelsMutex);
-      auto clientPublicationsIt = _clientChannels.find(hdl);
-      if (clientPublicationsIt == _clientChannels.end()) {
-        sendStatusAndLogMsg(hdl, StatusLevel::Error, "Client has no advertised channels");
-        break;
-      }
-
-      auto& clientPublications = clientPublicationsIt->second;
-
-      for (const auto& chanIdJson : payload.at("channelIds")) {
-        ClientChannelId channelId = chanIdJson.get<ClientChannelId>();
-        const auto& channelIt = clientPublications.find(channelId);
-        if (channelIt == clientPublications.end()) {
-          continue;
-        }
-
-        try {
-          _handlers.clientUnadvertiseHandler(channelId, hdl);
-          clientPublications.erase(channelIt);
-          const auto advertisedChannelIt = clientInfo.advertisedChannels.find(channelId);
-          if (advertisedChannelIt != clientInfo.advertisedChannels.end()) {
-            clientInfo.advertisedChannels.erase(advertisedChannelIt);
-          }
-        } catch (const ClientChannelError& e) {
-          sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
-        } catch (...) {
-          sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
-        }
-      }
-    } break;
-    case GET_PARAMETERS: {
-      if (!_handlers.parameterRequestHandler) {
-        return;
-      }
-
-      const auto paramNames = payload.at("parameterNames").get<std::vector<std::string>>();
-      const auto requestId = payload.find("id") == payload.end()
-                               ? std::nullopt
-                               : std::optional<std::string>(payload["id"].get<std::string>());
-
-      try {
-        _handlers.parameterRequestHandler(paramNames, requestId, hdl);
-      } catch (const std::exception& e) {
-        sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
-      } catch (...) {
-        sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
-      }
-    } break;
-    case SET_PARAMETERS: {
-      if (!_handlers.parameterChangeHandler) {
-        return;
-      }
-
-      const auto parameters = payload.at("parameters").get<std::vector<Parameter>>();
-      const auto requestId = payload.find("id") == payload.end()
-                               ? std::nullopt
-                               : std::optional<std::string>(payload["id"].get<std::string>());
-      try {
-        _handlers.parameterChangeHandler(parameters, requestId, hdl);
-      } catch (const std::exception& e) {
-        sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
-      } catch (...) {
-        sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
-      }
-    } break;
-    case SUBSCRIBE_PARAMETER_UPDATES: {
-      if (!_handlers.parameterSubscriptionHandler) {
-        return;
-      }
-
-      const auto paramNames = payload.at("parameterNames").get<std::unordered_set<std::string>>();
-      std::vector<std::string> paramsToSubscribe;
-      {
-        // Only consider parameters that are not subscribed yet (by this or by other clients)
-        std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
-        std::copy_if(paramNames.begin(), paramNames.end(), std::back_inserter(paramsToSubscribe),
-                     [this](const std::string& paramName) {
-                       return !isParameterSubscribed(paramName);
-                     });
-
-        // Update the client's parameter subscriptions.
-        auto& clientSubscribedParams = _clientParamSubscriptions[hdl];
-        clientSubscribedParams.insert(paramNames.begin(), paramNames.end());
-      }
-
-      if (paramsToSubscribe.empty()) {
-        return;
-      }
-
-      try {
-        _handlers.parameterSubscriptionHandler(paramsToSubscribe,
-                                               ParameterSubscriptionOperation::SUBSCRIBE, hdl);
-      } catch (const std::exception& e) {
-        sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
-      } catch (...) {
-        sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
-      }
-    } break;
-    case UNSUBSCRIBE_PARAMETER_UPDATES: {
-      if (!_handlers.parameterSubscriptionHandler) {
-        return;
-      }
-
-      const auto paramNames = payload.at("parameterNames").get<std::unordered_set<std::string>>();
-      {
-        std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
-        auto& clientSubscribedParams = _clientParamSubscriptions[hdl];
-        for (const auto& paramName : paramNames) {
-          clientSubscribedParams.erase(paramName);
-        }
-      }
-
-      unsubscribeParamsWithoutSubscriptions(hdl, paramNames);
-    } break;
-    case SUBSCRIBE_CONNECTION_GRAPH: {
-      if (!_handlers.subscribeConnectionGraphHandler) {
-        return;
-      }
-
-      bool subscribeToConnnectionGraph = false;
-      {
-        std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
-        _connectionGraph.subscriptionCount++;
-        subscribeToConnnectionGraph = _connectionGraph.subscriptionCount == 1;
-      }
-
-      if (subscribeToConnnectionGraph) {
-        // First subscriber, let the handler know that we are interested in updates.
-        _server.get_alog().write(APP, "Subscribing to connection graph updates.");
-        _handlers.subscribeConnectionGraphHandler(true);
-        clientInfo.subscribedToConnectionGraph = true;
-      }
-
-      json::array_t publishedTopicsJson, subscribedTopicsJson, advertisedServicesJson;
-      {
-        std::shared_lock<std::shared_mutex> lock(_connectionGraphMutex);
-        for (const auto& [name, ids] : _connectionGraph.publishedTopics) {
-          publishedTopicsJson.push_back(nlohmann::json{{"name", name}, {"publisherIds", ids}});
-        }
-        for (const auto& [name, ids] : _connectionGraph.subscribedTopics) {
-          subscribedTopicsJson.push_back(nlohmann::json{{"name", name}, {"subscriberIds", ids}});
-        }
-        for (const auto& [name, ids] : _connectionGraph.advertisedServices) {
-          advertisedServicesJson.push_back(nlohmann::json{{"name", name}, {"providerIds", ids}});
-        }
-      }
-
-      const json jsonMsg = {
-        {"op", "connectionGraphUpdate"},
-        {"publishedTopics", publishedTopicsJson},
-        {"subscribedTopics", subscribedTopicsJson},
-        {"advertisedServices", advertisedServicesJson},
-        {"removedTopics", json::array()},
-        {"removedServices", json::array()},
-      };
-
-      sendJsonRaw(hdl, jsonMsg.dump());
-    } break;
-    case UNSUBSCRIBE_CONNECTION_GRAPH: {
-      if (!_handlers.subscribeConnectionGraphHandler) {
-        return;
-      }
-
-      if (clientInfo.subscribedToConnectionGraph) {
-        clientInfo.subscribedToConnectionGraph = false;
-        bool unsubscribeFromConnnectionGraph = false;
-        {
-          std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
-          _connectionGraph.subscriptionCount--;
-          unsubscribeFromConnnectionGraph = _connectionGraph.subscriptionCount == 0;
-        }
-        if (unsubscribeFromConnnectionGraph) {
-          _server.get_alog().write(APP, "Unsubscribing from connection graph updates.");
-          _handlers.subscribeConnectionGraphHandler(false);
-        }
-      } else {
-        sendStatusAndLogMsg(hdl, StatusLevel::Error,
-                            "Client was not subscribed to connection graph updates");
-      }
-    } break;
-    case FETCH_ASSET: {
-      if (!_handlers.fetchAssetHandler) {
-        return;
-      }
-
-      const auto uri = payload.at("uri").get<std::string>();
-      const auto requestId = payload.at("requestId").get<uint32_t>();
-
-      try {
-        _handlers.fetchAssetHandler(uri, requestId, hdl);
-      } catch (const std::exception& e) {
-        sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
-      } catch (...) {
-        sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
-      }
-    } break;
-    default: {
-      sendStatusAndLogMsg(hdl, StatusLevel::Error, "Unrecognized client opcode \"" + op + "\"");
-    } break;
+  if (!hasHandler(StringHash(op))) {
+    sendStatusAndLogMsg(
+      hdl, StatusLevel::Error,
+      "Operation '" + op + "' not supported as server handler function is missing");
+    return;
   }
-}
+
+  try {
+    switch (StringHash(op)) {
+      case SUBSCRIBE:
+        handleSubscribe(payload, hdl);
+        break;
+      case UNSUBSCRIBE:
+        handleUnsubscribe(payload, hdl);
+        break;
+      case ADVERTISE:
+        handleAdvertise(payload, hdl);
+        break;
+      case UNADVERTISE:
+        handleUnadvertise(payload, hdl);
+        break;
+      case GET_PARAMETERS:
+        handleGetParameters(payload, hdl);
+        break;
+      case SET_PARAMETERS:
+        handleSetParameters(payload, hdl);
+        break;
+      case SUBSCRIBE_PARAMETER_UPDATES:
+        handleSubscribeParameterUpdates(payload, hdl);
+        break;
+      case UNSUBSCRIBE_PARAMETER_UPDATES:
+        handleUnsubscribeParameterUpdates(payload, hdl);
+        break;
+      case SUBSCRIBE_CONNECTION_GRAPH:
+        handleSubscribeConnectionGraph(hdl);
+        break;
+      case UNSUBSCRIBE_CONNECTION_GRAPH:
+        handleUnsubscribeConnectionGraph(hdl);
+        break;
+      case FETCH_ASSET:
+        handleFetchAsset(payload, hdl);
+        break;
+      default:
+        sendStatusAndLogMsg(hdl, StatusLevel::Error, "Unrecognized client opcode \"" + op + "\"");
+        break;
+    }
+  } catch (const ChannelError& e) {
+    sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+  } catch (...) {
+    sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
+  }
+}  // namespace foxglove
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, MessagePtr msg) {
@@ -1389,6 +1143,312 @@ template <typename ServerConfiguration>
 inline bool Server<ServerConfiguration>::hasCapability(const std::string& capability) const {
   return std::find(_options.capabilities.begin(), _options.capabilities.end(), capability) !=
          _options.capabilities.end();
+}
+
+template <typename ServerConfiguration>
+inline bool Server<ServerConfiguration>::hasHandler(uint32_t op) const {
+  switch (op) {
+    case SUBSCRIBE:
+      return bool(_handlers.subscribeHandler);
+    case UNSUBSCRIBE:
+      return bool(_handlers.unsubscribeHandler);
+    case ADVERTISE:
+      return bool(_handlers.clientAdvertiseHandler);
+    case UNADVERTISE:
+      return bool(_handlers.clientUnadvertiseHandler);
+    case GET_PARAMETERS:
+      return bool(_handlers.parameterRequestHandler);
+    case SET_PARAMETERS:
+      return bool(_handlers.parameterChangeHandler);
+    case SUBSCRIBE_PARAMETER_UPDATES:
+    case UNSUBSCRIBE_PARAMETER_UPDATES:
+      return bool(_handlers.parameterSubscriptionHandler);
+    case SUBSCRIBE_CONNECTION_GRAPH:
+    case UNSUBSCRIBE_CONNECTION_GRAPH:
+      return bool(_handlers.subscribeConnectionGraphHandler);
+    case FETCH_ASSET:
+      return bool(_handlers.fetchAssetHandler);
+    default:
+      throw std::runtime_error("Unknown operation: " + std::to_string(op));
+  }
+}
+
+template <typename ServerConfiguration>
+void Server<ServerConfiguration>::handleSubscribe(const nlohmann::json& payload, ConnHandle hdl) {
+  std::unordered_map<ChannelId, SubscriptionId> clientSubscriptionsByChannel;
+  {
+    std::shared_lock<std::shared_mutex> clientsLock(_clientsMutex);
+    clientSubscriptionsByChannel = _clients.at(hdl).subscriptionsByChannel;
+  }
+
+  const auto findSubscriptionBySubId =
+    [](const std::unordered_map<ChannelId, SubscriptionId>& subscriptionsByChannel,
+       SubscriptionId subId) {
+      return std::find_if(subscriptionsByChannel.begin(), subscriptionsByChannel.end(),
+                          [&subId](const auto& mo) {
+                            return mo.second == subId;
+                          });
+    };
+
+  for (const auto& sub : payload.at("subscriptions")) {
+    SubscriptionId subId = sub.at("id");
+    ChannelId channelId = sub.at("channelId");
+    if (findSubscriptionBySubId(clientSubscriptionsByChannel, subId) !=
+        clientSubscriptionsByChannel.end()) {
+      sendStatusAndLogMsg(hdl, StatusLevel::Error,
+                          "Client subscription id " + std::to_string(subId) +
+                            " was already used; ignoring subscription");
+      continue;
+    }
+    const auto& channelIt = _channels.find(channelId);
+    if (channelIt == _channels.end()) {
+      sendStatusAndLogMsg(
+        hdl, StatusLevel::Warning,
+        "Channel " + std::to_string(channelId) + " is not available; ignoring subscription");
+      continue;
+    }
+
+    _handlers.subscribeHandler(channelId, hdl);
+    std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+    _clients.at(hdl).subscriptionsByChannel.emplace(channelId, subId);
+  }
+}
+
+template <typename ServerConfiguration>
+void Server<ServerConfiguration>::handleUnsubscribe(const nlohmann::json& payload, ConnHandle hdl) {
+  std::unordered_map<ChannelId, SubscriptionId> clientSubscriptionsByChannel;
+  {
+    std::shared_lock<std::shared_mutex> clientsLock(_clientsMutex);
+    clientSubscriptionsByChannel = _clients.at(hdl).subscriptionsByChannel;
+  }
+
+  const auto findSubscriptionBySubId =
+    [](const std::unordered_map<ChannelId, SubscriptionId>& subscriptionsByChannel,
+       SubscriptionId subId) {
+      return std::find_if(subscriptionsByChannel.begin(), subscriptionsByChannel.end(),
+                          [&subId](const auto& mo) {
+                            return mo.second == subId;
+                          });
+    };
+
+  for (const auto& subIdJson : payload.at("subscriptionIds")) {
+    SubscriptionId subId = subIdJson;
+    const auto& sub = findSubscriptionBySubId(clientSubscriptionsByChannel, subId);
+    if (sub == clientSubscriptionsByChannel.end()) {
+      sendStatusAndLogMsg(hdl, StatusLevel::Warning,
+                          "Client subscription id " + std::to_string(subId) +
+                            " did not exist; ignoring unsubscription");
+      continue;
+    }
+
+    ChannelId chanId = sub->first;
+    _handlers.unsubscribeHandler(chanId, hdl);
+    std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+    _clients.at(hdl).subscriptionsByChannel.erase(sub);
+  }
+}
+
+template <typename ServerConfiguration>
+void Server<ServerConfiguration>::handleAdvertise(const nlohmann::json& payload, ConnHandle hdl) {
+  std::unique_lock<std::shared_mutex> clientChannelsLock(_clientChannelsMutex);
+  auto [clientPublicationsIt, isFirstPublication] =
+    _clientChannels.emplace(hdl, std::unordered_map<ClientChannelId, ClientAdvertisement>());
+
+  auto& clientPublications = clientPublicationsIt->second;
+
+  for (const auto& chan : payload.at("channels")) {
+    ClientChannelId channelId = chan.at("id");
+    if (!isFirstPublication && clientPublications.find(channelId) != clientPublications.end()) {
+      sendStatusAndLogMsg(hdl, StatusLevel::Error,
+                          "Channel " + std::to_string(channelId) + " was already advertised");
+      continue;
+    }
+
+    const auto topic = chan.at("topic").get<std::string>();
+    if (!isWhitelisted(topic, _options.clientTopicWhitelistPatterns)) {
+      sendStatusAndLogMsg(hdl, StatusLevel::Error,
+                          "Can't advertise channel " + std::to_string(channelId) + ", topic '" +
+                            topic + "' not whitelisted");
+      continue;
+    }
+    ClientAdvertisement advertisement{};
+    advertisement.channelId = channelId;
+    advertisement.topic = topic;
+    advertisement.encoding = chan.at("encoding").get<std::string>();
+    advertisement.schemaName = chan.at("schemaName").get<std::string>();
+
+    _handlers.clientAdvertiseHandler(advertisement, hdl);
+    std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+    _clients.at(hdl).advertisedChannels.emplace(channelId);
+    clientPublications.emplace(channelId, advertisement);
+  }
+}
+
+template <typename ServerConfiguration>
+void Server<ServerConfiguration>::handleUnadvertise(const nlohmann::json& payload, ConnHandle hdl) {
+  std::unique_lock<std::shared_mutex> clientChannelsLock(_clientChannelsMutex);
+  auto clientPublicationsIt = _clientChannels.find(hdl);
+  if (clientPublicationsIt == _clientChannels.end()) {
+    sendStatusAndLogMsg(hdl, StatusLevel::Error, "Client has no advertised channels");
+    return;
+  }
+
+  auto& clientPublications = clientPublicationsIt->second;
+
+  for (const auto& chanIdJson : payload.at("channelIds")) {
+    ClientChannelId channelId = chanIdJson.get<ClientChannelId>();
+    const auto& channelIt = clientPublications.find(channelId);
+    if (channelIt == clientPublications.end()) {
+      continue;
+    }
+
+    _handlers.clientUnadvertiseHandler(channelId, hdl);
+    std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+    auto& clientInfo = _clients.at(hdl);
+    clientPublications.erase(channelIt);
+    const auto advertisedChannelIt = clientInfo.advertisedChannels.find(channelId);
+    if (advertisedChannelIt != clientInfo.advertisedChannels.end()) {
+      clientInfo.advertisedChannels.erase(advertisedChannelIt);
+    }
+  }
+}
+
+template <typename ServerConfiguration>
+void Server<ServerConfiguration>::handleGetParameters(const nlohmann::json& payload,
+                                                      ConnHandle hdl) {
+  const auto paramNames = payload.at("parameterNames").get<std::vector<std::string>>();
+  const auto requestId = payload.find("id") == payload.end()
+                           ? std::nullopt
+                           : std::optional<std::string>(payload["id"].get<std::string>());
+  _handlers.parameterRequestHandler(paramNames, requestId, hdl);
+}
+
+template <typename ServerConfiguration>
+void Server<ServerConfiguration>::handleSetParameters(const nlohmann::json& payload,
+                                                      ConnHandle hdl) {
+  const auto parameters = payload.at("parameters").get<std::vector<Parameter>>();
+  const auto requestId = payload.find("id") == payload.end()
+                           ? std::nullopt
+                           : std::optional<std::string>(payload["id"].get<std::string>());
+  _handlers.parameterChangeHandler(parameters, requestId, hdl);
+}
+
+template <typename ServerConfiguration>
+void Server<ServerConfiguration>::handleSubscribeParameterUpdates(const nlohmann::json& payload,
+                                                                  ConnHandle hdl) {
+  const auto paramNames = payload.at("parameterNames").get<std::unordered_set<std::string>>();
+  std::vector<std::string> paramsToSubscribe;
+  {
+    // Only consider parameters that are not subscribed yet (by this or by other clients)
+    std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
+    std::copy_if(paramNames.begin(), paramNames.end(), std::back_inserter(paramsToSubscribe),
+                 [this](const std::string& paramName) {
+                   return !isParameterSubscribed(paramName);
+                 });
+
+    // Update the client's parameter subscriptions.
+    auto& clientSubscribedParams = _clientParamSubscriptions[hdl];
+    clientSubscribedParams.insert(paramNames.begin(), paramNames.end());
+  }
+
+  if (!paramsToSubscribe.empty()) {
+    _handlers.parameterSubscriptionHandler(paramsToSubscribe,
+                                           ParameterSubscriptionOperation::SUBSCRIBE, hdl);
+  }
+}
+
+template <typename ServerConfiguration>
+void Server<ServerConfiguration>::handleUnsubscribeParameterUpdates(const nlohmann::json& payload,
+                                                                    ConnHandle hdl) {
+  const auto paramNames = payload.at("parameterNames").get<std::unordered_set<std::string>>();
+  {
+    std::lock_guard<std::mutex> lock(_clientParamSubscriptionsMutex);
+    auto& clientSubscribedParams = _clientParamSubscriptions[hdl];
+    for (const auto& paramName : paramNames) {
+      clientSubscribedParams.erase(paramName);
+    }
+  }
+
+  unsubscribeParamsWithoutSubscriptions(hdl, paramNames);
+}
+
+template <typename ServerConfiguration>
+void Server<ServerConfiguration>::handleSubscribeConnectionGraph(ConnHandle hdl) {
+  bool subscribeToConnnectionGraph = false;
+  {
+    std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
+    _connectionGraph.subscriptionCount++;
+    subscribeToConnnectionGraph = _connectionGraph.subscriptionCount == 1;
+  }
+
+  if (subscribeToConnnectionGraph) {
+    // First subscriber, let the handler know that we are interested in updates.
+    _server.get_alog().write(APP, "Subscribing to connection graph updates.");
+    _handlers.subscribeConnectionGraphHandler(true);
+    std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+    _clients.at(hdl).subscribedToConnectionGraph = true;
+  }
+
+  json::array_t publishedTopicsJson, subscribedTopicsJson, advertisedServicesJson;
+  {
+    std::shared_lock<std::shared_mutex> lock(_connectionGraphMutex);
+    for (const auto& [name, ids] : _connectionGraph.publishedTopics) {
+      publishedTopicsJson.push_back(nlohmann::json{{"name", name}, {"publisherIds", ids}});
+    }
+    for (const auto& [name, ids] : _connectionGraph.subscribedTopics) {
+      subscribedTopicsJson.push_back(nlohmann::json{{"name", name}, {"subscriberIds", ids}});
+    }
+    for (const auto& [name, ids] : _connectionGraph.advertisedServices) {
+      advertisedServicesJson.push_back(nlohmann::json{{"name", name}, {"providerIds", ids}});
+    }
+  }
+
+  const json jsonMsg = {
+    {"op", "connectionGraphUpdate"},
+    {"publishedTopics", publishedTopicsJson},
+    {"subscribedTopics", subscribedTopicsJson},
+    {"advertisedServices", advertisedServicesJson},
+    {"removedTopics", json::array()},
+    {"removedServices", json::array()},
+  };
+
+  sendJsonRaw(hdl, jsonMsg.dump());
+}
+
+template <typename ServerConfiguration>
+void Server<ServerConfiguration>::handleUnsubscribeConnectionGraph(ConnHandle hdl) {
+  bool clientWasSubscribed = false;
+  {
+    std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+    auto& clientInfo = _clients.at(hdl);
+    if (clientInfo.subscribedToConnectionGraph) {
+      clientWasSubscribed = true;
+      clientInfo.subscribedToConnectionGraph = false;
+    }
+  }
+
+  if (clientWasSubscribed) {
+    bool unsubscribeFromConnnectionGraph = false;
+    {
+      std::unique_lock<std::shared_mutex> lock(_connectionGraphMutex);
+      _connectionGraph.subscriptionCount--;
+      unsubscribeFromConnnectionGraph = _connectionGraph.subscriptionCount == 0;
+    }
+    if (unsubscribeFromConnnectionGraph) {
+      _server.get_alog().write(APP, "Unsubscribing from connection graph updates.");
+      _handlers.subscribeConnectionGraphHandler(false);
+    }
+  } else {
+    sendStatusAndLogMsg(hdl, StatusLevel::Error,
+                        "Client was not subscribed to connection graph updates");
+  }
+}
+
+template <typename ServerConfiguration>
+void Server<ServerConfiguration>::handleFetchAsset(const nlohmann::json& payload, ConnHandle hdl) {
+  const auto uri = payload.at("uri").get<std::string>();
+  const auto requestId = payload.at("requestId").get<uint32_t>();
+  _handlers.fetchAssetHandler(uri, requestId, hdl);
 }
 
 template <typename ServerConfiguration>
