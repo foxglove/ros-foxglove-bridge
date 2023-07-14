@@ -80,10 +80,24 @@ TEST(SmokeTest, testSubscription) {
   // Connect a few clients and make sure that they receive the correct message
   const auto clientCount = 3;
   for (auto i = 0; i < clientCount; ++i) {
-    std::vector<uint8_t> msgData;
-    ASSERT_NO_THROW(msgData = foxglove::connectClientAndReceiveMsg(URI, topic_name));
+    // Set up a client and subscribe to the channel.
+    auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+    auto channelFuture = foxglove::waitForChannel(client, topic_name);
+    ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
+    ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(ONE_SECOND));
+    const foxglove::Channel channel = channelFuture.get();
+    const foxglove::SubscriptionId subscriptionId = 1;
+
+    // Subscribe to the channel and confirm that the promise resolves
+    auto msgFuture = waitForChannelMsg(client.get(), subscriptionId);
+    client->subscribe({{subscriptionId, channel.id}});
+    ASSERT_EQ(std::future_status::ready, msgFuture.wait_for(ONE_SECOND));
+    const auto msgData = msgFuture.get();
     ASSERT_EQ(sizeof(HELLO_WORLD_BINARY), msgData.size());
     EXPECT_EQ(0, std::memcmp(HELLO_WORLD_BINARY, msgData.data(), msgData.size()));
+
+    // Unsubscribe from the channel again.
+    client->unsubscribe({subscriptionId});
   }
 }
 
@@ -95,11 +109,24 @@ TEST(SmokeTest, testSubscriptionParallel) {
   pub.publish(std::string("hello world"));
 
   // Connect a few clients (in parallel) and make sure that they receive the correct message
+  const foxglove::SubscriptionId subscriptionId = 1;
+  auto clients = {
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+  };
+
   std::vector<std::future<std::vector<uint8_t>>> futures;
-  const auto clientCount = 3;
-  for (auto i = 0; i < clientCount; ++i) {
-    futures.push_back(
-      std::async(std::launch::async, foxglove::connectClientAndReceiveMsg, URI, topic_name));
+  for (auto client : clients) {
+    futures.push_back(waitForChannelMsg(client.get(), subscriptionId));
+  }
+
+  for (auto client : clients) {
+    auto channelFuture = foxglove::waitForChannel(client, topic_name);
+    ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
+    ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(ONE_SECOND));
+    const foxglove::Channel channel = channelFuture.get();
+    client->subscribe({{subscriptionId, channel.id}});
   }
 
   for (auto& future : futures) {
@@ -107,6 +134,10 @@ TEST(SmokeTest, testSubscriptionParallel) {
     auto msgData = future.get();
     ASSERT_EQ(sizeof(HELLO_WORLD_BINARY), msgData.size());
     EXPECT_EQ(0, std::memcmp(HELLO_WORLD_BINARY, msgData.data(), msgData.size()));
+  }
+
+  for (auto client : clients) {
+    client->unsubscribe({subscriptionId});
   }
 }
 
