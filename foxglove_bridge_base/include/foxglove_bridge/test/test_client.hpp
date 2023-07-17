@@ -11,8 +11,8 @@
 
 namespace foxglove {
 
-std::vector<uint8_t> connectClientAndReceiveMsg(const std::string& uri,
-                                                const std::string& topic_name);
+std::future<std::vector<uint8_t>> waitForChannelMsg(ClientInterface* client,
+                                                    SubscriptionId subscriptionId);
 
 std::future<std::vector<Parameter>> waitForParameters(std::shared_ptr<ClientInterface> client,
                                                       const std::string& requestId = std::string());
