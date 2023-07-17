@@ -1244,7 +1244,7 @@ void Server<ServerConfiguration>::handleUnsubscribe(const nlohmann::json& payloa
     ChannelId chanId = sub->first;
     _handlers.unsubscribeHandler(chanId, hdl);
     std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
-    _clients.at(hdl).subscriptionsByChannel.erase(sub);
+    _clients.at(hdl).subscriptionsByChannel.erase(chanId);
   }
 }
 
