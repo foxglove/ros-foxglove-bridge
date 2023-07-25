@@ -46,6 +46,8 @@ inline uint32_t ReadUint32LE(const uint8_t* buf) {
 
 void to_json(nlohmann::json& j, const Channel& c);
 void from_json(const nlohmann::json& j, Channel& c);
+void to_json(nlohmann::json& j, const ParameterValue& p);
+void from_json(const nlohmann::json& j, ParameterValue& p);
 void to_json(nlohmann::json& j, const Parameter& p);
 void from_json(const nlohmann::json& j, Parameter& p);
 void to_json(nlohmann::json& j, const Service& p);

@@ -23,12 +23,13 @@ constexpr char PARAM_USE_COMPRESSION[] = "use_compression";
 constexpr char PARAM_CAPABILITIES[] = "capabilities";
 constexpr char PARAM_CLIENT_TOPIC_WHITELIST[] = "client_topic_whitelist";
 constexpr char PARAM_INCLUDE_HIDDEN[] = "include_hidden";
+constexpr char PARAM_ASSET_URI_ALLOWLIST[] = "asset_uri_allowlist";
 
 constexpr int64_t DEFAULT_PORT = 8765;
 constexpr char DEFAULT_ADDRESS[] = "0.0.0.0";
 constexpr int64_t DEFAULT_SEND_BUFFER_LIMIT = 10000000;
 constexpr int64_t DEFAULT_MIN_QOS_DEPTH = 1;
-constexpr int64_t DEFAULT_MAX_QOS_DEPTH = 10;
+constexpr int64_t DEFAULT_MAX_QOS_DEPTH = 25;
 
 void declareParameters(rclcpp::Node* node);
 

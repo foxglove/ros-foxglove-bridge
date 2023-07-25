@@ -17,6 +17,31 @@ constexpr size_t DEFAULT_SEND_BUFFER_LIMIT_BYTES = 10000000UL;  // 10 MB
 
 using MapOfSets = std::unordered_map<std::string, std::unordered_set<std::string>>;
 
+template <typename IdType>
+class ExeptionWithId : public std::runtime_error {
+public:
+  explicit ExeptionWithId(IdType id, const std::string& what_arg)
+      : std::runtime_error(what_arg)
+      , _id(id) {}
+
+  IdType id() const {
+    return _id;
+  }
+
+private:
+  IdType _id;
+};
+
+class ChannelError : public ExeptionWithId<ChannelId> {
+  using ExeptionWithId::ExeptionWithId;
+};
+class ClientChannelError : public ExeptionWithId<ClientChannelId> {
+  using ExeptionWithId::ExeptionWithId;
+};
+class ServiceError : public ExeptionWithId<ServiceId> {
+  using ExeptionWithId::ExeptionWithId;
+};
+
 struct ServerOptions {
   std::vector<std::string> capabilities;
   std::vector<std::string> supportedEncodings;
@@ -48,6 +73,7 @@ struct ServerHandlers {
     parameterSubscriptionHandler;
   std::function<void(const ServiceRequest&, ConnectionHandle)> serviceRequestHandler;
   std::function<void(bool)> subscribeConnectionGraphHandler;
+  std::function<void(const std::string&, uint32_t, ConnectionHandle)> fetchAssetHandler;
 };
 
 template <typename ConnectionHandle>
@@ -76,6 +102,8 @@ public:
   virtual void updateConnectionGraph(const MapOfSets& publishedTopics,
                                      const MapOfSets& subscribedTopics,
                                      const MapOfSets& advertisedServices) = 0;
+  virtual void sendFetchAssetResponse(ConnectionHandle clientHandle,
+                                      const FetchAssetResponse& response) = 0;
 
   virtual uint16_t getPort() = 0;
   virtual std::string remoteEndpointString(ConnectionHandle clientHandle) = 0;

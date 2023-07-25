@@ -9,7 +9,7 @@ if(POLICY CMP0024)
   set(CMAKE_POLICY_DEFAULT_CMP0024 NEW)
 endif()
 
-project(foxglove_bridge LANGUAGES CXX VERSION 0.5.3)
+project(foxglove_bridge LANGUAGES CXX VERSION 0.7.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -35,6 +35,16 @@ find_package(ZLIB REQUIRED)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
+
+# Determine wheter to use standalone or boost asio
+option(USE_ASIO_STANDALONE "Build with standalone ASIO" ON)
+if(USE_ASIO_STANDALONE)
+  message(STATUS "Using standalone ASIO")
+  add_definitions(-DASIO_STANDALONE)
+else()
+  message(STATUS "Using Boost ASIO")
+  find_package(Boost REQUIRED)
+endif(USE_ASIO_STANDALONE)
 
 # Detect big-endian architectures
 include(TestBigEndian)
@@ -96,13 +106,13 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
     message(STATUS "Building with catkin")
     set(ROS_BUILD_TYPE "catkin")
 
-    find_package(catkin REQUIRED COMPONENTS nodelet ros_babel_fish rosgraph_msgs roslib roscpp)
+    find_package(catkin REQUIRED COMPONENTS nodelet resource_retriever ros_babel_fish rosgraph_msgs roslib roscpp)
     find_package(Boost REQUIRED)
 
     catkin_package(
       INCLUDE_DIRS foxglove_bridge_base/include
       LIBRARIES foxglove_bridge_base foxglove_bridge_nodelet
-      CATKIN_DEPENDS nodelet ros_babel_fish rosgraph_msgs roslib roscpp
+      CATKIN_DEPENDS nodelet resource_retriever ros_babel_fish rosgraph_msgs roslib roscpp
       DEPENDS Boost
     )
 
@@ -138,6 +148,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     find_package(rosgraph_msgs REQUIRED)
     find_package(rclcpp REQUIRED)
     find_package(rclcpp_components REQUIRED)
+    find_package(resource_retriever REQUIRED)
 
     add_library(foxglove_bridge_component SHARED
       ros2_foxglove_bridge/src/message_definition_cache.cpp
@@ -152,7 +163,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include>
         $<INSTALL_INTERFACE:include>
     )
-    ament_target_dependencies(foxglove_bridge_component rclcpp rclcpp_components rosgraph_msgs)
+    ament_target_dependencies(foxglove_bridge_component rclcpp rclcpp_components resource_retriever rosgraph_msgs)
     target_link_libraries(foxglove_bridge_component foxglove_bridge_base)
     rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
     enable_strict_compiler_warnings(foxglove_bridge_component)
@@ -180,17 +191,18 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
       find_package(GTest REQUIRED)
     endif()
     find_package(rostest REQUIRED)
+    find_package(Boost REQUIRED COMPONENTS system)
 
     catkin_add_gtest(version_test foxglove_bridge_base/tests/version_test.cpp)
-    target_link_libraries(version_test foxglove_bridge_base)
+    target_link_libraries(version_test foxglove_bridge_base ${Boost_LIBRARIES})
     enable_strict_compiler_warnings(version_test)
 
     catkin_add_gtest(serialization_test foxglove_bridge_base/tests/serialization_test.cpp)
-    target_link_libraries(serialization_test foxglove_bridge_base)
+    target_link_libraries(serialization_test foxglove_bridge_base ${Boost_LIBRARIES})
     enable_strict_compiler_warnings(foxglove_bridge)
 
     catkin_add_gtest(base64_test foxglove_bridge_base/tests/base64_test.cpp)
-    target_link_libraries(base64_test foxglove_bridge_base)
+    target_link_libraries(base64_test foxglove_bridge_base ${Boost_LIBRARIES})
     enable_strict_compiler_warnings(foxglove_bridge)
 
     add_rostest_gtest(smoke_test ros1_foxglove_bridge/tests/smoke.test ros1_foxglove_bridge/tests/smoke_test.cpp)
@@ -247,6 +259,9 @@ if(ROS_BUILD_TYPE STREQUAL "catkin")
       DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
     )
 elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
+    install(FILES ros2_foxglove_bridge/include/foxglove_bridge/ros2_foxglove_bridge.hpp
+      DESTINATION include/${PROJECT_NAME}/
+    )
     install(TARGETS foxglove_bridge
       DESTINATION lib/${PROJECT_NAME}
     )
@@ -255,8 +270,11 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
       LIBRARY DESTINATION lib
       RUNTIME DESTINATION bin
     )
-    install(DIRECTORY ros2_foxglove_bridge/launch/
+    install(DIRECTORY ros2_foxglove_bridge/launch
       DESTINATION share/${PROJECT_NAME}/
+    )
+    install(FILES ros2_foxglove_bridge/include/foxglove_bridge/utils.hpp
+      DESTINATION include/${PROJECT_NAME}/
     )
     ament_export_libraries(foxglove_bridge_base foxglove_bridge_component)
     ament_package()

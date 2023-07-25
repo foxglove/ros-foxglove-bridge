@@ -146,6 +146,16 @@ void declareParameters(rclcpp::Node* node) {
   includeHiddenDescription.description = "Include hidden topics and services";
   includeHiddenDescription.read_only = true;
   node->declare_parameter(PARAM_INCLUDE_HIDDEN, false, includeHiddenDescription);
+
+  auto assetUriAllowlistDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  assetUriAllowlistDescription.name = PARAM_ASSET_URI_ALLOWLIST;
+  assetUriAllowlistDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  assetUriAllowlistDescription.description =
+    "List of regular expressions (ECMAScript) of whitelisted asset URIs.";
+  assetUriAllowlistDescription.read_only = true;
+  node->declare_parameter(PARAM_ASSET_URI_ALLOWLIST,
+                          std::vector<std::string>({"package://(/?\\w+)+\\.(dae|stl|urdf|xacro)"}),
+                          paramWhiteListDescription);
 }
 
 std::vector<std::regex> parseRegexStrings(rclcpp::Node* node,
