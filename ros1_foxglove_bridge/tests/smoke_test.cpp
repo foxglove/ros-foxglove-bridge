@@ -1,9 +1,8 @@
-#define ASIO_STANDALONE
-
 #include <chrono>
 #include <future>
 #include <thread>
 
+#include <boost/filesystem.hpp>
 #include <gtest/gtest.h>
 #include <ros/ros.h>
 #include <std_msgs/builtin_string.h>
@@ -81,10 +80,24 @@ TEST(SmokeTest, testSubscription) {
   // Connect a few clients and make sure that they receive the correct message
   const auto clientCount = 3;
   for (auto i = 0; i < clientCount; ++i) {
-    std::vector<uint8_t> msgData;
-    ASSERT_NO_THROW(msgData = foxglove::connectClientAndReceiveMsg(URI, topic_name));
+    // Set up a client and subscribe to the channel.
+    auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+    auto channelFuture = foxglove::waitForChannel(client, topic_name);
+    ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
+    ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(ONE_SECOND));
+    const foxglove::Channel channel = channelFuture.get();
+    const foxglove::SubscriptionId subscriptionId = 1;
+
+    // Subscribe to the channel and confirm that the promise resolves
+    auto msgFuture = waitForChannelMsg(client.get(), subscriptionId);
+    client->subscribe({{subscriptionId, channel.id}});
+    ASSERT_EQ(std::future_status::ready, msgFuture.wait_for(ONE_SECOND));
+    const auto msgData = msgFuture.get();
     ASSERT_EQ(sizeof(HELLO_WORLD_BINARY), msgData.size());
     EXPECT_EQ(0, std::memcmp(HELLO_WORLD_BINARY, msgData.data(), msgData.size()));
+
+    // Unsubscribe from the channel again.
+    client->unsubscribe({subscriptionId});
   }
 }
 
@@ -96,11 +109,24 @@ TEST(SmokeTest, testSubscriptionParallel) {
   pub.publish(std::string("hello world"));
 
   // Connect a few clients (in parallel) and make sure that they receive the correct message
+  const foxglove::SubscriptionId subscriptionId = 1;
+  auto clients = {
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+  };
+
   std::vector<std::future<std::vector<uint8_t>>> futures;
-  const auto clientCount = 3;
-  for (auto i = 0; i < clientCount; ++i) {
-    futures.push_back(
-      std::async(std::launch::async, foxglove::connectClientAndReceiveMsg, URI, topic_name));
+  for (auto client : clients) {
+    futures.push_back(waitForChannelMsg(client.get(), subscriptionId));
+  }
+
+  for (auto client : clients) {
+    auto channelFuture = foxglove::waitForChannel(client, topic_name);
+    ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
+    ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(ONE_SECOND));
+    const foxglove::Channel channel = channelFuture.get();
+    client->subscribe({{subscriptionId, channel.id}});
   }
 
   for (auto& future : futures) {
@@ -108,6 +134,10 @@ TEST(SmokeTest, testSubscriptionParallel) {
     auto msgData = future.get();
     ASSERT_EQ(sizeof(HELLO_WORLD_BINARY), msgData.size());
     EXPECT_EQ(0, std::memcmp(HELLO_WORLD_BINARY, msgData.data(), msgData.size()));
+  }
+
+  for (auto client : clients) {
+    client->unsubscribe({subscriptionId});
   }
 }
 
@@ -178,14 +208,20 @@ TEST_F(ParameterTest, testGetParameters) {
     return param.getName() == PARAM_2_NAME;
   });
   ASSERT_NE(p1Iter, params.end());
-  EXPECT_EQ(PARAM_1_DEFAULT_VALUE, p1Iter->getValue<PARAM_1_TYPE>());
+  EXPECT_EQ(PARAM_1_DEFAULT_VALUE, p1Iter->getValue().getValue<PARAM_1_TYPE>());
   ASSERT_NE(p2Iter, params.end());
-  EXPECT_EQ(PARAM_2_DEFAULT_VALUE, p2Iter->getValue<PARAM_2_TYPE>());
+
+  std::vector<double> double_array_val;
+  const auto array_params = p2Iter->getValue().getValue<std::vector<foxglove::ParameterValue>>();
+  for (const auto& paramValue : array_params) {
+    double_array_val.push_back(paramValue.getValue<double>());
+  }
+  EXPECT_EQ(double_array_val, PARAM_2_DEFAULT_VALUE);
 }
 
 TEST_F(ParameterTest, testSetParameters) {
   const PARAM_1_TYPE newP1value = "world";
-  const PARAM_2_TYPE newP2value = {4.1, 5.5, 6.6};
+  const std::vector<foxglove::ParameterValue> newP2value = {4.1, 5.5, 6.6};
 
   const std::vector<foxglove::Parameter> parameters = {
     foxglove::Parameter(PARAM_1_NAME, newP1value),
@@ -207,9 +243,16 @@ TEST_F(ParameterTest, testSetParameters) {
     return param.getName() == PARAM_2_NAME;
   });
   ASSERT_NE(p1Iter, params.end());
-  EXPECT_EQ(newP1value, p1Iter->getValue<PARAM_1_TYPE>());
+  EXPECT_EQ(newP1value, p1Iter->getValue().getValue<PARAM_1_TYPE>());
   ASSERT_NE(p2Iter, params.end());
-  EXPECT_EQ(newP2value, p2Iter->getValue<PARAM_2_TYPE>());
+
+  std::vector<double> double_array_val;
+  const auto array_params = p2Iter->getValue().getValue<std::vector<foxglove::ParameterValue>>();
+  for (const auto& paramValue : array_params) {
+    double_array_val.push_back(paramValue.getValue<double>());
+  }
+  const std::vector<double> expected_value = {4.1, 5.5, 6.6};
+  EXPECT_EQ(double_array_val, expected_value);
 }
 
 TEST_F(ParameterTest, testSetParametersWithReqId) {
@@ -330,6 +373,52 @@ TEST_F(ServiceTest, testCallServiceParallel) {
     EXPECT_EQ(response.encoding, request.encoding);
     EXPECT_EQ(response.data, expectedSerializedResponse);
   }
+}
+
+TEST(FetchAssetTest, fetchExistingAsset) {
+  auto wsClient = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  EXPECT_EQ(std::future_status::ready, wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
+
+  const auto millisSinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(
+    std::chrono::system_clock::now().time_since_epoch());
+  const auto tmpFilePath =
+    boost::filesystem::temp_directory_path() / std::to_string(millisSinceEpoch.count());
+  constexpr char content[] = "Hello, world";
+  FILE* tmpAssetFile = std::fopen(tmpFilePath.c_str(), "w");
+  std::fputs(content, tmpAssetFile);
+  std::fclose(tmpAssetFile);
+
+  const std::string uri = std::string("file://") + tmpFilePath.string();
+  const uint32_t requestId = 123;
+
+  auto future = foxglove::waitForFetchAssetResponse(wsClient);
+  wsClient->fetchAsset(uri, requestId);
+  ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
+  const foxglove::FetchAssetResponse response = future.get();
+
+  EXPECT_EQ(response.requestId, requestId);
+  EXPECT_EQ(response.status, foxglove::FetchAssetStatus::Success);
+  // +1 since NULL terminator is not written to file.
+  ASSERT_EQ(response.data.size() + 1ul, sizeof(content));
+  EXPECT_EQ(0, std::memcmp(content, response.data.data(), response.data.size()));
+  std::remove(tmpFilePath.c_str());
+}
+
+TEST(FetchAssetTest, fetchNonExistingAsset) {
+  auto wsClient = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  EXPECT_EQ(std::future_status::ready, wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
+
+  const std::string assetId = "file:///foo/bar";
+  const uint32_t requestId = 456;
+
+  auto future = foxglove::waitForFetchAssetResponse(wsClient);
+  wsClient->fetchAsset(assetId, requestId);
+  ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
+  const foxglove::FetchAssetResponse response = future.get();
+
+  EXPECT_EQ(response.requestId, requestId);
+  EXPECT_EQ(response.status, foxglove::FetchAssetStatus::Error);
+  EXPECT_FALSE(response.errorMessage.empty());
 }
 
 // Run all the tests that were declared with TEST()

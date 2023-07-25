@@ -8,14 +8,15 @@
 #include <thread>
 #include <vector>
 
-#include <rclcpp/logging.hpp>
+#include "websocket_logging.hpp"
 
-namespace foxglove_bridge {
+namespace foxglove {
 
 class CallbackQueue {
 public:
-  CallbackQueue(size_t numThreads = 1)
-      : _quit(false) {
+  CallbackQueue(LogCallback logCallback, size_t numThreads = 1)
+      : _logCallback(logCallback)
+      , _quit(false) {
     for (size_t i = 0; i < numThreads; ++i) {
       _workerThreads.push_back(std::thread(&CallbackQueue::doWork, this));
     }
@@ -59,13 +60,17 @@ private:
           cb();
         } catch (const std::exception& ex) {
           // Should never get here if we catch all exceptions in the callbacks.
-          RCLCPP_ERROR(rclcpp::get_logger("foxglove_bridge"),
-                       "Caught unhandled exception in calback_queue: %s", ex.what());
+          const std::string msg =
+            std::string("Caught unhandled exception in calback_queue") + ex.what();
+          _logCallback(WebSocketLogLevel::Error, msg.c_str());
+        } catch (...) {
+          _logCallback(WebSocketLogLevel::Error, "Caught unhandled exception in calback_queue");
         }
       }
     }
   }
 
+  LogCallback _logCallback;
   std::atomic<bool> _quit;
   std::mutex _mutex;
   std::condition_variable _cv;
@@ -73,4 +78,4 @@ private:
   std::vector<std::thread> _workerThreads;
 };
 
-}  // namespace foxglove_bridge
+}  // namespace foxglove

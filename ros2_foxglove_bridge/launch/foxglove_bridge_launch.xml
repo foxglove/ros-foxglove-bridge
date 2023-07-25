@@ -13,8 +13,9 @@
   <arg name="num_threads"               default="0" />
   <arg name="send_buffer_limit"         default="10000000" />
   <arg name="use_sim_time"              default="false" />
-  <arg name="capabilities"              default="[clientPublish,parameters,parametersSubscribe,services,connectionGraph]" />
+  <arg name="capabilities"              default="[clientPublish,parameters,parametersSubscribe,services,connectionGraph,assets]" />
   <arg name="include_hidden"            default="false" />
+  <arg name="asset_uri_allowlist"       default="['package://(\\w+/?)+\\.(dae|stl|urdf|xacro)']" />  <!-- Needs double-escape -->
 
   <node pkg="foxglove_bridge" exec="foxglove_bridge">
     <param name="port"                    value="$(var port)" />
@@ -33,5 +34,6 @@
     <param name="use_sim_time"            value="$(var use_sim_time)" />
     <param name="capabilities"            value="$(var capabilities)" />
     <param name="include_hidden"          value="$(var include_hidden)" />
+    <param name="asset_uri_allowlist"     value="$(var asset_uri_allowlist)" />
   </node>
 </launch>

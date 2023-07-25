@@ -18,7 +18,7 @@ COPY package.xml src/ros-foxglove-bridge/
 
 # Install rosdep dependencies
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
-    apt-get update && rosdep update && rosdep install -y \
+    apt-get update && rosdep update --include-eol-distros && rosdep install -y \
       --from-paths \
         src \
       --ignore-src \
@@ -30,9 +30,11 @@ COPY foxglove_bridge_base src/ros-foxglove-bridge/foxglove_bridge_base
 COPY nodelets.xml src/ros-foxglove-bridge/nodelets.xml
 COPY ros1_foxglove_bridge src/ros-foxglove-bridge/ros1_foxglove_bridge
 
+ARG USE_ASIO_STANDALONE=ON
+
 # Build the Catkin workspace
 RUN . /opt/ros/$ROS_DISTRO/setup.sh \
-  && catkin_make
+  && catkin_make -DUSE_ASIO_STANDALONE=$USE_ASIO_STANDALONE
 
 # source workspace from entrypoint
 RUN sed --in-place \

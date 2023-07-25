@@ -2,6 +2,53 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.0 (2023-07-12)
+------------------
+* Fix ROS2 launch file install rule not installing launch subfolder (`#243 <https://github.com/foxglove/ros-foxglove-bridge/issues/243>`_)
+* Support building with boost asio (`#247 <https://github.com/foxglove/ros-foxglove-bridge/issues/247>`_)
+* Avoid usage of tmpnam() for creating random filename (`#246 <https://github.com/foxglove/ros-foxglove-bridge/issues/246>`_)
+* Implement ws-protocol's `fetchAsset` specification (`#232 <https://github.com/foxglove/ros-foxglove-bridge/issues/232>`_)
+* Use `--include-eol-distros` for `rosdep` to fix melodic builds (`#244 <https://github.com/foxglove/ros-foxglove-bridge/issues/244>`_)
+* Reduce logging severity for parameter retrieval logs (`#240 <https://github.com/foxglove/ros-foxglove-bridge/issues/240>`_)
+* Contributors: Hans-Joachim Krauch, Micah Guttman
+
+0.6.4 (2023-07-05)
+------------------
+* Assume publisher qos depth of 1 if the middleware reports the qos history as unknown (`#239 <https://github.com/foxglove/ros-foxglove-bridge/issues/239>`_)
+* devcontainer: Use `--include-eol-distros` for `rosdep update` (`#237 <https://github.com/foxglove/ros-foxglove-bridge/issues/237>`_)
+* Contributors: Hans-Joachim Krauch
+
+0.6.3 (2023-06-16)
+------------------
+* Add iron build to CI (`#234 <https://github.com/foxglove/ros-foxglove-bridge/issues/234>`_)
+* Fix QoS history being unknown when copied from existing publisher (`#233 <https://github.com/foxglove/ros-foxglove-bridge/issues/233>`_)
+* Extract ROS 2 bridge header (`#228 <https://github.com/foxglove/ros-foxglove-bridge/issues/228>`_)
+* Contributors: Hans-Joachim Krauch, Milan Vukov
+
+0.6.2 (2023-05-11)
+------------------
+* Fix connection graph updates to due incorrect use of std::set_difference (`#226 <https://github.com/foxglove/ros-foxglove-bridge/issues/226>`_)
+* Contributors: Ivan Nenakhov
+
+0.6.1 (2023-05-05)
+------------------
+* Fix warning messages not being logged (`#224 <https://github.com/foxglove/ros-foxglove-bridge/issues/224>`_)
+* Contributors: Hans-Joachim Krauch
+
+0.6.0 (2023-05-04)
+------------------
+* Add support for nested parameters (ROS1) (`#221 <https://github.com/foxglove/ros-foxglove-bridge/issues/221>`_)
+* Catch exceptions thrown in handler functions, send status to client (`#210 <https://github.com/foxglove/ros-foxglove-bridge/issues/210>`_)
+* Fix unhandled xmlrpc exception (`#218 <https://github.com/foxglove/ros-foxglove-bridge/issues/218>`_)
+* Add support for action topic and services (ROS2) (`#214 <https://github.com/foxglove/ros-foxglove-bridge/issues/214>`_)
+* Add parameter to include hidden topics and services (ROS 2) (`#216 <https://github.com/foxglove/ros-foxglove-bridge/issues/216>`_)
+* Add workaround for publishers not being cleaned up after they got destroyed (`#215 <https://github.com/foxglove/ros-foxglove-bridge/issues/215>`_)
+* Fix error when compiling with C++20 (`#212 <https://github.com/foxglove/ros-foxglove-bridge/issues/212>`_)
+* Devcontainer improvements (`#213 <https://github.com/foxglove/ros-foxglove-bridge/issues/213>`_)
+* Add parameter for minimum subscription QoS depth (`#211 <https://github.com/foxglove/ros-foxglove-bridge/issues/211>`_)
+* Log version and commit hash when node is started (`#209 <https://github.com/foxglove/ros-foxglove-bridge/issues/209>`_)
+* Contributors: Hans-Joachim Krauch
+
 0.5.3 (2023-03-31)
 ------------------
 * Fix publishers being created with invalid QoS profile (`#205 <https://github.com/foxglove/ros-foxglove-bridge/issues/205>`_)
