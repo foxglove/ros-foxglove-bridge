@@ -679,10 +679,15 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
         sendStatusAndLogMsg(hdl, StatusLevel::Error, "Unrecognized client opcode \"" + op + "\"");
         break;
     }
-  } catch (const ChannelError& e) {
-    sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+  } catch (const ExeptionWithId<uint32_t>& e) {
+    const std::string postfix = " (op: " + op + ", id: " + std::to_string(e.id()) + ")";
+    sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what() + postfix);
+  } catch (const std::exception& e) {
+    const std::string postfix = " (op: " + op + ")";
+    sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what() + postfix);
   } catch (...) {
-    sendStatusAndLogMsg(hdl, StatusLevel::Error, op + ": Failed to execute handler");
+    const std::string postfix = " (op: " + op + ")";
+    sendStatusAndLogMsg(hdl, StatusLevel::Error, "Failed to execute handler" + postfix);
   }
 }  // namespace foxglove
 
