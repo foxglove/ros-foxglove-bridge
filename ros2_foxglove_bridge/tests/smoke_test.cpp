@@ -34,6 +34,14 @@ public:
   inline static const std::string PARAM_2_NAME = "int_array_param";
   inline static const PARAM_2_TYPE PARAM_2_DEFAULT_VALUE = {1, 2, 3};
 
+  using PARAM_3_TYPE = double;
+  inline static const std::string PARAM_3_NAME = "float_param";
+  inline static const PARAM_3_TYPE PARAM_3_DEFAULT_VALUE = 1.123;
+
+  using PARAM_4_TYPE = std::vector<double>;
+  inline static const std::string PARAM_4_NAME = "float_array_param";
+  inline static const PARAM_4_TYPE PARAM_4_DEFAULT_VALUE = {1.1, 2.2, 3.3};
+
 protected:
   void SetUp() override {
     auto nodeOptions = rclcpp::NodeOptions();
@@ -52,6 +60,8 @@ protected:
     p2Param.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER_ARRAY;
     p2Param.read_only = false;
     _paramNode2->declare_parameter(p2Param.name, PARAM_2_DEFAULT_VALUE, p2Param);
+    _paramNode2->declare_parameter(PARAM_3_NAME, PARAM_3_DEFAULT_VALUE);
+    _paramNode2->declare_parameter(PARAM_4_NAME, PARAM_4_DEFAULT_VALUE);
 
     _executor.add_node(_paramNode1);
     _executor.add_node(_paramNode2);
@@ -417,6 +427,47 @@ TEST_F(ParameterTest, testSetParametersWithReqId) {
   std::vector<foxglove::Parameter> params = future.get();
 
   EXPECT_EQ(1UL, params.size());
+}
+
+TEST_F(ParameterTest, testSetFloatParametersWithIntegers) {
+  const auto floatParamName = NODE_2_NAME + "." + PARAM_3_NAME;
+  const auto floatArrayParamName = NODE_2_NAME + "." + PARAM_4_NAME;
+  const int64_t floatParamVal = 10;
+  const std::vector<int64_t> floatArrayParamVal = {3, 2, 1};
+  const std::string requestId = "req-testSetFloatParametersWithIntegers";
+  auto future = foxglove::waitForParameters(_wsClient, requestId);
+  const nlohmann::json::array_t parameters = {
+    {{"name", floatParamName}, {"value", floatParamVal}, {"type", "float64"}},
+    {{"name", floatArrayParamName}, {"value", floatArrayParamVal}, {"type", "float64_array"}},
+  };
+  _wsClient->sendText(
+    nlohmann::json{{"op", "setParameters"}, {"id", requestId}, {"parameters", parameters}}.dump());
+  ASSERT_EQ(std::future_status::ready, future.wait_for(ONE_SECOND));
+  std::vector<foxglove::Parameter> params = future.get();
+
+  {
+    const auto param =
+      std::find_if(params.begin(), params.end(), [floatParamName](const foxglove::Parameter& p) {
+        return p.getName() == floatParamName;
+      });
+    ASSERT_NE(param, params.end());
+    EXPECT_EQ(param->getType(), foxglove::ParameterType::PARAMETER_DOUBLE);
+    EXPECT_NEAR(param->getValue().getValue<double>(), static_cast<double>(floatParamVal), 1e-9);
+  }
+  {
+    const auto param = std::find_if(params.begin(), params.end(),
+                                    [floatArrayParamName](const foxglove::Parameter& p) {
+                                      return p.getName() == floatArrayParamName;
+                                    });
+    ASSERT_NE(param, params.end());
+    EXPECT_EQ(param->getType(), foxglove::ParameterType::PARAMETER_ARRAY);
+    const auto paramValue = param->getValue().getValue<std::vector<foxglove::ParameterValue>>();
+    ASSERT_EQ(paramValue.size(), floatArrayParamVal.size());
+    for (size_t i = 0; i < paramValue.size(); ++i) {
+      EXPECT_NEAR(paramValue[i].getValue<double>(), static_cast<double>(floatArrayParamVal[i]),
+                  1e-9);
+    }
+  }
 }
 
 TEST_F(ParameterTest, testUnsetParameter) {
