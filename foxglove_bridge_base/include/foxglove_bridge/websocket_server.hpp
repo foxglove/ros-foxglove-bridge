@@ -256,14 +256,20 @@ inline Server<ServerConfiguration>::Server(std::string name, LogCallback logger,
   this->setupTlsHandler();
   _server.set_validate_handler(std::bind(&Server::validateConnection, this, std::placeholders::_1));
   _server.set_open_handler(std::bind(&Server::handleConnectionOpened, this, std::placeholders::_1));
-  _server.set_close_handler(
-    std::bind(&Server::handleConnectionClosed, this, std::placeholders::_1));
-  _server.set_message_handler(
-    std::bind(&Server::handleMessage, this, std::placeholders::_1, std::placeholders::_2));
+  _server.set_close_handler([this](ConnHandle hdl) {
+    _handlerCallbackQueue->addCallback([this, hdl]() {
+      this->handleConnectionClosed(hdl);
+    });
+  });
+  _server.set_message_handler([this](ConnHandle hdl, MessagePtr msg) {
+    _handlerCallbackQueue->addCallback([this, hdl, msg]() {
+      this->handleMessage(hdl, msg);
+    });
+  });
   _server.set_reuse_addr(true);
   _server.set_listen_backlog(128);
 
-  // Callback queue for handling client requests.
+  // Callback queue for handling client requests and disconnections.
   _handlerCallbackQueue = std::make_unique<CallbackQueue>(_logger, /*numThreads=*/1ul);
 }
 
@@ -603,20 +609,18 @@ inline void Server<ServerConfiguration>::sendStatusAndLogMsg(ConnHandle clientHa
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::handleMessage(ConnHandle hdl, MessagePtr msg) {
   const OpCode op = msg->get_opcode();
-  _handlerCallbackQueue->addCallback([this, hdl, msg, op]() {
-    try {
-      if (op == OpCode::TEXT) {
-        handleTextMessage(hdl, msg);
-      } else if (op == OpCode::BINARY) {
-        handleBinaryMessage(hdl, msg);
-      }
-    } catch (const std::exception& e) {
-      sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
-    } catch (...) {
-      sendStatusAndLogMsg(hdl, StatusLevel::Error,
-                          "Exception occurred when executing message handler");
+  try {
+    if (op == OpCode::TEXT) {
+      handleTextMessage(hdl, msg);
+    } else if (op == OpCode::BINARY) {
+      handleBinaryMessage(hdl, msg);
     }
-  });
+  } catch (const std::exception& e) {
+    sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+  } catch (...) {
+    sendStatusAndLogMsg(hdl, StatusLevel::Error,
+                        "Exception occurred when executing message handler");
+  }
 }
 
 template <typename ServerConfiguration>
