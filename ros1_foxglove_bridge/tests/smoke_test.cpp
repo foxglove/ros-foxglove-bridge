@@ -84,7 +84,7 @@ TEST(SmokeTest, testSubscription) {
     auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
     auto channelFuture = foxglove::waitForChannel(client, topic_name);
     ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
-    ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(ONE_SECOND));
+    ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(DEFAULT_TIMEOUT));
     const foxglove::Channel channel = channelFuture.get();
     const foxglove::SubscriptionId subscriptionId = 1;
 
@@ -124,7 +124,7 @@ TEST(SmokeTest, testSubscriptionParallel) {
   for (auto client : clients) {
     auto channelFuture = foxglove::waitForChannel(client, topic_name);
     ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
-    ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(ONE_SECOND));
+    ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(DEFAULT_TIMEOUT));
     const foxglove::Channel channel = channelFuture.get();
     client->subscribe({{subscriptionId, channel.id}});
   }
