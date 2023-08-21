@@ -113,7 +113,7 @@ void from_json(const nlohmann::json& j, Parameter& p) {
         value = ParameterValue(static_cast<double>(value.getValue<int64_t>()));
       } else if (value.getType() != ParameterType::PARAMETER_DOUBLE) {
         throw std::runtime_error("Parameter '" + name +
-                                 "' (float64_array) contains non-float elements.");
+                                 "' (float64_array) contains non-numeric elements.");
       }
     }
     p = Parameter(name, values);
