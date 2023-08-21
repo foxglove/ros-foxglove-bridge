@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.7.1 (2023-08-21)
+------------------
 * Communicate double / double array parameters with type info, explicitly cast when set from integer (`#256 <https://github.com/foxglove/ros-foxglove-bridge/issues/256>`_)
 * Make ROS 2 smoke tests less flaky (`#260 <https://github.com/foxglove/ros-foxglove-bridge/issues/260>`_)
 * Add debug config for ros2 smoke test (`#257 <https://github.com/foxglove/ros-foxglove-bridge/issues/257>`_)
