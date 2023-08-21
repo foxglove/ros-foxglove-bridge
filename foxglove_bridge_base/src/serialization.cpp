@@ -77,6 +77,13 @@ void to_json(nlohmann::json& j, const Parameter& p) {
   j["name"] = p.getName();
   if (p.getType() == ParameterType::PARAMETER_BYTE_ARRAY) {
     j["type"] = "byte_array";
+  } else if (p.getType() == ParameterType::PARAMETER_DOUBLE) {
+    j["type"] = "float64";
+  } else if (p.getType() == ParameterType::PARAMETER_ARRAY) {
+    const auto& vec = p.getValue().getValue<std::vector<ParameterValue>>();
+    if (!vec.empty() && vec.front().getType() == ParameterType::PARAMETER_DOUBLE) {
+      j["type"] = "float64_array";
+    }
   }
 }
 
@@ -90,10 +97,26 @@ void from_json(const nlohmann::json& j, Parameter& p) {
 
   ParameterValue pValue;
   from_json(j["value"], pValue);
+  const auto typeIt = j.find("type");
+  const std::string type = typeIt != j.end() ? typeIt->get<std::string>() : "";
 
-  if (j.find("type") != j.end() && j["type"] == "byte_array" &&
-      pValue.getType() == ParameterType::PARAMETER_STRING) {
+  if (pValue.getType() == ParameterType::PARAMETER_STRING && type == "byte_array") {
     p = Parameter(name, base64Decode(pValue.getValue<std::string>()));
+  } else if (pValue.getType() == ParameterType::PARAMETER_INTEGER && type == "float64") {
+    // Explicitly cast integer value to double.
+    p = Parameter(name, static_cast<double>(pValue.getValue<int64_t>()));
+  } else if (pValue.getType() == ParameterType::PARAMETER_ARRAY && type == "float64_array") {
+    // Explicitly cast elements to double, if possible.
+    auto values = pValue.getValue<std::vector<ParameterValue>>();
+    for (ParameterValue& value : values) {
+      if (value.getType() == ParameterType::PARAMETER_INTEGER) {
+        value = ParameterValue(static_cast<double>(value.getValue<int64_t>()));
+      } else if (value.getType() != ParameterType::PARAMETER_DOUBLE) {
+        throw std::runtime_error("Parameter '" + name +
+                                 "' (float64_array) contains non-numeric elements.");
+      }
+    }
+    p = Parameter(name, values);
   } else {
     p = Parameter(name, pValue);
   }
