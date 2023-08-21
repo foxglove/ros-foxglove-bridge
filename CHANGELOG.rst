@@ -2,6 +2,16 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.1 (2023-08-21)
+------------------
+* Communicate double / double array parameters with type info, explicitly cast when set from integer (`#256 <https://github.com/foxglove/ros-foxglove-bridge/issues/256>`_)
+* Make ROS 2 smoke tests less flaky (`#260 <https://github.com/foxglove/ros-foxglove-bridge/issues/260>`_)
+* Add debug config for ros2 smoke test (`#257 <https://github.com/foxglove/ros-foxglove-bridge/issues/257>`_)
+* Handle client disconnection in message handler thread (`#259 <https://github.com/foxglove/ros-foxglove-bridge/issues/259>`_)
+* Reduce smoke test flakiness (`#258 <https://github.com/foxglove/ros-foxglove-bridge/issues/258>`_)
+* Server code improvements (`#250 <https://github.com/foxglove/ros-foxglove-bridge/issues/250>`_)
+* Contributors: Hans-Joachim Krauch
+
 0.7.0 (2023-07-12)
 ------------------
 * Fix ROS2 launch file install rule not installing launch subfolder (`#243 <https://github.com/foxglove/ros-foxglove-bridge/issues/243>`_)
