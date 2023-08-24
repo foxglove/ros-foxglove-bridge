@@ -1,0 +1,218 @@
+name: foxglove-bridge
+adopt-info: foxglove-bridge
+license: MIT
+summary: The foxglove-bridge snap
+description: |
+  The foxglove-bridge.
+
+grade: stable
+confinement: strict
+base: core22
+
+issues: https://github.com/foxglove/ros-foxglove-bridge/issues
+website: https://foxglove.dev/
+
+architectures:
+  - build-on: amd64
+  - build-on: arm64
+
+apps:
+  foxglove-bridge:
+    command: usr/bin/launch.sh
+    daemon: simple
+    plugs: [network, network-bind]
+    extensions: [ros2-humble]
+
+  reset-config:
+    command: usr/bin/reset_config.sh
+
+parts:
+  foxglove-bridge:
+    plugin: colcon
+    colcon-cmake-args:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_TESTING=OFF
+    source: .
+    override-pull: |
+        craftctl default
+
+        version="$(git describe --always --tags| sed -e 's/^v//;s/-/+git/;y/-/./')"
+        [ -n "$(echo $version | grep "+git")" ] && grade=devel || grade=stable
+        craftctl set version="$version"
+        craftctl set grade="$grade"
+    stage-packages:
+      - ros-humble-ros2launch
+      # Messages definition are required to bridge them.
+      # No custom message is going to be support for now
+      - ros-humble-ackermann-msgs
+      - ros-humble-action-msgs
+      - ros-humble-actionlib-msgs
+      - ros-humble-actuator-msgs
+      - ros-humble-apriltag-msgs
+      - ros-humble-aruco-msgs
+      - ros-humble-aruco-opencv-msgs
+      - ros-humble-automotive-autonomy-msgs
+      - ros-humble-automotive-navigation-msgs
+      - ros-humble-automotive-platform-msgs
+      - ros-humble-autoware-auto-msgs
+      - ros-humble-can-msgs
+      - ros-humble-cartographer-ros-msgs
+      - ros-humble-cascade-lifecycle-msgs
+      - ros-humble-clearpath-msgs
+      - ros-humble-clearpath-platform-msgs
+      - ros-humble-control-msgs
+      - ros-humble-controller-manager-msgs
+      - ros-humble-create-msgs
+      - ros-humble-dataspeed-dbw-msgs
+      - ros-humble-dataspeed-ulc-msgs
+      - ros-humble-dbw-fca-msgs
+      - ros-humble-dbw-ford-msgs
+      - ros-humble-dbw-polaris-msgs
+      - ros-humble-delphi-esr-msgs
+      - ros-humble-delphi-mrr-msgs
+      - ros-humble-delphi-srr-msgs
+      - ros-humble-depthai-ros-msgs
+      - ros-humble-derived-object-msgs
+      - ros-humble-diagnostic-msgs
+      - ros-humble-dwb-msgs
+      - ros-humble-dynamixel-workbench-msgs
+      - ros-humble-event-camera-msgs
+      - ros-humble-flexbe-msgs
+      - ros-humble-flir-camera-msgs
+      - ros-humble-foros-msgs
+      - ros-humble-four-wheel-steering-msgs
+      - ros-humble-foxglove-msgs
+      - ros-humble-gazebo-msgs
+      - ros-humble-geographic-msgs
+      - ros-humble-geometry-msgs
+      - ros-humble-gps-msgs
+      - ros-humble-graph-msgs
+      - ros-humble-grasping-msgs
+      - ros-humble-grbl-msgs
+      - ros-humble-grid-map-msgs
+      - ros-humble-ibeo-msgs
+      - ros-humble-irobot-create-msgs
+      - ros-humble-kartech-linear-actuator-msgs
+      - ros-humble-leo-msgs
+      - ros-humble-lgsvl-msgs
+      - ros-humble-lifecycle-msgs
+      - ros-humble-map-msgs
+      - ros-humble-marker-msgs
+      - ros-humble-marti-can-msgs
+      - ros-humble-marti-common-msgs
+      - ros-humble-marti-dbw-msgs
+      - ros-humble-marti-introspection-msgs
+      - ros-humble-marti-nav-msgs
+      - ros-humble-marti-perception-msgs
+      - ros-humble-marti-sensor-msgs
+      - ros-humble-marti-status-msgs
+      - ros-humble-marti-visualization-msgs
+      - ros-humble-marvelmind-ros2-msgs
+      - ros-humble-mavros-msgs
+      - ros-humble-micro-ros-diagnostic-msgs
+      - ros-humble-micro-ros-msgs
+      - ros-humble-microstrain-inertial-msgs
+      - ros-humble-mobileye-560-660-msgs
+      - ros-humble-moveit-msgs
+      - ros-humble-mrpt-msgs
+      - ros-humble-nao-command-msgs
+      - ros-humble-nao-sensor-msgs
+      - ros-humble-nav-2d-msgs
+      - ros-humble-nav-msgs
+      - ros-humble-nav2-msgs
+      - ros-humble-neobotix-usboard-msgs
+      - ros-humble-nmea-msgs
+      - ros-humble-novatel-gps-msgs
+      - ros-humble-novatel-oem7-msgs
+      - ros-humble-object-recognition-msgs
+      - ros-humble-octomap-msgs
+      - ros-humble-ouster-msgs
+      - ros-humble-pal-statistics-msgs
+      - ros-humble-pcl-msgs
+      - ros-humble-pendulum-msgs
+      - ros-humble-phidgets-msgs
+      - ros-humble-plansys2-msgs
+      - ros-humble-play-motion2-msgs
+      - ros-humble-plotjuggler-msgs
+      - ros-humble-polygon-msgs
+      - ros-humble-radar-msgs
+      - ros-humble-raspimouse-msgs
+      - ros-humble-rc-common-msgs
+      - ros-humble-rc-reason-msgs
+      - ros-humble-rclpy-message-converter-msgs
+      - ros-humble-rcss3d-agent-msgs
+      - ros-humble-realsense2-camera-msgs
+      - ros-humble-rmf-api-msgs
+      - ros-humble-rmf-building-map-msgs
+      - ros-humble-rmf-charger-msgs
+      - ros-humble-rmf-dispenser-msgs
+      - ros-humble-rmf-door-msgs
+      - ros-humble-rmf-fleet-msgs
+      - ros-humble-rmf-ingestor-msgs
+      - ros-humble-rmf-lift-msgs
+      - ros-humble-rmf-obstacle-msgs
+      - ros-humble-rmf-scheduler-msgs
+      - ros-humble-rmf-site-map-msgs
+      - ros-humble-rmf-task-msgs
+      - ros-humble-rmf-traffic-msgs
+      - ros-humble-rmf-visualization-msgs
+      - ros-humble-rmf-workcell-msgs
+      - ros-humble-robot-calibration-msgs
+      - ros-humble-robot-controllers-msgs
+      - ros-humble-rosapi-msgs
+      - ros-humble-rosbridge-msgs
+      - ros-humble-rosbridge-test-msgs
+      - ros-humble-rosgraph-msgs
+      - ros-humble-rqt-image-overlay
+      - ros-humble-rtabmap-msgs
+      - ros-humble-rtcm-msgs
+      - ros-humble-rviz-2d-overlay-msgs
+      - ros-humble-sensor-msgs
+      - ros-humble-shape-msgs
+      - ros-humble-smacc2-msgs
+      - ros-humble-smach-msgs
+      - ros-humble-soccer-object-msgs
+      - ros-humble-soccer-vision-2d-msgs
+      - ros-humble-soccer-vision-3d-msgs
+      - ros-humble-soccer-vision-attribute-msgs
+      - ros-humble-social-nav-msgs
+      - ros-humble-statistics-msgs
+      - ros-humble-std-msgs
+      - ros-humble-stereo-msgs
+      - ros-humble-stubborn-buddies-msgs
+      - ros-humble-system-modes-msgs
+      - ros-humble-teleop-tools-msgs
+      - ros-humble-test-msgs
+      - ros-humble-tf2-geometry-msgs
+      - ros-humble-tf2-msgs
+      - ros-humble-tf2-sensor-msgs
+      - ros-humble-trajectory-msgs
+      - ros-humble-turtlebot3-msgs
+      - ros-humble-turtlebot4-msgs
+      - ros-humble-tuw-airskin-msgs
+      - ros-humble-tuw-geometry-msgs
+      - ros-humble-tuw-msgs
+      - ros-humble-tuw-multi-robot-msgs
+      - ros-humble-tuw-nav-msgs
+      - ros-humble-tuw-object-msgs
+      - ros-humble-twist-mux-msgs
+      - ros-humble-ublox-msgs
+      - ros-humble-ublox-ubx-msgs
+      - ros-humble-udp-msgs
+      - ros-humble-unique-identifier-msgs
+      - ros-humble-ur-dashboard-msgs
+      - ros-humble-ur-msgs
+      - ros-humble-urg-node-msgs
+      - ros-humble-velodyne-msgs
+      - ros-humble-vision-msgs
+      - ros-humble-visualization-msgs
+      - ros-humble-webots-ros2-msgs
+      - ros-humble-wiimote-msgs
+      - ros-humble-wireless-msgs
+
+  # copy local scripts to the snap usr/bin
+  local-files:
+    plugin: dump
+    source: snap/local/
+    organize:
+      '*.sh': usr/bin/

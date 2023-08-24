@@ -1,0 +1,3 @@
+#!/bin/sh -e
+
+. $SNAP/usr/bin/reset_config.sh
