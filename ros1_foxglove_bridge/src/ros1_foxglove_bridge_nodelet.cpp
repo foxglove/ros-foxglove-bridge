@@ -47,7 +47,7 @@ constexpr char ROS1_CHANNEL_ENCODING[] = "ros1";
 constexpr uint32_t SUBSCRIPTION_QUEUE_LENGTH = 10;
 constexpr double MIN_UPDATE_PERIOD_MS = 100.0;
 constexpr uint32_t PUBLICATION_QUEUE_LENGTH = 10;
-constexpr int SERVICE_TYPE_RETRIEVAL_TIMEOUT_MS = 250;
+constexpr int DEFAULT_SERVICE_TYPE_RETRIEVAL_TIMEOUT_MS = 250;
 
 using ConnectionHandle = websocketpp::connection_hdl;
 using TopicAndDatatype = std::pair<std::string, std::string>;
@@ -75,6 +75,8 @@ public:
     _capabilities = nhp.param<std::vector<std::string>>(
       "capabilities", std::vector<std::string>(foxglove::DEFAULT_CAPABILITIES.begin(),
                                                foxglove::DEFAULT_CAPABILITIES.end()));
+    _serviceRetrievalTimeoutMs = nhp.param<int>("service_type_retrieval_timeout_ms",
+                                                DEFAULT_SERVICE_TYPE_RETRIEVAL_TIMEOUT_MS);
 
     const auto topicWhitelistPatterns =
       nhp.param<std::vector<std::string>>("topic_whitelist", {".*"});
@@ -602,15 +604,9 @@ private:
         continue;  // Already advertised
       }
 
-      auto serviceTypeFuture = retrieveServiceType(serviceName);
-      if (serviceTypeFuture.wait_for(std::chrono::milliseconds(
-            SERVICE_TYPE_RETRIEVAL_TIMEOUT_MS)) != std::future_status::ready) {
-        ROS_WARN("Failed to retrieve type of service %s", serviceName.c_str());
-        continue;
-      }
-
       try {
-        const auto serviceType = serviceTypeFuture.get();
+        const auto serviceType =
+          retrieveServiceType(serviceName, std::chrono::milliseconds(_serviceRetrievalTimeoutMs));
         const auto srvDescription = _rosTypeInfoProvider.getServiceDescription(serviceType);
 
         foxglove::ServiceWithoutId service;
@@ -919,6 +915,7 @@ private:
   ros::Subscriber _clockSubscription;
   bool _useSimTime = false;
   std::vector<std::string> _capabilities;
+  int _serviceRetrievalTimeoutMs = DEFAULT_SERVICE_TYPE_RETRIEVAL_TIMEOUT_MS;
   std::atomic<bool> _subscribeGraphUpdates = false;
   std::unique_ptr<foxglove::CallbackQueue> _fetchAssetQueue;
 };
