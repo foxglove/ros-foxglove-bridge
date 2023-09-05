@@ -9,7 +9,7 @@
 
 namespace foxglove_bridge {
 
-std::string retrieveServiceType(const std::string& serviceName, int timeout_ms) {
+std::string retrieveServiceType(const std::string& serviceName, std::chrono::milliseconds timeout) {
   auto link = ros::ServiceManager::instance()->createServiceServerLink(serviceName, false, "*", "*",
                                                                        {{"probe", "1"}});
   std::promise<std::string> promise;
@@ -27,8 +27,8 @@ std::string retrieveServiceType(const std::string& serviceName, int timeout_ms) 
       return true;
     });
 
-  if (future.wait_for(std::chrono::milliseconds(timeout_ms)) != std::future_status::ready) {
-    throw std::runtime_error("Failed to retrieve service type");
+  if (future.wait_for(timeout) != std::future_status::ready) {
+    throw std::runtime_error("Timed out when retrieving service type");
   }
 
   return future.get();

@@ -605,7 +605,8 @@ private:
       }
 
       try {
-        const auto serviceType = retrieveServiceType(serviceName, _serviceRetrievalTimeoutMs);
+        const auto serviceType =
+          retrieveServiceType(serviceName, std::chrono::milliseconds(_serviceRetrievalTimeoutMs));
         const auto srvDescription = _rosTypeInfoProvider.getServiceDescription(serviceType);
 
         foxglove::ServiceWithoutId service;
