@@ -12,6 +12,12 @@ namespace foxglove_bridge {
 std::string retrieveServiceType(const std::string& serviceName, std::chrono::milliseconds timeout) {
   auto link = ros::ServiceManager::instance()->createServiceServerLink(serviceName, false, "*", "*",
                                                                        {{"probe", "1"}});
+  if (!link) {
+    throw std::runtime_error("Failed to create service link");
+  } else if (!link->getConnection()) {
+    throw std::runtime_error("Failed to get service link connection");
+  }
+
   std::promise<std::string> promise;
   auto future = promise.get_future();
 
