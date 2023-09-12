@@ -2,6 +2,12 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.2 (2023-09-12)
+------------------
+* Fix invalid pointers not being caught (`#265 <https://github.com/foxglove/ros-foxglove-bridge/issues/265>`_)
+* Make ROS1 service type retrieval more robust (`#263 <https://github.com/foxglove/ros-foxglove-bridge/issues/263>`_)
+* Contributors: Hans-Joachim Krauch
+
 0.7.1 (2023-08-21)
 ------------------
 * Communicate double / double array parameters with type info, explicitly cast when set from integer (`#256 <https://github.com/foxglove/ros-foxglove-bridge/issues/256>`_)
