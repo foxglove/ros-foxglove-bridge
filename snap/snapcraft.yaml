@@ -41,6 +41,7 @@ parts:
         craftctl set version="$version"
         craftctl set grade="$grade"
     stage-packages:
+      - ros-humble-spdlog-vendor
       - ros-humble-ros2launch
       # Messages definition are required to bridge them.
       # No custom message is going to be support for now
