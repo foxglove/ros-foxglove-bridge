@@ -16,6 +16,7 @@ max-qos-depth
 num-threads
 send-buffer-limit
 use-sim-time
+use-compression
 capabilities
 include-hidden
 asset-uri-allowlist"

@@ -17,6 +17,7 @@ snapctl set max_qos_depth!
 snapctl set num_threads!
 snapctl set send_buffer_limit!
 snapctl set use_sim_time!
+snapctl set use-compression!
 snapctl set capabilities!
 snapctl set include_hidden!
 snapctl set asset_uri_allowlist!
