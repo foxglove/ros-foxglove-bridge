@@ -23,7 +23,7 @@ asset-uri-allowlist"
 for OPTION in ${OPTIONS}; do
   VALUE="$(snapctl get ${OPTION})"
   if [ -n "${VALUE}" ]; then
-    LAUNCH_OPTIONS+="${OPTION}:=${VALUE} "
+    LAUNCH_OPTIONS="${LAUNCH_OPTIONS} ${OPTION}:=${VALUE}"
   fi
 done
 
