@@ -40,6 +40,8 @@ parts:
         [ -n "$(echo $version | grep "+git")" ] && grade=devel || grade=stable
         craftctl set version="$version"
         craftctl set grade="$grade"
+    build-packages:
+      - ros-humble-spdlog-vendor
     stage-packages:
       - ros-humble-spdlog-vendor
       - ros-humble-ros2launch
