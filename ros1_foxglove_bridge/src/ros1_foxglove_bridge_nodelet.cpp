@@ -104,7 +104,7 @@ public:
     }
 
     const auto assetUriAllowlist = nhp.param<std::vector<std::string>>(
-      "asset_uri_allowlist", {"package://(/?\\w+)+\\.(dae|stl|urdf|xacro)"});
+      "asset_uri_allowlist", {"^package://(?:\\w+/)*\\w+\\.(?:dae|stl|urdf|xacro|png|jpg|jpeg)$"});
     _assetUriAllowlistPatterns = parseRegexPatterns(assetUriAllowlist);
     if (assetUriAllowlist.size() != _assetUriAllowlistPatterns.size()) {
       ROS_ERROR("Failed to parse one or more asset URI whitelist patterns");
