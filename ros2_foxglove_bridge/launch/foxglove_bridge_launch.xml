@@ -15,7 +15,7 @@
   <arg name="use_sim_time"              default="false" />
   <arg name="capabilities"              default="[clientPublish,parameters,parametersSubscribe,services,connectionGraph,assets]" />
   <arg name="include_hidden"            default="false" />
-  <arg name="asset_uri_allowlist"       default="['package://(\\w+/?)+\\.(dae|stl|urdf|xacro)']" />  <!-- Needs double-escape -->
+  <arg name="asset_uri_allowlist"       default="['^package://(?:\\w+/)*\\w+\\.(?:dae|fbx|glb|gltf|jpeg|jpg|mtl|obj|png|stl|tif|tiff|urdf|webp|xacro)$']" />  <!-- Needs double-escape -->
 
   <node pkg="foxglove_bridge" exec="foxglove_bridge">
     <param name="port"                    value="$(var port)" />
