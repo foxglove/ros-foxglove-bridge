@@ -157,7 +157,7 @@ void declareParameters(rclcpp::Node* node) {
     PARAM_ASSET_URI_ALLOWLIST,
     std::vector<std::string>(
       {"^package://(?:\\w+/"
-       ")*\\w+\\.(?:dae|fbx|glb|gltf|jpeg|jpg|mtl|obj|png|stl|tiff|urdf|webp|xacro)$"}),
+       ")*\\w+\\.(?:dae|fbx|glb|gltf|jpeg|jpg|mtl|obj|png|stl|tif|tiff|urdf|webp|xacro)$"}),
     paramWhiteListDescription);
 }
 
