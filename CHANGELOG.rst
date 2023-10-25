@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.7.3 (2023-10-25)
+------------------
 * Fix `asset_uri_whitelist` regex backtracking issue, add more extensions (`#270 <https://github.com/foxglove/ros-foxglove-bridge/issues/270>`_)
 * [ROS1] Fix callback accessing invalid reference to promise (`#268 <https://github.com/foxglove/ros-foxglove-bridge/issues/268>`_)
 * Contributors: Hans-Joachim Krauch
