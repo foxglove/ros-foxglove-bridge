@@ -50,8 +50,8 @@ for opt in tls include_hidden use_sim_time use_compression; do
         True) ;;
         False) ;;
         *)
-        logger -t ${SNAP_NAME} "'${!opt}' is not a valid boolean for ${opt}. Please use 'true' or 'false'."
-        echo "'${!opt}' is not a valid boolean for ${opt}. Please use 'true' or 'false'." >&2
+        logger -t ${SNAP_NAME} "'${!opt}' is not a valid boolean for ${opt}. Please use 'True' or 'False'."
+        echo "'${!opt}' is not a valid boolean for ${opt}. Please use 'True' or 'False'." >&2
         return 1
         ;;
     esac
