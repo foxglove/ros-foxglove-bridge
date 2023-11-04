@@ -29,6 +29,8 @@ find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 find_package(websocketpp REQUIRED)
 find_package(ZLIB REQUIRED)
+find_path(WEBSOCKETPP_INCLUDE_DIR NAMES websocketpp/websocketpp.hpp)
+message(STATUS "WEBSOCKETPP_INCLUDE_DIR: " ${WEBSOCKETPP_INCLUDE_DIR})
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
@@ -81,6 +83,7 @@ target_include_directories(foxglove_bridge_base
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
     $<INSTALL_INTERFACE:include>
 )
+target_include_directories(foxglove_bridge_base SYSTEM PUBLIC ${WEBSOCKETPP_INCLUDE_DIR})
 target_link_libraries(foxglove_bridge_base
   OpenSSL::Crypto
   OpenSSL::SSL
