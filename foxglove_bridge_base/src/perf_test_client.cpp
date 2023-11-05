@@ -1,12 +1,12 @@
+#include <atomic>
 #include <chrono>
 #include <iostream>
 #include <memory>
 #include <regex>
 #include <unordered_map>
 
-#include <websocketpp/config/asio_client.hpp>
-
 #include <foxglove_bridge/websocket_client.hpp>
+#include <foxglove_bridge/websocket_notls.hpp>
 
 struct ChannelStats {
   std::string topic;
@@ -19,7 +19,7 @@ struct ChannelStats {
 constexpr char DEFAULT_URI[] = "ws://localhost:8765";
 constexpr auto DEFAULT_TIMEOUT = std::chrono::seconds(5);
 
-bool doAbort = false;
+std::atomic<bool> doAbort = false;
 
 void signal_handler(int) {
   doAbort = true;
@@ -31,7 +31,7 @@ int main(int argc, char** argv) {
   std::unordered_map<foxglove::SubscriptionId, ChannelStats> channelStatsBySubId;
   std::unordered_map<foxglove::ChannelId, foxglove::SubscriptionId> subIdByChannelId;
   foxglove::SubscriptionId nextSubId = 0;
-  foxglove::Client<websocketpp::config::asio_client> client;
+  foxglove::Client<foxglove::WebSocketNoTls> client;
   size_t maxTopicCharLength = 0;
 
   client.setBinaryMessageHandler([&](const uint8_t* data, size_t dataLength) {

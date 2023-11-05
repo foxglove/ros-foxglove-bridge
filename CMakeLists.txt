@@ -87,6 +87,13 @@ target_link_libraries(foxglove_bridge_base
   ZLIB::ZLIB
   ${CMAKE_THREAD_LIBS_INIT}
 )
+
+find_package(Boost COMPONENTS program_options REQUIRED)
+add_executable(perf_test_server foxglove_bridge_base/src/perf_test_server.cpp)
+target_link_libraries(perf_test_server foxglove_bridge_base Boost::program_options)
+add_executable(perf_test_client foxglove_bridge_base/src/perf_test_client.cpp)
+target_link_libraries(perf_test_client foxglove_bridge_base Boost::program_options)
+
 if(nlohmann_json_FOUND)
   target_link_libraries(foxglove_bridge_base nlohmann_json::nlohmann_json)
 else()
@@ -241,7 +248,7 @@ endif()
 #### INSTALL ###################################################################
 
 if(ROS_BUILD_TYPE STREQUAL "catkin")
-    install(TARGETS foxglove_bridge
+    install(TARGETS foxglove_bridge perf_test_server perf_test_client
       RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
     )
     install(TARGETS foxglove_bridge_base foxglove_bridge_nodelet
@@ -259,7 +266,7 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
     install(FILES ros2_foxglove_bridge/include/foxglove_bridge/ros2_foxglove_bridge.hpp
       DESTINATION include/${PROJECT_NAME}/
     )
-    install(TARGETS foxglove_bridge
+    install(TARGETS foxglove_bridge perf_test_server perf_test_client
       DESTINATION lib/${PROJECT_NAME}
     )
     install(TARGETS foxglove_bridge_base foxglove_bridge_component
