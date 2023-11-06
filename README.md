@@ -75,7 +75,7 @@ Parameters are provided to configure the behavior of the bridge. These parameter
  * __param_whitelist__: List of regular expressions ([ECMAScript grammar](https://en.cppreference.com/w/cpp/regex/ecmascript)) of whitelisted parameter names. Defaults to `[".*"]`.
   * __client_topic_whitelist__: List of regular expressions ([ECMAScript grammar](https://en.cppreference.com/w/cpp/regex/ecmascript)) of whitelisted client-published topic names. Defaults to `[".*"]`.
  * __send_buffer_limit__: Connection send buffer limit in bytes. Messages will be dropped when a connection's send buffer reaches this limit to avoid a queue of outdated messages building up. Defaults to `10000000` (10 MB).
- * __use_compression__: Use websocket compression (permessage-deflate). Suited for connections with smaller bandwith, at the cost of additional CPU load.
+ * __use_compression__: Use websocket compression (permessage-deflate). Suited for connections with smaller bandwith, at the cost of additional CPU load. Note that compression does not perform well on binary data. Hence it is recommended to leave this disabled unless you intend to send lots of text messages (see [Foxglove WebSocket protocol](https://github.com/foxglove/ws-protocol)). Defaults to `false`.
  * __capabilities__: List of supported [server capabilities](https://github.com/foxglove/ws-protocol/blob/main/docs/spec.md). Defaults to `[clientPublish,parameters,parametersSubscribe,services,connectionGraph,assets]`.
  * __asset_uri_allowlist__: List of regular expressions ([ECMAScript grammar](https://en.cppreference.com/w/cpp/regex/ecmascript)) of allowed asset URIs. Uses the [resource_retriever](https://index.ros.org/p/resource_retriever/github-ros-resource_retriever) to resolve `package://`, `file://` or `http(s)://` URIs. Note that this list should be carefully configured such that no confidential files are accidentally exposed over the websocket connection. As an extra security measure, URIs containing two consecutive dots (`..`) are disallowed as they could be used to construct URIs that would allow retrieval of confidential files if the allowlist is not configured strict enough (e.g. `package://<pkg_name>/../../../secret.txt`). Defaults to `["^package://(?:\w+/)*\w+\.(?:dae|fbx|glb|gltf|jpeg|jpg|mtl|obj|png|stl|tif|tiff|urdf|webp|xacro)$"]`.
  * (ROS 1) __max_update_ms__: The maximum number of milliseconds to wait in between polling `roscore` for new topics, services, or parameters. Defaults to `5000`.
@@ -112,7 +112,26 @@ ros2 launch foxglove_bridge foxglove_bridge_launch.xml
 
 ## Clients
 
-[Foxglove Studio](https://foxglove.dev/studio) connects to foxglove_bridge for live robotics visualization.
+- [Foxglove Studio](https://foxglove.dev/studio) - Connects to foxglove_bridge for live robotics visualization
+- https://foxglove.github.io/ws-protocol - Measures websocket data throughput for selected topics
+
+## Performance considerations
+
+- Ensure a good network connection as websockets do not perform well on lossy connections
+  - When running in a Docker container, consider using `--net=host` as it allows a higher bandwith than the bridged network
+- Compress high bandwith topics such as point clouds or images on the server side
+  - Pointclouds often contain lots of zero points or points with nans which can be removed to save bandwith
+  - Use [image_transport](https://index.ros.org/p/image_transport/) for transporting images in low-bandwidth compressed formats
+- Disable all unused [capabilities](#configuration). The capabilities array can be left empty if the client only subscribes to topics
+
+You can measure the websocket throughput with https://foxglove.github.io/ws-protocol which allows you to individually subscribe to available topics. For testing websocket throughput without ROS topics, you can use the provided `perf_test_server`:
+
+```bash
+rosrun foxglove_bridge perf_test_server  # Also available for ROS2
+
+## Connect with https://foxglove.github.io/ws-protocol or alternatively run the client:
+# rosrun foxglove_bridge perf_test_client
+```
 
 ## Development
 
