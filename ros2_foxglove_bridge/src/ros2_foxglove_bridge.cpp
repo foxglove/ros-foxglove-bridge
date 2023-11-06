@@ -494,32 +494,41 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
 
   rclcpp::QoS qos{rclcpp::KeepLast(depth)};
 
-  // If all endpoints are reliable, ask for reliable
-  if (reliabilityReliableEndpointsCount == publisherInfo.size()) {
-    qos.reliable();
+  // If there are no other publishers, we can't determine anything on reliability or durability,
+  // so we keep the system default.
+  if (publisherInfo.size() == 0) {
+    RCLCPP_WARN(this->get_logger(),
+                "No publishers on topic '%s'. Falling back to QoSReliabilityPolicy.RELIABLE as it "
+                "will connect to all publishers",
+                topic.c_str());
   } else {
-    if (reliabilityReliableEndpointsCount > 0) {
-      RCLCPP_WARN(
-        this->get_logger(),
-        "Some, but not all, publishers on topic '%s' are offering QoSReliabilityPolicy.RELIABLE. "
-        "Falling back to QoSReliabilityPolicy.BEST_EFFORT as it will connect to all publishers",
-        topic.c_str());
+    // If all endpoints are reliable, ask for reliable
+    if (reliabilityReliableEndpointsCount == publisherInfo.size()) {
+      qos.reliable();
+    } else {
+      if (reliabilityReliableEndpointsCount > 0) {
+        RCLCPP_WARN(
+          this->get_logger(),
+          "Some, but not all, publishers on topic '%s' are offering QoSReliabilityPolicy.RELIABLE. "
+          "Falling back to QoSReliabilityPolicy.BEST_EFFORT as it will connect to all publishers",
+          topic.c_str());
+      }
+      qos.best_effort();
     }
-    qos.best_effort();
-  }
 
-  // If all endpoints are transient_local, ask for transient_local
-  if (durabilityTransientLocalEndpointsCount == publisherInfo.size()) {
-    qos.transient_local();
-  } else {
-    if (durabilityTransientLocalEndpointsCount > 0) {
-      RCLCPP_WARN(this->get_logger(),
-                  "Some, but not all, publishers on topic '%s' are offering "
-                  "QoSDurabilityPolicy.TRANSIENT_LOCAL. Falling back to "
-                  "QoSDurabilityPolicy.VOLATILE as it will connect to all publishers",
-                  topic.c_str());
+    // If all endpoints are transient_local, ask for transient_local
+    if (durabilityTransientLocalEndpointsCount == publisherInfo.size()) {
+      qos.transient_local();
+    } else {
+      if (durabilityTransientLocalEndpointsCount > 0) {
+        RCLCPP_WARN(this->get_logger(),
+                    "Some, but not all, publishers on topic '%s' are offering "
+                    "QoSDurabilityPolicy.TRANSIENT_LOCAL. Falling back to "
+                    "QoSDurabilityPolicy.VOLATILE as it will connect to all publishers",
+                    topic.c_str());
+      }
+      qos.durability_volatile();
     }
-    qos.durability_volatile();
   }
 
   if (firstSubscription) {
