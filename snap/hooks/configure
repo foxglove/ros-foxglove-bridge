@@ -18,6 +18,7 @@ max_qos_depth="$(snapctl get max-qos-depth)"
 num_threads="$(snapctl get num-threads)"
 send_buffer_limit="$(snapctl get send-buffer-limit)"
 use_sim_time="$(snapctl get use-sim-time)"
+use_compression="$(snapctl get use-compression)"
 capabilities="$(snapctl get capabilities)"
 include_hidden="$(snapctl get include-hidden)"
 asset_uri_allowlist="$(snapctl get asset-uri-allowlist)"
@@ -43,14 +44,14 @@ for opt in max_qos_depth num_threads send_buffer_limit; do
 fi
 done
 
-for opt in tls include_hidden use_sim_time; do
+for opt in tls include_hidden use_sim_time use_compression; do
   if [ -n "${!opt}" ]; then
     case "${!opt}" in
-        true) ;;
-        false) ;;
+        True) ;;
+        False) ;;
         *)
-        logger -t ${SNAP_NAME} "'${!opt}' is not a valid boolean for ${opt}. Please use 'true' or 'false'."
-        echo "'${!opt}' is not a valid boolean for ${opt}. Please use 'true' or 'false'." >&2
+        logger -t ${SNAP_NAME} "'${!opt}' is not a valid boolean for ${opt}. Please use 'True' or 'False'."
+        echo "'${!opt}' is not a valid boolean for ${opt}. Please use 'True' or 'False'." >&2
         return 1
         ;;
     esac

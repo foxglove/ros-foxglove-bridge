@@ -16,6 +16,7 @@ max-qos-depth
 num-threads
 send-buffer-limit
 use-sim-time
+use-compression
 capabilities
 include-hidden
 asset-uri-allowlist"
@@ -23,7 +24,7 @@ asset-uri-allowlist"
 for OPTION in ${OPTIONS}; do
   VALUE="$(snapctl get ${OPTION})"
   if [ -n "${VALUE}" ]; then
-    LAUNCH_OPTIONS+="${OPTION}:=${VALUE} "
+    LAUNCH_OPTIONS="${LAUNCH_OPTIONS} ${OPTION}:=${VALUE}"
   fi
 done
 
