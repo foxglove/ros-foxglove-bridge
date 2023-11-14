@@ -345,6 +345,8 @@ private:
       ROS_INFO("Client %s is advertising \"%s\" (%s) on channel %d",
                _server->remoteEndpointString(clientHandle).c_str(), channel.topic.c_str(),
                channel.schemaName.c_str(), channel.channelId);
+      // Trigger topic discovery so other clients are immediately informed about this new topic.
+      updateAdvertisedTopics();
     } else {
       const auto errMsg =
         "Failed to create publisher for topic " + channel.topic + "(" + channel.schemaName + ")";
