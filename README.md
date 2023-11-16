@@ -20,7 +20,16 @@ The `foxglove_bridge` uses the [Foxglove WebSocket protocol](https://github.com/
 
 **Note**: This project is under active development and binary releases of `foxglove_bridge` might be quite outdated. For the latest features and bug fixes, consider [building foxglove_bridge from source](#building-from-source).
 
-The `foxglove_bridge` package is available for ROS 1 Melodic and Noetic, and ROS 2 Humble and Rolling. Earlier releases of ROS will not be supported due to API design and/or performance limitations. The package can be installed with the following command:
+The `foxglove_bridge` package is available for the following ROS versions:
+- ROS 1 Melodic
+- ROS 1 Noetic
+- ROS 2 Humble
+- ROS 2 Iron
+- ROS 2 Rolling
+
+Earlier releases of ROS will not be supported due to API design and/or performance limitations. 
+
+To install the package:
 
 ```bash
 $ sudo apt install ros-$ROS_DISTRO-foxglove-bridge
