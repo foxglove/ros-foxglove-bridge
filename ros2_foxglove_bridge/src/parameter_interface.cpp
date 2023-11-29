@@ -94,7 +94,7 @@ static foxglove::Parameter fromRosParam(const rclcpp::Parameter& p) {
   } else if (type == rclcpp::ParameterType::PARAMETER_BOOL_ARRAY) {
     std::vector<foxglove::ParameterValue> paramVec;
     for (const auto value : p.as_bool_array()) {
-      paramVec.push_back(value);
+      paramVec.push_back(foxglove::ParameterValue(value));
     }
     return foxglove::Parameter(p.get_name(), paramVec);
   } else if (type == rclcpp::ParameterType::PARAMETER_INTEGER_ARRAY) {
