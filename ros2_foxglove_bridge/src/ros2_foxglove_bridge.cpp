@@ -495,7 +495,7 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
   rclcpp::QoS qos{rclcpp::KeepLast(depth)};
 
   // If all endpoints are reliable, ask for reliable
-  if (reliabilityReliableEndpointsCount == publisherInfo.size()) {
+  if (!publisherInfo.empty() && reliabilityReliableEndpointsCount == publisherInfo.size()) {
     qos.reliable();
   } else {
     if (reliabilityReliableEndpointsCount > 0) {
@@ -509,7 +509,7 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
   }
 
   // If all endpoints are transient_local, ask for transient_local
-  if (durabilityTransientLocalEndpointsCount == publisherInfo.size()) {
+  if (!publisherInfo.empty() && durabilityTransientLocalEndpointsCount == publisherInfo.size()) {
     qos.transient_local();
   } else {
     if (durabilityTransientLocalEndpointsCount > 0) {
