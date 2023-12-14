@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.7.4 (2023-12-14)
+------------------
 * Solved bug with incompatible QoS policies
 * added explicit call to ParameterValue() to avoid clang error (`#277 <https://github.com/foxglove/ros-foxglove-bridge/issues/277>`_)
 * Add iron release badge to readme (`#271 <https://github.com/foxglove/ros-foxglove-bridge/issues/271>`_)
