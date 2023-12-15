@@ -2,6 +2,13 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.4 (2023-12-14)
+------------------
+* Solved bug with incompatible QoS policies
+* added explicit call to ParameterValue() to avoid clang error (`#277 <https://github.com/foxglove/ros-foxglove-bridge/issues/277>`_)
+* Add iron release badge to readme (`#271 <https://github.com/foxglove/ros-foxglove-bridge/issues/271>`_)
+* Contributors: Hans-Joachim Krauch, Ted
+
 0.7.3 (2023-10-25)
 ------------------
 * Fix `asset_uri_whitelist` regex backtracking issue, add more extensions (`#270 <https://github.com/foxglove/ros-foxglove-bridge/issues/270>`_)
