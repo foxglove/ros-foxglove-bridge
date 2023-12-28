@@ -160,7 +160,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include>
         $<INSTALL_INTERFACE:include>
     )
-    ament_target_dependencies(foxglove_bridge_component rclcpp rclcpp_components resource_retriever rosgraph_msgs)
+    ament_target_dependencies(foxglove_bridge_component ament_index_cpp rclcpp rclcpp_components resource_retriever rosgraph_msgs)
     target_link_libraries(foxglove_bridge_component foxglove_bridge_base)
     rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
     enable_strict_compiler_warnings(foxglove_bridge_component)
