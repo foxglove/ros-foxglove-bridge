@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.7.5 (2023-12-29)
+------------------
 * Add ROS 2 dependency for ament_index_cpp (`#281 <https://github.com/foxglove/ros-foxglove-bridge/issues/281>`_)
 * Contributors: Chris Lalancette
 
