@@ -31,5 +31,7 @@
   },
   "capAdd": [
     "SYS_PTRACE"
-  ]
+  ],
+  // More info: <https://aka.ms/dev-containers-non-root>
+  "remoteUser": "vscode"
 }

@@ -6,14 +6,12 @@
       "includePath": [
         "${workspaceFolder}/**",
         "/opt/ros/humble/include/**",
-        "/opt/ros/noetic/include/**",
         "/usr/include/**"
       ],
       "browse": {
         "path": [
           "${workspaceFolder}",
           "/opt/ros/humble/include",
-          "/opt/ros/noetic/include",
           "/usr/include"
         ]
       },
