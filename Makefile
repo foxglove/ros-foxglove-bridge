@@ -1,5 +1,5 @@
 ROS1_DISTRIBUTIONS := melodic noetic
-ROS2_DISTRIBUTIONS := galactic humble iron rolling
+ROS2_DISTRIBUTIONS := humble iron rolling
 
 define generate_ros1_targets
 .PHONY: $(1)

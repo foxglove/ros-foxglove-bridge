@@ -1,7 +1,6 @@
 // -*- jsonc -*-
 {
-  // ROS 1 / ROS 2 hybrid dev environment
-  "name": "ROS 1 + 2",
+  "name": "ROS 2",
   "workspaceFolder": "/ros_ws/src/ros-foxglove-bridge",
   "workspaceMount": "source=${localWorkspaceFolder},target=/ros_ws/src/ros-foxglove-bridge,type=bind,consistency=cached",
   "dockerFile": "./Dockerfile",
@@ -33,6 +32,6 @@
   "capAdd": [
     "SYS_PTRACE"
   ],
-  // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+  // More info: <https://aka.ms/dev-containers-non-root>
   "remoteUser": "vscode"
 }
