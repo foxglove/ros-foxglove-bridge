@@ -3,7 +3,6 @@ foxglove_bridge
 
 [![ROS Melodic version](https://img.shields.io/ros/v/melodic/foxglove_bridge)](https://index.ros.org/p/foxglove_bridge/github-foxglove-ros-foxglove-bridge/#melodic)
 [![ROS Noetic version](https://img.shields.io/ros/v/noetic/foxglove_bridge)](https://index.ros.org/p/foxglove_bridge/github-foxglove-ros-foxglove-bridge/#noetic)
-[![ROS Galactic version](https://img.shields.io/ros/v/galactic/foxglove_bridge)](https://index.ros.org/p/foxglove_bridge/github-foxglove-ros-foxglove-bridge/#galactic)
 [![ROS Humble version](https://img.shields.io/ros/v/humble/foxglove_bridge)](https://index.ros.org/p/foxglove_bridge/github-foxglove-ros-foxglove-bridge/#humble)
 [![ROS Iron version](https://img.shields.io/ros/v/iron/foxglove_bridge)](https://index.ros.org/p/foxglove_bridge/github-foxglove-ros-foxglove-bridge/#iron)
 [![ROS Rolling version](https://img.shields.io/ros/v/rolling/foxglove_bridge)](https://index.ros.org/p/foxglove_bridge/github-foxglove-ros-foxglove-bridge/#rolling)
@@ -121,7 +120,7 @@ A VSCode container is provided with a dual ROS 1 and ROS 2 installation and
 enough tools to build and run the bridge. Some bash aliases are defined to simplify the common workflow. Here's an example of building and running the ROS 2 node:
 
 ```bash
-source /opt/ros/galactic/setup.bash
+source /opt/ros/humble/setup.bash
 ros2_build_debug  # or ros2_build_release
 ros2_foxglove_bridge
 ```
@@ -135,7 +134,7 @@ To test the bridge with example data, open another terminal and download the tes
 Then start playback:
 
 ```bash
-source /opt/ros/galactic/setup.bash
+source /opt/ros/humble/setup.bash
 ros2 bag play -l --clock 100 -s mcap data/nuScenes-v1.0-mini-scene-0061-ros2.mcap
 ```
 
