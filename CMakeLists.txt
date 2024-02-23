@@ -154,6 +154,13 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
       ros2_foxglove_bridge/src/parameter_interface.cpp
       ros2_foxglove_bridge/src/generic_client.cpp
     )
+
+    # Check if the ROS_DISTRO is greater than iron and set a compile definition if that's the case.
+    string(COMPARE GREATER $ENV{ROS_DISTRO} "iron" ROS_DISTRO_GT_IRON)
+    if(ROS_DISTRO_GT_IRON)
+      target_compile_definitions(foxglove_bridge_component PRIVATE ROS_DISTRO_GT_IRON)
+    endif()
+
     target_include_directories(foxglove_bridge_component
       PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>

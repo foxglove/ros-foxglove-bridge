@@ -123,10 +123,17 @@ GenericClient::GenericClient(rclcpp::node_interfaces::NodeBaseInterface* nodeBas
   _typeIntrospectionHdl = (reinterpret_cast<decltype(get_ts)>(
     _typeIntrospectionLib->get_symbol(typeinstrospection_symbol_name)))();
 
+#ifdef ROS_DISTRO_GT_IRON
+  _requestTypeSupportHdl =
+    rclcpp::get_message_typesupport_handle(requestTypeName, TYPESUPPORT_LIB_NAME, *_typeSupportLib);
+  _responseTypeSupportHdl = rclcpp::get_message_typesupport_handle(
+    responseTypeName, TYPESUPPORT_LIB_NAME, *_typeSupportLib);
+#else
   _requestTypeSupportHdl =
     rclcpp::get_typesupport_handle(requestTypeName, TYPESUPPORT_LIB_NAME, *_typeSupportLib);
   _responseTypeSupportHdl =
     rclcpp::get_typesupport_handle(responseTypeName, TYPESUPPORT_LIB_NAME, *_typeSupportLib);
+#endif
 
   rcl_ret_t ret = rcl_client_init(this->get_client_handle().get(), this->get_rcl_node_handle(),
                                   _serviceTypeSupportHdl, serviceName.c_str(), &client_options);
