@@ -142,10 +142,47 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     set(ROS_BUILD_TYPE "ament_cmake")
 
     find_package(ament_cmake REQUIRED)
-    find_package(rosgraph_msgs REQUIRED)
+    find_package(ament_index_cpp REQUIRED)
     find_package(rclcpp REQUIRED)
+    find_package(rclcpp_action REQUIRED)
     find_package(rclcpp_components REQUIRED)
+    find_package(rcpputils REQUIRED)
     find_package(resource_retriever REQUIRED)
+    find_package(rosgraph_msgs REQUIRED)
+    find_package(rosidl_runtime_cpp REQUIRED)
+    find_package(rosidl_typesupport_cpp REQUIRED)
+    find_package(rosidl_typesupport_introspection_cpp REQUIRED)
+
+    # Build the vendored ros2_babel_fish library
+    set(ROS2_BABEL_FISH_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/src/ros2_babel_fish)
+    set(ROS2_BABEL_FISH_SOURCES
+      ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_action_client.cpp
+      ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_publisher.cpp
+      ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_service.cpp
+      ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_service_client.cpp
+      ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_subscription.cpp
+      ${ROS2_BABEL_FISH_DIR}/idl/providers/local_type_support_provider.cpp
+      ${ROS2_BABEL_FISH_DIR}/idl/serialization.cpp
+      ${ROS2_BABEL_FISH_DIR}/idl/type_support_provider.cpp
+      ${ROS2_BABEL_FISH_DIR}/messages/array_message.cpp
+      ${ROS2_BABEL_FISH_DIR}/messages/compound_message.cpp
+      ${ROS2_BABEL_FISH_DIR}/messages/message.cpp
+      ${ROS2_BABEL_FISH_DIR}/babel_fish.cpp
+      ${ROS2_BABEL_FISH_DIR}/detail/topic.cpp
+    )
+
+    add_library(ros2_babel_fish STATIC ${ROS2_BABEL_FISH_SOURCES})
+    target_include_directories(ros2_babel_fish PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include)
+    target_compile_definitions(ros2_babel_fish PUBLIC RCLCPP_VERSION_MAJOR=${rclcpp_VERSION_MAJOR})
+    ament_target_dependencies(ros2_babel_fish
+      ament_index_cpp
+      rclcpp
+      rclcpp_action
+      rcpputils
+      rosidl_runtime_cpp
+      rosidl_typesupport_cpp
+      rosidl_typesupport_introspection_cpp
+    )
 
     add_library(foxglove_bridge_component SHARED
       ros2_foxglove_bridge/src/message_definition_cache.cpp
@@ -161,7 +198,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
         $<INSTALL_INTERFACE:include>
     )
     ament_target_dependencies(foxglove_bridge_component ament_index_cpp rclcpp rclcpp_components resource_retriever rosgraph_msgs)
-    target_link_libraries(foxglove_bridge_component foxglove_bridge_base)
+    target_link_libraries(foxglove_bridge_component foxglove_bridge_base ros2_babel_fish)
     rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
     enable_strict_compiler_warnings(foxglove_bridge_component)
     add_executable(foxglove_bridge
