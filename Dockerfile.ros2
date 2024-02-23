@@ -10,7 +10,7 @@ ENV CC=clang
 ENV CXX=clang++
 
 # Set environment and working directory
-ENV ROS_WS /ros2_ws
+ENV ROS_WS /ros_ws
 WORKDIR $ROS_WS
 
 # Install system dependencies

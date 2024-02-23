@@ -10,7 +10,7 @@ ENV CC=clang
 ENV CXX=clang++
 
 # Set environment and working directory
-ENV ROS_WS /ros2_ws
+ENV ROS_WS /ros_ws
 WORKDIR $ROS_WS
 
 # Install system dependencies
@@ -59,6 +59,9 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
+
+# Make the workspace directory writable by the non-root user
+RUN chown -R $USERNAME:$USERNAME $ROS_WS
 
 USER $USERNAME
 
