@@ -9,6 +9,7 @@
 
 #include <foxglove_bridge/generic_client.hpp>
 
+// clang-format off
 /* True if the version of RCLCPP is at least major.minor.patch */
 #define RCLCPP_VERSION_GTE(major, minor, patch)        \
   (major < RCLCPP_VERSION_MAJOR                        \
@@ -21,6 +22,7 @@
                  ? false                               \
                  : patch < RCLCPP_VERSION_PATCH ? true \
                                                 : patch > RCLCPP_VERSION_PATCH ? false : true)
+// clang-format on
 
 namespace {
 
