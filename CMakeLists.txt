@@ -172,6 +172,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     )
 
     add_library(ros2_babel_fish STATIC ${ROS2_BABEL_FISH_SOURCES})
+    set_target_properties(ros2_babel_fish PROPERTIES POSITION_INDEPENDENT_CODE ON)
     target_include_directories(ros2_babel_fish PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include)
     target_compile_definitions(ros2_babel_fish PUBLIC RCLCPP_VERSION_MAJOR=${rclcpp_VERSION_MAJOR})
     ament_target_dependencies(ros2_babel_fish
