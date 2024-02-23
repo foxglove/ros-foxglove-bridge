@@ -1,5 +1,6 @@
 #include <unordered_set>
 
+#include <nlohmann/json.hpp>
 #include <resource_retriever/retriever.hpp>
 
 #include <foxglove_bridge/ros2_foxglove_bridge.hpp>
@@ -11,6 +12,80 @@ inline bool isHiddenTopicOrService(const std::string& name) {
     throw std::invalid_argument("Topic or service name can't be empty");
   }
   return name.front() == '_' || name.find("/_") != std::string::npos;
+}
+
+inline void assignJsonToMessageField(ros2_babel_fish::Message& field, const nlohmann::json& value) {
+  using MessageType = ros2_babel_fish::MessageType;
+
+  if (value.is_null()) {
+    return;
+  }
+
+  switch (field.type()) {
+    case MessageType::None:
+      break;
+    case MessageType::Float:
+      field = value.get<float>();
+      break;
+    case MessageType::Double:
+      field = value.get<double>();
+      break;
+    case MessageType::LongDouble:
+      field = value.get<long double>();
+      break;
+    case MessageType::Char:
+      field = value.get<char>();
+      break;
+    case MessageType::WChar:
+      field = value.get<wchar_t>();
+      break;
+    case MessageType::Bool:
+      field = value.get<bool>();
+      break;
+    case MessageType::Octet:
+    case MessageType::UInt8:
+      field = value.get<uint8_t>();
+      break;
+    case MessageType::Int8:
+      field = value.get<int8_t>();
+      break;
+    case MessageType::UInt16:
+      field = value.get<uint16_t>();
+      break;
+    case MessageType::Int16:
+      field = value.get<int16_t>();
+      break;
+    case MessageType::UInt32:
+      field = value.get<uint32_t>();
+      break;
+    case MessageType::Int32:
+      field = value.get<int32_t>();
+      break;
+    case MessageType::UInt64:
+      field = value.get<uint64_t>();
+      break;
+    case MessageType::Int64:
+      field = value.get<int64_t>();
+      break;
+    case MessageType::String:
+      field = value.get<std::string>();
+      break;
+    case MessageType::WString:
+      field = value.get<std::wstring>();
+      break;
+    case MessageType::Compound: {
+      // Recursively convert compound messages
+      auto& compound = field.as<ros2_babel_fish::CompoundMessage>();
+      for (const auto& key : compound.keys()) {
+        assignJsonToMessageField(compound[key], value[key]);
+      }
+      break;
+    }
+    case MessageType::Array: {
+      // FIXME: Handle variable length arrays, fixed length arrays, and bounded arrays
+      break;
+    }
+  }
 }
 }  // namespace
 
@@ -24,6 +99,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   RCLCPP_INFO(this->get_logger(), "Starting foxglove_bridge (%s, %s@%s) with %s", rosDistro,
               foxglove::FOXGLOVE_BRIDGE_VERSION, foxglove::FOXGLOVE_BRIDGE_GIT_HASH,
               foxglove::WebSocketUserAgent());
+
+  _babelFish = ros2_babel_fish::BabelFish::make_shared();
 
   declareParameters(this);
 
@@ -61,7 +138,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   if (_useSimTime) {
     serverOptions.capabilities.push_back(foxglove::CAPABILITY_TIME);
   }
-  serverOptions.supportedEncodings = {"cdr"};
+  serverOptions.supportedEncodings = {"cdr", "json"};
   serverOptions.metadata = {{"ROS_DISTRO", rosDistro}};
   serverOptions.sendBufferLimitBytes = send_buffer_limit;
   serverOptions.sessionId = std::to_string(std::time(nullptr));
@@ -625,9 +702,10 @@ void FoxgloveBridge::clientAdvertise(const foxglove::ClientAdvertisement& advert
     publisherOptions.callback_group = _clientPublishCallbackGroup;
     auto publisher = this->create_generic_publisher(topicName, topicType, qos, publisherOptions);
 
-    RCLCPP_INFO(this->get_logger(), "Client %s is advertising \"%s\" (%s) on channel %d",
+    RCLCPP_INFO(this->get_logger(),
+                "Client %s is advertising \"%s\" (%s) on channel %d with encoding \"%s\"",
                 _server->remoteEndpointString(hdl).c_str(), topicName.c_str(), topicType.c_str(),
-                advertisement.channelId);
+                advertisement.channelId, advertisement.encoding.c_str());
 
     // Store the new topic advertisement
     clientPublications.emplace(advertisement.channelId, std::move(publisher));
@@ -700,14 +778,68 @@ void FoxgloveBridge::clientMessage(const foxglove::ClientMessage& message, Conne
     publisher = it2->second;
   }
 
-  // Copy the message payload into a SerializedMessage object
-  rclcpp::SerializedMessage serializedMessage{message.getLength()};
-  auto& rclSerializedMsg = serializedMessage.get_rcl_serialized_message();
-  std::memcpy(rclSerializedMsg.buffer, message.getData(), message.getLength());
-  rclSerializedMsg.buffer_length = message.getLength();
+  if (message.advertisement.encoding == "cdr") {
+    // Copy the message payload into a SerializedMessage object
+    rclcpp::SerializedMessage serializedMessage{message.getLength()};
+    auto& rclSerializedMsg = serializedMessage.get_rcl_serialized_message();
+    std::memcpy(rclSerializedMsg.buffer, message.getData(), message.getLength());
+    rclSerializedMsg.buffer_length = message.getLength();
 
-  // Publish the message
-  publisher->publish(serializedMessage);
+    // Publish the message
+    publisher->publish(serializedMessage);
+  } else if (message.advertisement.encoding == "json") {
+    // Decode the JSON message
+    nlohmann::json json;
+    try {
+      const std::string_view messageDataView{reinterpret_cast<const char*>(message.data.data()),
+                                             message.data.size()};
+      json = nlohmann::json::parse(messageDataView);
+    } catch (const nlohmann::json::parse_error& ex) {
+      throw foxglove::ClientChannelError(message.advertisement.channelId,
+                                         "Dropping client message from " +
+                                           _server->remoteEndpointString(hdl) +
+                                           " with invalid JSON: " + ex.what());
+    }
+
+    // Convert the JSON message to a ROS message using ros2_babel_fish
+    ros2_babel_fish::CompoundMessage::SharedPtr rosMsgPtr;
+    try {
+      rosMsgPtr = _babelFish->create_message_shared(message.advertisement.schemaName);
+    } catch (const std::exception& ex) {
+      throw foxglove::ClientChannelError(
+        message.advertisement.channelId,
+        "Dropping client message from " + _server->remoteEndpointString(hdl) +
+          " with unknown schema \"" + message.advertisement.schemaName + "\": " + ex.what());
+    }
+    auto& rosMsg = *rosMsgPtr;
+    for (const auto& key : rosMsg.keys()) {
+      if (!json.contains(key)) {
+        continue;
+      }
+
+      try {
+        assignJsonToMessageField(rosMsg[key], json[key]);
+      } catch (const std::exception& ex) {
+        throw foxglove::ClientChannelError(message.advertisement.channelId,
+                                           "Dropping client message from " +
+                                             _server->remoteEndpointString(hdl) +
+                                             " with invalid JSON: " + ex.what());
+      }
+    }
+
+    // Publish the assembled ROS message
+    auto publisherHandle = publisher->get_publisher_handle();
+    const auto status =
+      rcl_publish(publisherHandle.get(), rosMsg.type_erased_message().get(), nullptr);
+    if (RCL_RET_OK != status) {
+      rclcpp::exceptions::throw_from_rcl_error(status, "Failed to publish message");
+    }
+  } else {
+    throw foxglove::ClientChannelError(
+      message.advertisement.channelId,
+      "Dropping client message from " + _server->remoteEndpointString(hdl) +
+        " with unknown encoding \"" + message.advertisement.encoding + "\"");
+  }
 }
 
 void FoxgloveBridge::setParameters(const std::vector<foxglove::Parameter>& parameters,

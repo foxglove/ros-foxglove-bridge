@@ -7,6 +7,7 @@
 #include <thread>
 
 #include <rclcpp/rclcpp.hpp>
+#include <ros2_babel_fish/babel_fish.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
 #include <websocketpp/common/connection_hdl.hpp>
 
@@ -82,6 +83,7 @@ private:
   std::atomic<bool> _subscribeGraphUpdates = false;
   bool _includeHidden = false;
   std::unique_ptr<foxglove::CallbackQueue> _fetchAssetQueue;
+  ros2_babel_fish::BabelFish::SharedPtr _babelFish;
 
   void subscribeConnectionGraph(bool subscribe);
 
