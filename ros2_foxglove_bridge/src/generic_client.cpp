@@ -9,6 +9,19 @@
 
 #include <foxglove_bridge/generic_client.hpp>
 
+/* True if the version of RCLCPP is at least major.minor.patch */
+#define RCLCPP_VERSION_GTE(major, minor, patch)        \
+  (major < RCLCPP_VERSION_MAJOR                        \
+     ? true                                            \
+     : major > RCLCPP_VERSION_MAJOR                    \
+         ? false                                       \
+         : minor < RCLCPP_VERSION_MINOR                \
+             ? true                                    \
+             : minor > RCLCPP_VERSION_MINOR            \
+                 ? false                               \
+                 : patch < RCLCPP_VERSION_PATCH ? true \
+                                                : patch > RCLCPP_VERSION_PATCH ? false : true)
+
 namespace {
 
 // Copy of github.com/ros2/rclcpp/blob/33dae5d67/rclcpp/src/rclcpp/typesupport_helpers.cpp#L69-L92
@@ -123,7 +136,9 @@ GenericClient::GenericClient(rclcpp::node_interfaces::NodeBaseInterface* nodeBas
   _typeIntrospectionHdl = (reinterpret_cast<decltype(get_ts)>(
     _typeIntrospectionLib->get_symbol(typeinstrospection_symbol_name)))();
 
-#ifdef ROS_DISTRO_GT_IRON
+  // get_typesupport_handle is deprecated since rclcpp 25.0.0
+  // (https://github.com/ros2/rclcpp/pull/2209)
+#if RCLCPP_VERSION_GTE(25, 0, 0)
   _requestTypeSupportHdl =
     rclcpp::get_message_typesupport_handle(requestTypeName, TYPESUPPORT_LIB_NAME, *_typeSupportLib);
   _responseTypeSupportHdl = rclcpp::get_message_typesupport_handle(
