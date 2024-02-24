@@ -534,7 +534,9 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
   try {
     auto subscriber = this->create_generic_subscription(
       topic, datatype, qos,
-      std::bind(&FoxgloveBridge::rosMessageHandler, this, channelId, clientHandle, _1),
+      [this, channelId, clientHandle](std::shared_ptr<rclcpp::SerializedMessage> msg) {
+        this->rosMessageHandler(channelId, clientHandle, msg);
+      },
       subscriptionOptions);
     subscriptionsByClient.emplace(clientHandle, std::move(subscriber));
   } catch (const std::exception& ex) {
