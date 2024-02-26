@@ -2,6 +2,12 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Fix rolling builds (`#289 <https://github.com/foxglove/ros-foxglove-bridge/issues/289>`_)
+* Remove dual ROS 1+2 devcontainer, remove ROS Galactic from the support matrix (`#285 <https://github.com/foxglove/ros-foxglove-bridge/issues/285>`_)
+* Contributors: Hans-Joachim Krauch, John Hurliman
+
 0.7.5 (2023-12-29)
 ------------------
 * Add ROS 2 dependency for ament_index_cpp (`#281 <https://github.com/foxglove/ros-foxglove-bridge/issues/281>`_)
