@@ -1,16 +1,15 @@
 // Copyright (c) 2021 Stefan Fabian. All rights reserved.
-// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+// Licensed under the MIT license. See LICENSE file in the project root for full license
+// information.
 
 #ifndef ROS2_BABEL_FISH_MESSAGE_TYPES_HPP
 #define ROS2_BABEL_FISH_MESSAGE_TYPES_HPP
 
 #include <rosidl_typesupport_introspection_cpp/field_types.hpp>
 
-namespace ros2_babel_fish
-{
+namespace ros2_babel_fish {
 
-namespace MessageTypes
-{
+namespace MessageTypes {
 enum MessageType : uint8_t {
   None = 0x00000,
   Float = ::rosidl_typesupport_introspection_cpp::ROS_TYPE_FLOAT,
@@ -35,6 +34,6 @@ enum MessageType : uint8_t {
 };
 }
 typedef MessageTypes::MessageType MessageType;
-} // namespace ros2_babel_fish
+}  // namespace ros2_babel_fish
 
-#endif // ROS2_BABEL_FISH_MESSAGE_TYPES_HPP
+#endif  // ROS2_BABEL_FISH_MESSAGE_TYPES_HPP

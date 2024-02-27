@@ -759,7 +759,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, Mes
                                           length,
                                           data};
         _handlers.clientMessageHandler(clientMessage, hdl);
-      } catch (const ServiceError const& e) {
+      } catch (ServiceError const& e) {
         sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
       } catch (std::exception const& e) {
         sendStatusAndLogMsg(hdl, StatusLevel::Error,
