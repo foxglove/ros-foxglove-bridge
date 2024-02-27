@@ -186,6 +186,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     )
 
     add_library(foxglove_bridge_component SHARED
+      ros2_foxglove_bridge/src/json_to_ros.cpp
       ros2_foxglove_bridge/src/message_definition_cache.cpp
       ros2_foxglove_bridge/src/param_utils.cpp
       ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp
@@ -268,6 +269,11 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
     ament_add_gtest(base64_test foxglove_bridge_base/tests/base64_test.cpp)
     target_link_libraries(base64_test foxglove_bridge_base)
     enable_strict_compiler_warnings(base64_test)
+
+    ament_add_gtest(json_to_ros_test ros2_foxglove_bridge/tests/json_to_ros_test.cpp)
+    ament_target_dependencies(json_to_ros_test rclcpp rclcpp_components std_msgs)
+    target_link_libraries(json_to_ros_test foxglove_bridge_component)
+    enable_strict_compiler_warnings(json_to_ros_test)
 
     ament_add_gtest(smoke_test ros2_foxglove_bridge/tests/smoke_test.cpp)
     ament_target_dependencies(smoke_test rclcpp rclcpp_components std_msgs std_srvs)
