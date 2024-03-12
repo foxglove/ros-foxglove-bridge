@@ -2,7 +2,9 @@
 
 #include <resource_retriever/retriever.hpp>
 
+#ifdef ENABLE_JSON_MESSAGES
 #include <foxglove_bridge/json_to_ros.hpp>
+#endif
 #include <foxglove_bridge/ros2_foxglove_bridge.hpp>
 
 namespace foxglove_bridge {
@@ -26,7 +28,9 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
               foxglove::FOXGLOVE_BRIDGE_VERSION, foxglove::FOXGLOVE_BRIDGE_GIT_HASH,
               foxglove::WebSocketUserAgent());
 
+#ifdef ENABLE_JSON_MESSAGES
   _babelFish = ros2_babel_fish::BabelFish::make_shared();
+#endif
 
   declareParameters(this);
 
@@ -713,6 +717,7 @@ void FoxgloveBridge::clientMessage(const foxglove::ClientMessage& message, Conne
 
     // Publish the message
     publisher->publish(serializedMessage);
+#ifdef ENABLE_JSON_MESSAGES
   } else if (message.advertisement.encoding == "json") {
     const auto jsonMessage =
       std::string_view{reinterpret_cast<const char*>(message.getData()), message.getLength()};
@@ -733,6 +738,7 @@ void FoxgloveBridge::clientMessage(const foxglove::ClientMessage& message, Conne
     if (RCL_RET_OK != status) {
       rclcpp::exceptions::throw_from_rcl_error(status, "Failed to publish message");
     }
+#endif
   } else {
     throw foxglove::ClientChannelError(
       message.advertisement.channelId,

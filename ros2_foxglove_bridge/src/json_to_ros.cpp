@@ -1,3 +1,5 @@
+#ifdef ENABLE_JSON_MESSAGES
+
 #include "foxglove_bridge/json_to_ros.hpp"
 
 #include <nlohmann/json.hpp>
@@ -133,3 +135,5 @@ std::optional<std::exception> jsonMessageToRos(
 }
 
 }  // namespace foxglove_bridge
+
+#endif

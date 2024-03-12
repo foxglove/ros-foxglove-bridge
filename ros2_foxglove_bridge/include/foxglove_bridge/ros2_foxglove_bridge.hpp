@@ -7,7 +7,6 @@
 #include <thread>
 
 #include <rclcpp/rclcpp.hpp>
-#include <ros2_babel_fish/babel_fish.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
 #include <websocketpp/common/connection_hdl.hpp>
 
@@ -20,6 +19,10 @@
 #include <foxglove_bridge/regex_utils.hpp>
 #include <foxglove_bridge/server_factory.hpp>
 #include <foxglove_bridge/utils.hpp>
+
+#ifdef ENABLE_JSON_MESSAGES
+#include <ros2_babel_fish/babel_fish.hpp>
+#endif
 
 namespace foxglove_bridge {
 
@@ -83,7 +86,9 @@ private:
   std::atomic<bool> _subscribeGraphUpdates = false;
   bool _includeHidden = false;
   std::unique_ptr<foxglove::CallbackQueue> _fetchAssetQueue;
+#ifdef ENABLE_JSON_MESSAGES
   ros2_babel_fish::BabelFish::SharedPtr _babelFish;
+#endif
 
   void subscribeConnectionGraph(bool subscribe);
 

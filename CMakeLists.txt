@@ -153,38 +153,6 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     find_package(rosidl_typesupport_cpp REQUIRED)
     find_package(rosidl_typesupport_introspection_cpp REQUIRED)
 
-    # Build the vendored ros2_babel_fish library
-    set(ROS2_BABEL_FISH_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/src/ros2_babel_fish)
-    set(ROS2_BABEL_FISH_SOURCES
-      ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_action_client.cpp
-      ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_publisher.cpp
-      ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_service.cpp
-      ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_service_client.cpp
-      ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_subscription.cpp
-      ${ROS2_BABEL_FISH_DIR}/idl/providers/local_type_support_provider.cpp
-      ${ROS2_BABEL_FISH_DIR}/idl/serialization.cpp
-      ${ROS2_BABEL_FISH_DIR}/idl/type_support_provider.cpp
-      ${ROS2_BABEL_FISH_DIR}/messages/array_message.cpp
-      ${ROS2_BABEL_FISH_DIR}/messages/compound_message.cpp
-      ${ROS2_BABEL_FISH_DIR}/messages/message.cpp
-      ${ROS2_BABEL_FISH_DIR}/babel_fish.cpp
-      ${ROS2_BABEL_FISH_DIR}/detail/topic.cpp
-    )
-
-    add_library(ros2_babel_fish STATIC ${ROS2_BABEL_FISH_SOURCES})
-    set_target_properties(ros2_babel_fish PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    target_include_directories(ros2_babel_fish PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include)
-    target_compile_definitions(ros2_babel_fish PUBLIC RCLCPP_VERSION_MAJOR=${rclcpp_VERSION_MAJOR})
-    ament_target_dependencies(ros2_babel_fish
-      ament_index_cpp
-      rclcpp
-      rclcpp_action
-      rcpputils
-      rosidl_runtime_cpp
-      rosidl_typesupport_cpp
-      rosidl_typesupport_introspection_cpp
-    )
-
     add_library(foxglove_bridge_component SHARED
       ros2_foxglove_bridge/src/json_to_ros.cpp
       ros2_foxglove_bridge/src/message_definition_cache.cpp
@@ -199,8 +167,49 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include>
         $<INSTALL_INTERFACE:include>
     )
+
+    # For ROS 2 Humble only, build and link the vendored ros2_babel_fish library
+    if("$ENV{ROS_DISTRO}" STREQUAL "humble")
+      message(STATUS "Building vendored ros2_babel_fish")
+      set(ROS2_BABEL_FISH_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/src/ros2_babel_fish)
+      set(ROS2_BABEL_FISH_SOURCES
+        ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_action_client.cpp
+        ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_publisher.cpp
+        ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_service.cpp
+        ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_service_client.cpp
+        ${ROS2_BABEL_FISH_DIR}/detail/babel_fish_subscription.cpp
+        ${ROS2_BABEL_FISH_DIR}/idl/providers/local_type_support_provider.cpp
+        ${ROS2_BABEL_FISH_DIR}/idl/serialization.cpp
+        ${ROS2_BABEL_FISH_DIR}/idl/type_support_provider.cpp
+        ${ROS2_BABEL_FISH_DIR}/messages/array_message.cpp
+        ${ROS2_BABEL_FISH_DIR}/messages/compound_message.cpp
+        ${ROS2_BABEL_FISH_DIR}/messages/message.cpp
+        ${ROS2_BABEL_FISH_DIR}/babel_fish.cpp
+        ${ROS2_BABEL_FISH_DIR}/detail/topic.cpp
+      )
+
+      add_library(ros2_babel_fish STATIC ${ROS2_BABEL_FISH_SOURCES})
+      set_target_properties(ros2_babel_fish PROPERTIES POSITION_INDEPENDENT_CODE ON)
+      target_include_directories(ros2_babel_fish PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include)
+      target_compile_definitions(ros2_babel_fish PUBLIC RCLCPP_VERSION_MAJOR=${rclcpp_VERSION_MAJOR})
+      ament_target_dependencies(ros2_babel_fish
+        ament_index_cpp
+        rclcpp
+        rclcpp_action
+        rcpputils
+        rosidl_runtime_cpp
+        rosidl_typesupport_cpp
+        rosidl_typesupport_introspection_cpp
+      )
+
+      target_link_libraries(foxglove_bridge_component foxglove_bridge_base ros2_babel_fish)
+      target_compile_definitions(foxglove_bridge_component PUBLIC ENABLE_JSON_MESSAGES=1)
+    elseif(${rclcpp_VERSION_MAJOR} GREATER 20)
+      # NOTE: For ROS 2 Iron and later, we can use native rclcpp for dynamic message serialization
+      # ...
+    endif()
+
     ament_target_dependencies(foxglove_bridge_component ament_index_cpp rclcpp rclcpp_components resource_retriever rosgraph_msgs)
-    target_link_libraries(foxglove_bridge_component foxglove_bridge_base ros2_babel_fish)
     rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
     enable_strict_compiler_warnings(foxglove_bridge_component)
     add_executable(foxglove_bridge
@@ -270,10 +279,12 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
     target_link_libraries(base64_test foxglove_bridge_base)
     enable_strict_compiler_warnings(base64_test)
 
-    ament_add_gtest(json_to_ros_test ros2_foxglove_bridge/tests/json_to_ros_test.cpp)
-    ament_target_dependencies(json_to_ros_test rclcpp rclcpp_components std_msgs)
-    target_link_libraries(json_to_ros_test foxglove_bridge_component)
-    enable_strict_compiler_warnings(json_to_ros_test)
+    if("$ENV{ROS_DISTRO}" STREQUAL "humble")
+      ament_add_gtest(json_to_ros_test ros2_foxglove_bridge/tests/json_to_ros_test.cpp)
+      ament_target_dependencies(json_to_ros_test rclcpp rclcpp_components std_msgs)
+      target_link_libraries(json_to_ros_test foxglove_bridge_component)
+      enable_strict_compiler_warnings(json_to_ros_test)
+    endif()
 
     ament_add_gtest(smoke_test ros2_foxglove_bridge/tests/smoke_test.cpp)
     ament_target_dependencies(smoke_test rclcpp rclcpp_components std_msgs std_srvs)
