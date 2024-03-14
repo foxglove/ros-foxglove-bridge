@@ -112,7 +112,7 @@ ros2 launch foxglove_bridge foxglove_bridge_launch.xml
 
 ## Clients
 
-[Foxglove Studio](https://foxglove.dev/studio) connects to foxglove_bridge for live robotics visualization.
+[Foxglove](https://foxglove.dev/) connects to foxglove_bridge for live robotics visualization.
 
 ## Development
 
