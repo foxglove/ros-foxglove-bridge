@@ -10,15 +10,16 @@ ENV CC=clang
 ENV CXX=clang++
 
 # Set environment and working directory
-ENV ROS_WS /ros2_ws
+ENV ROS_WS /ros_ws
 WORKDIR $ROS_WS
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
   bash-completion \
   build-essential \
-  clang \
-  clang-format \
+  clang-15 \
+  clangd-15 \
+  clang-format-15 \
   curl \
   gdb \
   git \
@@ -32,6 +33,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   strace \
   sudo \
   && rm -rf /var/lib/apt/lists/*
+
+# Set clang*-15 as the default
+RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-15 100
+RUN update-alternatives --install /usr/bin/clangd clangd /usr/bin/clangd-15 100
+RUN update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-15 100
 
 # Add package.xml so we can install package dependencies
 COPY package.xml src/ros-foxglove-bridge/
@@ -60,11 +66,14 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 
+# Make the workspace directory writable by the non-root user
+RUN chown -R $USERNAME:$USERNAME $ROS_WS
+
 USER $USERNAME
 
 # Add aliases to .bashrc
 RUN echo $'\
-alias ros2_build_debug="source /opt/ros/humble/setup.bash && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Debug"\n\
-alias ros2_build_release="source /opt/ros/humble/setup.bash && colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo"\n\
+alias ros2_build_debug="source /opt/ros/$ROS_DISTRO/setup.bash && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON"\n\
+alias ros2_build_release="source /opt/ros/$ROS_DISTRO/setup.bash && colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON"\n\
 alias ros2_foxglove_bridge="source /ros_ws/install_ros2/setup.bash && ros2 run foxglove_bridge foxglove_bridge --ros-args --log-level debug --log-level rcl:=INFO"\n\
 ' >> ~/.bashrc

@@ -2,6 +2,9 @@
 
 #include <resource_retriever/retriever.hpp>
 
+#ifdef ENABLE_JSON_MESSAGES
+#include <foxglove_bridge/json_to_ros.hpp>
+#endif
 #include <foxglove_bridge/ros2_foxglove_bridge.hpp>
 
 namespace foxglove_bridge {
@@ -24,6 +27,10 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   RCLCPP_INFO(this->get_logger(), "Starting foxglove_bridge (%s, %s@%s) with %s", rosDistro,
               foxglove::FOXGLOVE_BRIDGE_VERSION, foxglove::FOXGLOVE_BRIDGE_GIT_HASH,
               foxglove::WebSocketUserAgent());
+
+#ifdef ENABLE_JSON_MESSAGES
+  _babelFish = ros2_babel_fish::BabelFish::make_shared();
+#endif
 
   declareParameters(this);
 
@@ -61,7 +68,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   if (_useSimTime) {
     serverOptions.capabilities.push_back(foxglove::CAPABILITY_TIME);
   }
-  serverOptions.supportedEncodings = {"cdr"};
+  serverOptions.supportedEncodings = {"cdr", "json"};
   serverOptions.metadata = {{"ROS_DISTRO", rosDistro}};
   serverOptions.sendBufferLimitBytes = send_buffer_limit;
   serverOptions.sessionId = std::to_string(std::time(nullptr));
@@ -627,9 +634,10 @@ void FoxgloveBridge::clientAdvertise(const foxglove::ClientAdvertisement& advert
     publisherOptions.callback_group = _clientPublishCallbackGroup;
     auto publisher = this->create_generic_publisher(topicName, topicType, qos, publisherOptions);
 
-    RCLCPP_INFO(this->get_logger(), "Client %s is advertising \"%s\" (%s) on channel %d",
+    RCLCPP_INFO(this->get_logger(),
+                "Client %s is advertising \"%s\" (%s) on channel %d with encoding \"%s\"",
                 _server->remoteEndpointString(hdl).c_str(), topicName.c_str(), topicType.c_str(),
-                advertisement.channelId);
+                advertisement.channelId, advertisement.encoding.c_str());
 
     // Store the new topic advertisement
     clientPublications.emplace(advertisement.channelId, std::move(publisher));
@@ -702,14 +710,43 @@ void FoxgloveBridge::clientMessage(const foxglove::ClientMessage& message, Conne
     publisher = it2->second;
   }
 
-  // Copy the message payload into a SerializedMessage object
-  rclcpp::SerializedMessage serializedMessage{message.getLength()};
-  auto& rclSerializedMsg = serializedMessage.get_rcl_serialized_message();
-  std::memcpy(rclSerializedMsg.buffer, message.getData(), message.getLength());
-  rclSerializedMsg.buffer_length = message.getLength();
+  if (message.advertisement.encoding == "cdr") {
+    // Copy the message payload into a SerializedMessage object
+    rclcpp::SerializedMessage serializedMessage{message.getLength()};
+    auto& rclSerializedMsg = serializedMessage.get_rcl_serialized_message();
+    std::memcpy(rclSerializedMsg.buffer, message.getData(), message.getLength());
+    rclSerializedMsg.buffer_length = message.getLength();
 
-  // Publish the message
-  publisher->publish(serializedMessage);
+    // Publish the message
+    publisher->publish(serializedMessage);
+#ifdef ENABLE_JSON_MESSAGES
+  } else if (message.advertisement.encoding == "json") {
+    const auto jsonMessage =
+      std::string_view{reinterpret_cast<const char*>(message.getData()), message.getLength()};
+    ros2_babel_fish::CompoundMessage::SharedPtr rosMsg;
+    const auto maybeErr =
+      jsonMessageToRos(jsonMessage, message.advertisement.schemaName, _babelFish, rosMsg);
+    if (maybeErr) {
+      throw foxglove::ClientChannelError(message.advertisement.channelId,
+                                         std::string{"Dropping client message from "} +
+                                           _server->remoteEndpointString(hdl) +
+                                           " with encoding \"json\": " + maybeErr.value().what());
+    }
+
+    // Publish the assembled ROS message
+    auto publisherHandle = publisher->get_publisher_handle();
+    const auto status =
+      rcl_publish(publisherHandle.get(), rosMsg->type_erased_message().get(), nullptr);
+    if (RCL_RET_OK != status) {
+      rclcpp::exceptions::throw_from_rcl_error(status, "Failed to publish message");
+    }
+#endif
+  } else {
+    throw foxglove::ClientChannelError(
+      message.advertisement.channelId,
+      "Dropping client message from " + _server->remoteEndpointString(hdl) +
+        " with unknown encoding \"" + message.advertisement.encoding + "\"");
+  }
 }
 
 void FoxgloveBridge::setParameters(const std::vector<foxglove::Parameter>& parameters,
