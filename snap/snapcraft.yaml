@@ -16,7 +16,17 @@ architectures:
   - build-on: amd64
   - build-on: arm64
 
+plugs:
+  configuration-read:
+    interface: content
+    target: $SNAP_COMMON/configuration
+
 apps:
+  config-from-content-snap:
+    command: usr/bin/config_from_content_snap.sh
+    daemon: oneshot
+    install-mode: disable
+    before: [foxglove-bridge]
   foxglove-bridge:
     command: usr/bin/launch.sh
     daemon: simple
@@ -42,6 +52,8 @@ parts:
         craftctl set grade="$grade"
     build-packages:
       - ros-humble-spdlog-vendor
+    stage-snaps:
+      - yq
     stage-packages:
       - ros-humble-spdlog-vendor
       - ros-humble-ros2launch
