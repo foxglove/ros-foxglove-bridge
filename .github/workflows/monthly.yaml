@@ -6,6 +6,6 @@ on:
 
 jobs:
   main:
-    uses: canonical/ros-foxglove-bridge/.github/workflows/snap.yaml@main
+    uses: ubuntu-robotics/ros-foxglove-bridge/.github/workflows/snap.yaml@main
     with:
       branch-name: "main"
