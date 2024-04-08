@@ -1,0 +1,12 @@
+#!/bin/sh -e
+
+CONFIGURATION_FILE_PATH=$SNAP_COMMON/configuration/foxglove-bridge.yaml
+
+if [ ! -f "$CONFIGURATION_FILE_PATH" ]; then
+    echo "Configuration file '$CONFIGURATION_FILE_PATH' does not exist."
+    exit 1
+fi
+
+snapctl start --enable ${SNAP_NAME}.config-from-content-snap 2>&1
+snapctl restart ${SNAP_NAME} 2>&1 || true
+

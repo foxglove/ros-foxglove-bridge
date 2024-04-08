@@ -1,0 +1,5 @@
+#!/bin/sh -e
+
+snapctl stop --disable ${SNAP_NAME}.config-from-content-snap 2>&1
+snapctl restart ${SNAP_NAME} 2>&1 || true
+
