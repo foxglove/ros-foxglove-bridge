@@ -1,0 +1,11 @@
+name: Monthly
+on:
+  schedule:
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+jobs:
+  main:
+    uses: ubuntu-robotics/ros-foxglove-bridge/.github/workflows/snap.yaml@main
+    with:
+      branch-name: "main"

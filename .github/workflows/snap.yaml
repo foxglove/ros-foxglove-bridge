@@ -1,0 +1,25 @@
+name: snap
+on:
+  push:
+    branches:
+      - feature/snap
+  pull_request:
+    branches:
+      - feature/snap
+  workflow_dispatch:
+  workflow_call:
+   inputs:
+      branch-name:
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  snap:
+    uses: ubuntu-robotics/snap_workflows/.github/workflows/snap.yaml@main
+    secrets:
+      store-login: ${{ secrets.STORE_LOGIN }}
+    with:
+      branch-name: ${{ inputs.branch-name == '' && github.ref || inputs.branch-name }}
+      snap-name: foxglove-bridge
+      publish: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
