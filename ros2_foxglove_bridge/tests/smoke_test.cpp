@@ -537,6 +537,24 @@ TEST_F(ParameterTest, testGetParametersParallel) {
   }
 }
 
+TEST_F(ServiceTest, testAdvertiseService) {
+  auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  auto serviceFuture = foxglove::waitForService(client, SERVICE_NAME);
+  ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
+  ASSERT_EQ(std::future_status::ready, serviceFuture.wait_for(DEFAULT_TIMEOUT));
+  const foxglove::Service service = serviceFuture.get();
+
+  EXPECT_EQ(service.name, SERVICE_NAME);
+  EXPECT_EQ(service.type, "std_srvs/srv/SetBool");
+  EXPECT_EQ(service.requestSchema, "bool data # e.g. for hardware enabling / disabling\n");
+  EXPECT_EQ(service.responseSchema,
+            "bool success   # indicate successful run of triggered service\nstring message # "
+            "informational, e.g. for error messages\n");
+
+  std_srvs::srv::SetBool::Request requestMsg;
+  requestMsg.data = true;
+}
+
 TEST_F(ServiceTest, testCallServiceParallel) {
   // Connect a few clients (in parallel) and make sure that they can all call the service
   auto clients = {
