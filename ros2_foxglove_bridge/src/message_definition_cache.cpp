@@ -31,6 +31,8 @@ static const std::unordered_set<std::string> PRIMITIVE_TYPES{
   "bool",  "byte",   "char",  "float32", "float64", "int8",   "uint8",
   "int16", "uint16", "int32", "uint32",  "int64",   "uint64", "string"};
 
+constexpr char SEP[] = "---\n";
+
 static std::set<std::string> parse_msg_dependencies(const std::string& text,
                                                     const std::string& package_context) {
   std::set<std::string> dependencies;
@@ -130,8 +132,6 @@ static std::string trim_string(std::string& str) {
 /// @return A tuple holding goal, result and feedback definitions
 static std::tuple<std::string, std::string, std::string> split_action_msg_definition(
   const std::string& action_definition) {
-  constexpr char SEP[] = "---";
-
   auto definitions = split_string(action_definition, SEP);
   if (definitions.size() != 3) {
     throw std::invalid_argument("Invalid action definition:\n" + action_definition);
@@ -145,8 +145,6 @@ static std::tuple<std::string, std::string, std::string> split_action_msg_defini
 /// @return A tuple holding request and response definitions
 static std::tuple<std::string, std::string> split_service_msg_definition(
   const std::string& service_definition) {
-  constexpr char SEP[] = "---";
-
   auto definitions = split_string(service_definition, SEP);
   if (definitions.size() != 2) {
     throw std::invalid_argument("Invalid service definition:\n" + service_definition);
