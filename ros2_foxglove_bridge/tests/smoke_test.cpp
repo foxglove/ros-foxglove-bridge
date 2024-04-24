@@ -546,10 +546,10 @@ TEST_F(ServiceTest, testAdvertiseService) {
 
   EXPECT_EQ(service.name, SERVICE_NAME);
   EXPECT_EQ(service.type, "std_srvs/srv/SetBool");
-  EXPECT_EQ(service.requestSchema, "bool data # e.g. for hardware enabling / disabling\n");
+  EXPECT_EQ(service.requestSchema, "bool data # e.g. for hardware enabling / disabling");
   EXPECT_EQ(service.responseSchema,
             "bool success   # indicate successful run of triggered service\nstring message # "
-            "informational, e.g. for error messages\n");
+            "informational, e.g. for error messages");
 
   std_srvs::srv::SetBool::Request requestMsg;
   requestMsg.data = true;

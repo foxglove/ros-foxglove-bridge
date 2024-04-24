@@ -118,19 +118,26 @@ static std::vector<std::string> split_string(const std::string& str,
   return strings;
 }
 
+static std::string trim_string(std::string& str) {
+  constexpr char whitespaces[] = "\t\n\r ";
+  str.erase(0, str.find_first_not_of(whitespaces));  // trim left
+  str.erase(str.find_last_not_of(whitespaces) + 1);  // trim right
+  return str;
+}
+
 /// @brief Split an action definition into individual goal, result and feedback definitions.
 /// @param action_definition The full action definition as read from a .action file
 /// @return A tuple holding goal, result and feedback definitions
 static std::tuple<std::string, std::string, std::string> split_action_msg_definition(
   const std::string& action_definition) {
-  constexpr char SEP[] = "\n---\n";
+  constexpr char SEP[] = "---";
 
-  const auto definitions = split_string(action_definition, SEP);
+  auto definitions = split_string(action_definition, SEP);
   if (definitions.size() != 3) {
     throw std::invalid_argument("Invalid action definition:\n" + action_definition);
   }
 
-  return {definitions[0], definitions[1], definitions[2]};
+  return {trim_string(definitions[0]), trim_string(definitions[1]), trim_string(definitions[2])};
 }
 
 /// @brief Split an service definition into individual request and response definitions.
@@ -138,14 +145,14 @@ static std::tuple<std::string, std::string, std::string> split_action_msg_defini
 /// @return A tuple holding request and response definitions
 static std::tuple<std::string, std::string> split_service_msg_definition(
   const std::string& service_definition) {
-  constexpr char SEP[] = "---\n";
+  constexpr char SEP[] = "---";
 
-  const auto definitions = split_string(service_definition, SEP);
+  auto definitions = split_string(service_definition, SEP);
   if (definitions.size() != 2) {
     throw std::invalid_argument("Invalid service definition:\n" + service_definition);
   }
 
-  return {definitions[0], definitions[1]};
+  return {trim_string(definitions[0]), trim_string(definitions[1])};
 }
 
 inline bool ends_with(const std::string& str, const std::string& suffix) {
