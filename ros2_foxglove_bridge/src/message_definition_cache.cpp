@@ -14,6 +14,8 @@
 #include <ament_index_cpp/get_resources.hpp>
 #include <rcutils/logging_macros.h>
 
+#include "foxglove_bridge/utils.hpp"
+
 namespace foxglove {
 
 // Match datatype names (foo_msgs/Bar or foo_msgs/msg/Bar or foo_msgs/srv/Bar)
@@ -30,8 +32,6 @@ static const std::regex IDL_FIELD_TYPE_REGEX{
 static const std::unordered_set<std::string> PRIMITIVE_TYPES{
   "bool",  "byte",   "char",  "float32", "float64", "int8",   "uint8",
   "int16", "uint16", "int32", "uint32",  "int64",   "uint64", "string"};
-
-constexpr char SEP[] = "---\n";
 
 static std::set<std::string> parse_msg_dependencies(const std::string& text,
                                                     const std::string& package_context) {
@@ -118,39 +118,6 @@ static std::vector<std::string> split_string(const std::string& str,
   strings.push_back(str.substr(prev));
 
   return strings;
-}
-
-static std::string trim_string(std::string& str) {
-  constexpr char whitespaces[] = "\t\n\r ";
-  str.erase(0, str.find_first_not_of(whitespaces));  // trim left
-  str.erase(str.find_last_not_of(whitespaces) + 1);  // trim right
-  return str;
-}
-
-/// @brief Split an action definition into individual goal, result and feedback definitions.
-/// @param action_definition The full action definition as read from a .action file
-/// @return A tuple holding goal, result and feedback definitions
-static std::tuple<std::string, std::string, std::string> split_action_msg_definition(
-  const std::string& action_definition) {
-  auto definitions = split_string(action_definition, SEP);
-  if (definitions.size() != 3) {
-    throw std::invalid_argument("Invalid action definition:\n" + action_definition);
-  }
-
-  return {trim_string(definitions[0]), trim_string(definitions[1]), trim_string(definitions[2])};
-}
-
-/// @brief Split an service definition into individual request and response definitions.
-/// @param service_definition The full services definition as read from a .srv file
-/// @return A tuple holding request and response definitions
-static std::tuple<std::string, std::string> split_service_msg_definition(
-  const std::string& service_definition) {
-  auto definitions = split_string(service_definition, SEP);
-  if (definitions.size() != 2) {
-    throw std::invalid_argument("Invalid service definition:\n" + service_definition);
-  }
-
-  return {trim_string(definitions[0]), trim_string(definitions[1])};
 }
 
 inline bool ends_with(const std::string& str, const std::string& suffix) {
@@ -257,10 +224,16 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
   if (!file.good()) {
     throw DefinitionNotFoundError(definition_identifier.package_resource_name);
   }
-  const std::string contents{std::istreambuf_iterator(file), {}};
 
   if (subfolder == "action") {
-    const auto [goalDef, resultDef, feedbackDef] = split_action_msg_definition(contents);
+    const auto splitDefinitions = foxglove_bridge::splitMessageDefinitions(file);
+    if (splitDefinitions.size() != 3) {
+      throw std::invalid_argument("Invalid action definition: " + filename);
+    }
+
+    const auto& goalDef = splitDefinitions[0];
+    const auto& resultDef = splitDefinitions[1];
+    const auto& feedbackDef = splitDefinitions[2];
 
     // Define type definitions for each action subtype.
     // These type definitions may include additional fields such as the goal_id.
@@ -293,7 +266,13 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
     }
     return it->second;
   } else if (subfolder == "srv") {
-    const auto [requestDef, responseDef] = split_service_msg_definition(contents);
+    const auto splitDefinitions = foxglove_bridge::splitMessageDefinitions(file);
+    if (splitDefinitions.size() != 2) {
+      throw std::invalid_argument("Invalid service definition: " + filename);
+    }
+
+    const auto& requestDef = splitDefinitions[0];
+    const auto& responseDef = splitDefinitions[1];
     const std::map<std::string, std::string> service_type_definitions = {
       {SERVICE_REQUEST_MESSAGE_SUFFIX, requestDef}, {SERVICE_RESPONSE_MESSAGE_SUFFIX, responseDef}};
 
@@ -319,7 +298,8 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
     const MessageSpec& spec =
       msg_specs_by_definition_identifier_
         .emplace(definition_identifier,
-                 MessageSpec(definition_identifier.format, std::move(contents), package))
+                 MessageSpec(definition_identifier.format,
+                             std::string{std::istreambuf_iterator(file), {}}, package))
         .first->second;
 
     // "References and pointers to data stored in the container are only invalidated by erasing that
