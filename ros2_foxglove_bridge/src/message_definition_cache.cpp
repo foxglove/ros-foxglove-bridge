@@ -226,14 +226,16 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
   }
 
   if (subfolder == "action") {
-    const auto splitDefinitions = foxglove_bridge::splitMessageDefinitions(file);
-    if (splitDefinitions.size() != 3) {
-      throw std::invalid_argument("Invalid action definition: " + filename);
+    const auto split_definitions = foxglove_bridge::splitMessageDefinitions(file);
+    if (split_definitions.size() != 3) {
+      throw std::invalid_argument("Invalid action definition in " + filename +
+                                  ": Expected 3 definitions, got " +
+                                  std::to_string(split_definitions.size()));
     }
 
-    const auto& goalDef = splitDefinitions[0];
-    const auto& resultDef = splitDefinitions[1];
-    const auto& feedbackDef = splitDefinitions[2];
+    const auto& goalDef = split_definitions[0];
+    const auto& resultDef = split_definitions[1];
+    const auto& feedbackDef = split_definitions[2];
 
     // Define type definitions for each action subtype.
     // These type definitions may include additional fields such as the goal_id.
@@ -266,13 +268,15 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
     }
     return it->second;
   } else if (subfolder == "srv") {
-    const auto splitDefinitions = foxglove_bridge::splitMessageDefinitions(file);
-    if (splitDefinitions.size() != 2) {
-      throw std::invalid_argument("Invalid service definition: " + filename);
+    const auto split_definitions = foxglove_bridge::splitMessageDefinitions(file);
+    if (split_definitions.size() != 2) {
+      throw std::invalid_argument("Invalid service definition in " + filename +
+                                  ": Expected 2 definitions, got " +
+                                  std::to_string(split_definitions.size()));
     }
 
-    const auto& requestDef = splitDefinitions[0];
-    const auto& responseDef = splitDefinitions[1];
+    const auto& requestDef = split_definitions[0];
+    const auto& responseDef = split_definitions[1];
     const std::map<std::string, std::string> service_type_definitions = {
       {SERVICE_REQUEST_MESSAGE_SUFFIX, requestDef}, {SERVICE_RESPONSE_MESSAGE_SUFFIX, responseDef}};
 

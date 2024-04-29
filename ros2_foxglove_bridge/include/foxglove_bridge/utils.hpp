@@ -30,7 +30,7 @@ inline std::vector<std::string> splitMessageDefinitions(std::istream& stream) {
   std::string line = "";
   std::string definition = "";
 
-  while (getline(stream, line)) {
+  while (std::getline(stream, line)) {
     if (line == "---") {
       definitions.push_back(trimString(definition));
       definition = "";

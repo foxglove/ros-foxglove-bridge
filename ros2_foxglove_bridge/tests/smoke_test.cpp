@@ -550,9 +550,6 @@ TEST_F(ServiceTest, testAdvertiseService) {
   EXPECT_EQ(service.responseSchema,
             "bool success   # indicate successful run of triggered service\nstring message # "
             "informational, e.g. for error messages");
-
-  std_srvs::srv::SetBool::Request requestMsg;
-  requestMsg.data = true;
 }
 
 TEST_F(ServiceTest, testCallServiceParallel) {
