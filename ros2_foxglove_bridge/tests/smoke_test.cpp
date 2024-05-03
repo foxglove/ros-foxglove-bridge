@@ -263,7 +263,7 @@ TEST(SmokeTest, testPublishing) {
   auto msgFuture = msgPromise.get_future();
   auto node = rclcpp::Node::make_shared("tester");
   auto sub = node->create_subscription<std_msgs::msg::String>(
-    advertisement.topic, 10, [&msgPromise](const std_msgs::msg::String::SharedPtr msg) {
+    advertisement.topic, 10, [&msgPromise](std::shared_ptr<const std_msgs::msg::String> msg) {
       msgPromise.set_value(msg->data);
     });
   rclcpp::executors::SingleThreadedExecutor executor;
@@ -300,7 +300,7 @@ TEST_F(ExistingPublisherTest, testPublishingWithExistingPublisher) {
   auto msgFuture = msgPromise.get_future();
   auto node = rclcpp::Node::make_shared("tester");
   auto sub = node->create_subscription<std_msgs::msg::String>(
-    advertisement.topic, 10, [&msgPromise](const std_msgs::msg::String::SharedPtr msg) {
+    advertisement.topic, 10, [&msgPromise](std::shared_ptr<const std_msgs::msg::String> msg) {
       msgPromise.set_value(msg->data);
     });
   rclcpp::executors::SingleThreadedExecutor executor;
@@ -535,6 +535,21 @@ TEST_F(ParameterTest, testGetParametersParallel) {
     EXPECT_NO_THROW(parameters = future.get());
     EXPECT_GE(parameters.size(), 2UL);
   }
+}
+
+TEST_F(ServiceTest, testAdvertiseService) {
+  auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  auto serviceFuture = foxglove::waitForService(client, SERVICE_NAME);
+  ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
+  ASSERT_EQ(std::future_status::ready, serviceFuture.wait_for(DEFAULT_TIMEOUT));
+  const foxglove::Service service = serviceFuture.get();
+
+  EXPECT_EQ(service.name, SERVICE_NAME);
+  EXPECT_EQ(service.type, "std_srvs/srv/SetBool");
+  EXPECT_EQ(service.requestSchema, "bool data # e.g. for hardware enabling / disabling");
+  EXPECT_EQ(service.responseSchema,
+            "bool success   # indicate successful run of triggered service\nstring message # "
+            "informational, e.g. for error messages");
 }
 
 TEST_F(ServiceTest, testCallServiceParallel) {
