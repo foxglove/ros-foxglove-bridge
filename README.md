@@ -22,7 +22,7 @@ The `foxglove_bridge` uses the [Foxglove WebSocket protocol](https://github.com/
 The `foxglove_bridge` package is available for ROS 1 Melodic and Noetic, and ROS 2 Humble and Rolling. Earlier releases of ROS will not be supported due to API design and/or performance limitations. The package can be installed with the following command:
 
 ```bash
-$ sudo apt install ros-$ROS_DISTRO-foxglove-bridge
+sudo apt install ros-$ROS_DISTRO-foxglove-bridge
 ```
 
 ## Running the bridge
@@ -32,7 +32,7 @@ To run the bridge node, it is recommended to use the provided launch file:
 **ROS 1**
 
 ```bash
-$ roslaunch --screen foxglove_bridge foxglove_bridge.launch port:=8765
+roslaunch --screen foxglove_bridge foxglove_bridge.launch port:=8765
 ```
 
 ```xml
@@ -48,7 +48,7 @@ $ roslaunch --screen foxglove_bridge foxglove_bridge.launch port:=8765
 **ROS 2**
 
 ```bash
-$ ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
+ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
 ```
 
 ```xml
