@@ -126,7 +126,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   if (_useSimTime) {
     _clockSubscription = this->create_subscription<rosgraph_msgs::msg::Clock>(
       "/clock", rclcpp::QoS{rclcpp::KeepLast(1)}.best_effort(),
-      [&](std::shared_ptr<rosgraph_msgs::msg::Clock> msg) {
+      [&](std::shared_ptr<const rosgraph_msgs::msg::Clock> msg) {
         const auto timestamp = rclcpp::Time{msg->clock}.nanoseconds();
         assert(timestamp >= 0 && "Timestamp is negative");
         _server->broadcastTime(static_cast<uint64_t>(timestamp));
@@ -534,7 +534,7 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
   try {
     auto subscriber = this->create_generic_subscription(
       topic, datatype, qos,
-      [this, channelId, clientHandle](std::shared_ptr<rclcpp::SerializedMessage> msg) {
+      [this, channelId, clientHandle](std::shared_ptr<const rclcpp::SerializedMessage> msg) {
         this->rosMessageHandler(channelId, clientHandle, msg);
       },
       subscriptionOptions);
@@ -770,7 +770,7 @@ void FoxgloveBridge::logHandler(LogLevel level, char const* msg) {
 
 void FoxgloveBridge::rosMessageHandler(const foxglove::ChannelId& channelId,
                                        ConnectionHandle clientHandle,
-                                       std::shared_ptr<rclcpp::SerializedMessage> msg) {
+                                       std::shared_ptr<const rclcpp::SerializedMessage> msg) {
   // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
   // to `/rosout` will cause a feedback loop
   const auto timestamp = this->now().nanoseconds();
