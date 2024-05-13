@@ -145,6 +145,8 @@ public:
                    const uint8_t* payload, size_t payloadSize) override;
   void broadcastTime(uint64_t timestamp) override;
   void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) override;
+  void sendServiceFailure(ConnHandle clientHandle, ServiceId serviceId, uint32_t callId,
+                          const std::string& message) override;
   void updateConnectionGraph(const MapOfSets& publishedTopics, const MapOfSets& subscribedTopics,
                              const MapOfSets& advertisedServices) override;
   void sendFetchAssetResponse(ConnHandle clientHandle, const FetchAssetResponse& response) override;
@@ -768,8 +770,10 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, Mes
     case ClientBinaryOpcode::SERVICE_CALL_REQUEST: {
       ServiceRequest request;
       if (length < request.size()) {
-        sendStatusAndLogMsg(hdl, StatusLevel::Error,
-                            "Invalid service call request length " + std::to_string(length));
+        const std::string errMessage =
+          "Invalid service call request length " + std::to_string(length);
+        sendServiceFailure(hdl, request.serviceId, request.callId, errMessage);
+        sendStatusAndLogMsg(hdl, StatusLevel::Error, errMessage);
         return;
       }
 
@@ -778,15 +782,23 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, Mes
       {
         std::shared_lock<std::shared_mutex> lock(_servicesMutex);
         if (_services.find(request.serviceId) == _services.end()) {
-          sendStatusAndLogMsg(
-            hdl, StatusLevel::Error,
-            "Service " + std::to_string(request.serviceId) + " is not advertised");
+          const std::string errMessage =
+            "Service " + std::to_string(request.serviceId) + " is not advertised";
+          sendServiceFailure(hdl, request.serviceId, request.callId, errMessage);
+          sendStatusAndLogMsg(hdl, StatusLevel::Error, errMessage);
           return;
         }
       }
 
-      if (_handlers.serviceRequestHandler) {
+      try {
+        if (!_handlers.serviceRequestHandler) {
+          throw foxglove::ServiceError(request.serviceId, "No service handler");
+        }
+
         _handlers.serviceRequestHandler(request, hdl);
+      } catch (const std::exception& e) {
+        sendServiceFailure(hdl, request.serviceId, request.callId, e.what());
+        sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
       }
     } break;
     default: {
@@ -1023,6 +1035,16 @@ inline uint16_t Server<ServerConfiguration>::getPort() {
   }
   return endpoint.port();
 }
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::sendServiceFailure(ConnHandle clientHandle,
+                                                            ServiceId serviceId, uint32_t callId,
+                                                            const std::string& message) {
+  sendJson(clientHandle, json{{"op", "serviceCallFailure"},
+                              {"serviceId", serviceId},
+                              {"callId", callId},
+                              {"message", message}});
+};
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::updateConnectionGraph(

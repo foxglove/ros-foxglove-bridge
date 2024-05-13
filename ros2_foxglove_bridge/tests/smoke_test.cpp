@@ -604,6 +604,32 @@ TEST_F(ServiceTest, testCallServiceParallel) {
   }
 }
 
+TEST_F(ServiceTest, testCallNonexistantService) {
+  auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(std::chrono::seconds(5)));
+
+  std::promise<nlohmann::json> promise;
+  auto serviceFailureFuture = promise.get_future();
+  client->setTextMessageHandler([&promise](const std::string& payload) mutable {
+    const auto msg = nlohmann::json::parse(payload);
+    if (msg["op"].get<std::string>() == "serviceCallFailure") {
+      promise.set_value(msg);
+    }
+  });
+
+  foxglove::ServiceRequest request;
+  request.serviceId = 99u;
+  request.callId = 123u;
+  request.encoding = "";
+  request.data = {};
+  client->sendServiceRequest(request);
+
+  ASSERT_EQ(std::future_status::ready, serviceFailureFuture.wait_for(std::chrono::seconds(5)));
+  const auto failureMsg = serviceFailureFuture.get();
+  EXPECT_EQ(failureMsg["serviceId"].get<uint32_t>(), request.serviceId);
+  EXPECT_EQ(failureMsg["callId"].get<uint32_t>(), request.callId);
+}
+
 TEST(SmokeTest, receiveMessagesOfMultipleTransientLocalPublishers) {
   const std::string topicName = "/latched";
   auto node = rclcpp::Node::make_shared("node");
