@@ -604,7 +604,7 @@ TEST_F(ServiceTest, testCallServiceParallel) {
   }
 }
 
-TEST_F(ServiceTest, testCallNonexistantService) {
+TEST_F(ServiceTest, testCallNonexistentService) {
   auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
   ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(std::chrono::seconds(5)));
 
@@ -626,7 +626,7 @@ TEST_F(ServiceTest, testCallNonexistantService) {
 
   ASSERT_EQ(std::future_status::ready, serviceFailureFuture.wait_for(std::chrono::seconds(5)));
   const auto failureMsg = serviceFailureFuture.get();
-  EXPECT_EQ(failureMsg["serviceId"].get<uint32_t>(), request.serviceId);
+  EXPECT_EQ(failureMsg["serviceId"].get<foxglove::ServiceId>(), request.serviceId);
   EXPECT_EQ(failureMsg["callId"].get<uint32_t>(), request.callId);
 }
 
