@@ -99,6 +99,8 @@ public:
   virtual void broadcastTime(uint64_t timestamp) = 0;
   virtual void sendServiceResponse(ConnectionHandle clientHandle,
                                    const ServiceResponse& response) = 0;
+  virtual void sendServiceFailure(ConnectionHandle clientHandle, ServiceId serviceId,
+                                  uint32_t callId, const std::string& message) = 0;
   virtual void updateConnectionGraph(const MapOfSets& publishedTopics,
                                      const MapOfSets& subscribedTopics,
                                      const MapOfSets& advertisedServices) = 0;
