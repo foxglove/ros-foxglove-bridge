@@ -773,7 +773,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, Mes
         const std::string errMessage =
           "Invalid service call request length " + std::to_string(length);
         sendServiceFailure(hdl, request.serviceId, request.callId, errMessage);
-        sendStatusAndLogMsg(hdl, StatusLevel::Error, errMessage);
+        _server.get_elog().write(RECOVERABLE, errMessage);
         return;
       }
 
@@ -785,7 +785,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, Mes
           const std::string errMessage =
             "Service " + std::to_string(request.serviceId) + " is not advertised";
           sendServiceFailure(hdl, request.serviceId, request.callId, errMessage);
-          sendStatusAndLogMsg(hdl, StatusLevel::Error, errMessage);
+          _server.get_elog().write(RECOVERABLE, errMessage);
           return;
         }
       }
@@ -798,7 +798,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, Mes
         _handlers.serviceRequestHandler(request, hdl);
       } catch (const std::exception& e) {
         sendServiceFailure(hdl, request.serviceId, request.callId, e.what());
-        sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
+        _server.get_elog().write(RECOVERABLE, e.what());
       }
     } break;
     default: {
