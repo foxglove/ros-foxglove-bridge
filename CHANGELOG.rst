@@ -2,6 +2,15 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.7 (2024-05-21)
+------------------
+* send service call failure operation (`#298 <https://github.com/foxglove/ros-foxglove-bridge/issues/298>`_)
+* Fix service definition parsing on ROS rolling (`#293 <https://github.com/foxglove/ros-foxglove-bridge/issues/293>`_)
+* Update docs to discourage users from using websocket compression (`#297 <https://github.com/foxglove/ros-foxglove-bridge/issues/297>`_)
+* Update README.md to remove '$ ' so that you can copy and run command (`#294 <https://github.com/foxglove/ros-foxglove-bridge/issues/294>`_)
+* Fix typo in ROS2 launch file example (`#296 <https://github.com/foxglove/ros-foxglove-bridge/issues/296>`_)
+* Contributors: Felipe Galindo, Hans-Joachim Krauch, Jacob Bandes-Storch, Roman Shtylman
+
 0.7.6 (2024-02-26)
 ------------------
 * Fix rolling builds (`#289 <https://github.com/foxglove/ros-foxglove-bridge/issues/289>`_)
