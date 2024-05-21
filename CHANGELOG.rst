@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.7.7 (2024-05-21)
+------------------
 * send service call failure operation (`#298 <https://github.com/foxglove/ros-foxglove-bridge/issues/298>`_)
 * Fix service definition parsing on ROS rolling (`#293 <https://github.com/foxglove/ros-foxglove-bridge/issues/293>`_)
 * Update docs to discourage users from using websocket compression (`#297 <https://github.com/foxglove/ros-foxglove-bridge/issues/297>`_)
