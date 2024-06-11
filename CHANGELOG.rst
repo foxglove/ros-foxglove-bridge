@@ -2,6 +2,11 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Fix srv definition parsing failing due to carriage return (`#303 <https://github.com/foxglove/ros-foxglove-bridge/issues/303>`_)
+* Contributors: Hans-Joachim Krauch
+
 0.7.7 (2024-05-21)
 ------------------
 * send service call failure operation (`#298 <https://github.com/foxglove/ros-foxglove-bridge/issues/298>`_)
