@@ -73,6 +73,17 @@ TEST(SplitDefinitionsTest, ActionDefinitionNoGoal) {
   EXPECT_EQ(definitions[2], "bool feedback");
 }
 
+TEST(SplitDefinitionsTest, HandleCarriageReturn) {
+  const std::string messageDef =
+    "---\r\n"
+    "string device_name\n";
+  std::istringstream stream(messageDef);
+  const auto definitions = foxglove_bridge::splitMessageDefinitions(stream);
+  ASSERT_EQ(definitions.size(), 2u);
+  EXPECT_EQ(definitions[0], "");
+  EXPECT_EQ(definitions[1], "string device_name");
+}
+
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
