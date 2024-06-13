@@ -4,6 +4,11 @@
   "workspaceFolder": "/ros_ws/src/ros-foxglove-bridge",
   "workspaceMount": "source=${localWorkspaceFolder},target=/ros_ws/src/ros-foxglove-bridge,type=bind,consistency=cached",
   "dockerFile": "./Dockerfile",
+  "build": {
+    "args": {
+      "ROS_DISTRIBUTION": "humble"
+    }
+  },
   "context": "..",
   "forwardPorts": [
     8765
@@ -11,8 +16,7 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-vscode.cpptools",
-        "xaver.clang-format",
+        "llvm-vs-code-extensions.vscode-clangd",
         "twxs.cmake"
       ],
       "settings": {

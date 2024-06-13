@@ -1,7 +1,7 @@
 // -*- jsonc -*-
 {
-  "C_Cpp.autoAddFileAssociations": false,
-  "editor.defaultFormatter": "xaver.clang-format",
+  "clangd.arguments": ["--compile-commands-dir=/ros_ws/build_ros2"],
+  "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd",
   "editor.formatOnSave": true,
   "files.eol": "\n",
   "files.insertFinalNewline": true,
