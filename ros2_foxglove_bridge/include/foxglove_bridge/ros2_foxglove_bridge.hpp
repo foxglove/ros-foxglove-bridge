@@ -20,6 +20,8 @@
 #include <foxglove_bridge/server_factory.hpp>
 #include <foxglove_bridge/utils.hpp>
 
+#include <rosx_introspection/ros_parser.hpp>
+
 namespace foxglove_bridge {
 
 using ConnectionHandle = websocketpp::connection_hdl;
@@ -82,6 +84,7 @@ private:
   std::atomic<bool> _subscribeGraphUpdates = false;
   bool _includeHidden = false;
   std::unique_ptr<foxglove::CallbackQueue> _fetchAssetQueue;
+  std::unordered_map<std::string, std::shared_ptr<RosMsgParser::Parser>> _jsonParsers;
 
   void subscribeConnectionGraph(bool subscribe);
 
