@@ -21,7 +21,24 @@ constexpr uint8_t HELLO_WORLD_BINARY[] = {0,   1,   0,   0,  12,  0,   0,   0,  
 constexpr auto ONE_SECOND = std::chrono::seconds(1);
 constexpr auto DEFAULT_TIMEOUT = std::chrono::seconds(10);
 
-rclcpp::executors::SingleThreadedExecutor::SharedPtr executor = nullptr;
+class TestWithExecutor : public testing::Test {
+protected:
+  TestWithExecutor() {
+    this->_executorThread = std::thread([this]() {
+      this->executor.spin();
+    });
+  }
+
+  ~TestWithExecutor() override {
+    this->executor.cancel();
+    this->_executorThread.join();
+  }
+
+  rclcpp::executors::SingleThreadedExecutor executor;
+
+private:
+  std::thread _executorThread;
+};
 
 class ParameterTest : public ::testing::Test {
 public:
@@ -253,7 +270,7 @@ TEST(SmokeTest, testSubscriptionParallel) {
   }
 }
 
-TEST(SmokeTest, testPublishing) {
+TEST_F(TestWithExecutor, testPublishing) {
   foxglove::ClientAdvertisement advertisement;
   advertisement.channelId = 1;
   advertisement.topic = "/foo";
@@ -268,7 +285,7 @@ TEST(SmokeTest, testPublishing) {
     advertisement.topic, 10, [&msgPromise](std::shared_ptr<const std_msgs::msg::String> msg) {
       msgPromise.set_value(msg->data);
     });
-  executor->add_node(node);
+  this->executor.add_node(node);
 
   // Set up the client, advertise and publish the binary message
   auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
@@ -285,7 +302,7 @@ TEST(SmokeTest, testPublishing) {
 
   // Ensure that we have received the correct message via our ROS subscriber
   ASSERT_EQ(std::future_status::ready, msgFuture.wait_for(DEFAULT_TIMEOUT));
-  executor->remove_node(node);
+  this->executor.remove_node(node);
   EXPECT_EQ("hello world", msgFuture.get());
 }
 
@@ -733,7 +750,7 @@ int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   rclcpp::init(argc, argv);
 
-  executor = rclcpp::executors::SingleThreadedExecutor::make_shared();
+  auto executor = rclcpp::executors::SingleThreadedExecutor::make_shared();
 
   rclcpp_components::ComponentManager componentManager(executor, "ComponentManager");
   const auto componentResources = componentManager.get_component_resources("foxglove_bridge");
@@ -751,7 +768,7 @@ int main(int argc, char** argv) {
   auto node = componentFactory->create_node_instance(nodeOptions);
   executor->add_node(node.get_node_base_interface());
 
-  std::thread spinnerThread([]() {
+  std::thread spinnerThread([&executor]() {
     executor->spin();
   });
 
