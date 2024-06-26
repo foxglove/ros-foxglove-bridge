@@ -40,7 +40,7 @@ private:
   std::thread _executorThread;
 };
 
-class ParameterTest : public ::testing::Test {
+class ParameterTest : public TestWithExecutor {
 public:
   using PARAM_1_TYPE = std::string;
   inline static const std::string NODE_1_NAME = "node_1";
@@ -82,25 +82,15 @@ protected:
     _paramNode2->declare_parameter(PARAM_3_NAME, PARAM_3_DEFAULT_VALUE);
     _paramNode2->declare_parameter(PARAM_4_NAME, PARAM_4_DEFAULT_VALUE);
 
-    _executor.add_node(_paramNode1);
-    _executor.add_node(_paramNode2);
-    _executorThread = std::thread([this]() {
-      _executor.spin();
-    });
+    executor.add_node(_paramNode1);
+    executor.add_node(_paramNode2);
 
     _wsClient = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
     ASSERT_EQ(std::future_status::ready, _wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
   }
 
-  void TearDown() override {
-    _executor.cancel();
-    _executorThread.join();
-  }
-
-  rclcpp::executors::SingleThreadedExecutor _executor;
   rclcpp::Node::SharedPtr _paramNode1;
   rclcpp::Node::SharedPtr _paramNode2;
-  std::thread _executorThread;
   std::shared_ptr<foxglove::Client<websocketpp::config::asio_client>> _wsClient;
 };
 
