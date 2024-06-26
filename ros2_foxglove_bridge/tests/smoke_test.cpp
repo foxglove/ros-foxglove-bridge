@@ -89,12 +89,17 @@ protected:
     ASSERT_EQ(std::future_status::ready, _wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
   }
 
+  void TearDown() override {
+    executor.remove_node(_paramNode1);
+    executor.remove_node(_paramNode2);
+  }
+
   rclcpp::Node::SharedPtr _paramNode1;
   rclcpp::Node::SharedPtr _paramNode2;
   std::shared_ptr<foxglove::Client<websocketpp::config::asio_client>> _wsClient;
 };
 
-class ServiceTest : public ::testing::Test {
+class ServiceTest : public TestWithExecutor {
 public:
   inline static const std::string SERVICE_NAME = "/foo_service";
 
@@ -107,26 +112,19 @@ protected:
         res->message = "hello";
         res->success = req->data;
       });
-
-    _executor.add_node(_node);
-    _executorThread = std::thread([this]() {
-      _executor.spin();
-    });
+    executor.add_node(_node);
   }
 
   void TearDown() override {
-    _executor.cancel();
-    _executorThread.join();
+    executor.remove_node(_node);
   }
 
-  rclcpp::executors::SingleThreadedExecutor _executor;
   rclcpp::Node::SharedPtr _node;
   rclcpp::ServiceBase::SharedPtr _service;
-  std::thread _executorThread;
   std::shared_ptr<foxglove::Client<websocketpp::config::asio_client>> _wsClient;
 };
 
-class ExistingPublisherTest : public ::testing::Test {
+class ExistingPublisherTest : public TestWithExecutor {
 public:
   inline static const std::string TOPIC_NAME = "/some_topic";
 
@@ -135,21 +133,15 @@ protected:
     _node = rclcpp::Node::make_shared("node");
     _publisher =
       _node->create_publisher<std_msgs::msg::String>(TOPIC_NAME, rclcpp::SystemDefaultsQoS());
-    _executor.add_node(_node);
-    _executorThread = std::thread([this]() {
-      _executor.spin();
-    });
+    executor.add_node(_node);
   }
 
   void TearDown() override {
-    _executor.cancel();
-    _executorThread.join();
+    executor.remove_node(_node);
   }
 
-  rclcpp::executors::SingleThreadedExecutor _executor;
   rclcpp::Node::SharedPtr _node;
   rclcpp::PublisherBase::SharedPtr _publisher;
-  std::thread _executorThread;
 };
 
 template <class T>
