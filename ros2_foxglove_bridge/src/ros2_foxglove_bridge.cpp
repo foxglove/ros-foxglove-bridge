@@ -135,6 +135,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
 }
 
 FoxgloveBridge::~FoxgloveBridge() {
+  _shuttingDown = true;
   RCLCPP_INFO(this->get_logger(), "Shutting down %s", this->get_name());
   if (_rosgraphPollThread) {
     _rosgraphPollThread->join();
@@ -148,7 +149,7 @@ void FoxgloveBridge::rosgraphPollThread() {
   updateAdvertisedServices();
 
   auto graphEvent = this->get_graph_event();
-  while (rclcpp::ok()) {
+  while (!_shuttingDown && rclcpp::ok()) {
     try {
       this->wait_for_graph_change(graphEvent, 200ms);
       bool triggered = graphEvent->check_and_clear();

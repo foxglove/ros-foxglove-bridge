@@ -4,11 +4,11 @@
 #include <thread>
 
 #include <gtest/gtest.h>
-#include <rclcpp_components/component_manager.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <websocketpp/config/asio_client.hpp>
 
+#include <foxglove_bridge/ros2_foxglove_bridge.hpp>
 #include <foxglove_bridge/test/test_client.hpp>
 #include <foxglove_bridge/websocket_client.hpp>
 
@@ -21,7 +21,26 @@ constexpr uint8_t HELLO_WORLD_BINARY[] = {0,   1,   0,   0,  12,  0,   0,   0,  
 constexpr auto ONE_SECOND = std::chrono::seconds(1);
 constexpr auto DEFAULT_TIMEOUT = std::chrono::seconds(10);
 
-class ParameterTest : public ::testing::Test {
+class TestWithExecutor : public testing::Test {
+protected:
+  TestWithExecutor() {
+    this->_executorThread = std::thread([this]() {
+      this->executor.spin();
+    });
+  }
+
+  ~TestWithExecutor() override {
+    this->executor.cancel();
+    this->_executorThread.join();
+  }
+
+  rclcpp::executors::SingleThreadedExecutor executor;
+
+private:
+  std::thread _executorThread;
+};
+
+class ParameterTest : public TestWithExecutor {
 public:
   using PARAM_1_TYPE = std::string;
   inline static const std::string NODE_1_NAME = "node_1";
@@ -63,29 +82,24 @@ protected:
     _paramNode2->declare_parameter(PARAM_3_NAME, PARAM_3_DEFAULT_VALUE);
     _paramNode2->declare_parameter(PARAM_4_NAME, PARAM_4_DEFAULT_VALUE);
 
-    _executor.add_node(_paramNode1);
-    _executor.add_node(_paramNode2);
-    _executorThread = std::thread([this]() {
-      _executor.spin();
-    });
+    executor.add_node(_paramNode1);
+    executor.add_node(_paramNode2);
 
     _wsClient = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
     ASSERT_EQ(std::future_status::ready, _wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
   }
 
   void TearDown() override {
-    _executor.cancel();
-    _executorThread.join();
+    executor.remove_node(_paramNode1);
+    executor.remove_node(_paramNode2);
   }
 
-  rclcpp::executors::SingleThreadedExecutor _executor;
   rclcpp::Node::SharedPtr _paramNode1;
   rclcpp::Node::SharedPtr _paramNode2;
-  std::thread _executorThread;
   std::shared_ptr<foxglove::Client<websocketpp::config::asio_client>> _wsClient;
 };
 
-class ServiceTest : public ::testing::Test {
+class ServiceTest : public TestWithExecutor {
 public:
   inline static const std::string SERVICE_NAME = "/foo_service";
 
@@ -98,26 +112,19 @@ protected:
         res->message = "hello";
         res->success = req->data;
       });
-
-    _executor.add_node(_node);
-    _executorThread = std::thread([this]() {
-      _executor.spin();
-    });
+    executor.add_node(_node);
   }
 
   void TearDown() override {
-    _executor.cancel();
-    _executorThread.join();
+    executor.remove_node(_node);
   }
 
-  rclcpp::executors::SingleThreadedExecutor _executor;
   rclcpp::Node::SharedPtr _node;
   rclcpp::ServiceBase::SharedPtr _service;
-  std::thread _executorThread;
   std::shared_ptr<foxglove::Client<websocketpp::config::asio_client>> _wsClient;
 };
 
-class ExistingPublisherTest : public ::testing::Test {
+class ExistingPublisherTest : public TestWithExecutor {
 public:
   inline static const std::string TOPIC_NAME = "/some_topic";
 
@@ -126,21 +133,15 @@ protected:
     _node = rclcpp::Node::make_shared("node");
     _publisher =
       _node->create_publisher<std_msgs::msg::String>(TOPIC_NAME, rclcpp::SystemDefaultsQoS());
-    _executor.add_node(_node);
-    _executorThread = std::thread([this]() {
-      _executor.spin();
-    });
+    executor.add_node(_node);
   }
 
   void TearDown() override {
-    _executor.cancel();
-    _executorThread.join();
+    executor.remove_node(_node);
   }
 
-  rclcpp::executors::SingleThreadedExecutor _executor;
   rclcpp::Node::SharedPtr _node;
   rclcpp::PublisherBase::SharedPtr _publisher;
-  std::thread _executorThread;
 };
 
 template <class T>
@@ -251,7 +252,7 @@ TEST(SmokeTest, testSubscriptionParallel) {
   }
 }
 
-TEST(SmokeTest, testPublishing) {
+TEST_F(TestWithExecutor, testPublishing) {
   foxglove::ClientAdvertisement advertisement;
   advertisement.channelId = 1;
   advertisement.topic = "/foo";
@@ -266,8 +267,7 @@ TEST(SmokeTest, testPublishing) {
     advertisement.topic, 10, [&msgPromise](std::shared_ptr<const std_msgs::msg::String> msg) {
       msgPromise.set_value(msg->data);
     });
-  rclcpp::executors::SingleThreadedExecutor executor;
-  executor.add_node(node);
+  this->executor.add_node(node);
 
   // Set up the client, advertise and publish the binary message
   auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
@@ -283,8 +283,8 @@ TEST(SmokeTest, testPublishing) {
   client->unadvertise({advertisement.channelId});
 
   // Ensure that we have received the correct message via our ROS subscriber
-  const auto ret = executor.spin_until_future_complete(msgFuture, ONE_SECOND);
-  ASSERT_EQ(rclcpp::FutureReturnCode::SUCCESS, ret);
+  ASSERT_EQ(std::future_status::ready, msgFuture.wait_for(DEFAULT_TIMEOUT));
+  this->executor.remove_node(node);
   EXPECT_EQ("hello world", msgFuture.get());
 }
 
@@ -732,34 +732,23 @@ int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   rclcpp::init(argc, argv);
 
-  const size_t numThreads = 2;
-  auto executor =
-    rclcpp::executors::MultiThreadedExecutor::make_shared(rclcpp::ExecutorOptions{}, numThreads);
-
-  rclcpp_components::ComponentManager componentManager(executor, "ComponentManager");
-  const auto componentResources = componentManager.get_component_resources("foxglove_bridge");
-
-  if (componentResources.empty()) {
-    RCLCPP_INFO(componentManager.get_logger(), "No loadable resources found");
-    return EXIT_FAILURE;
-  }
-
-  auto componentFactory = componentManager.create_component_factory(componentResources.front());
+  rclcpp::executors::SingleThreadedExecutor executor;
   rclcpp::NodeOptions nodeOptions;
   // Explicitly allow file:// asset URIs for testing purposes.
   nodeOptions.append_parameter_override("asset_uri_allowlist",
                                         std::vector<std::string>({"file://.*"}));
-  auto node = componentFactory->create_node_instance(nodeOptions);
-  executor->add_node(node.get_node_base_interface());
+  foxglove_bridge::FoxgloveBridge node(nodeOptions);
+  executor.add_node(node.get_node_base_interface());
 
   std::thread spinnerThread([&executor]() {
-    executor->spin();
+    executor.spin();
   });
 
   const auto testResult = RUN_ALL_TESTS();
-  executor->cancel();
+
+  executor.cancel();
   spinnerThread.join();
-  rclcpp::shutdown();
+  executor.remove_node(node.get_node_base_interface());
 
   return testResult;
 }
