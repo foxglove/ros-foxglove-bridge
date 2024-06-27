@@ -4,11 +4,11 @@
 #include <thread>
 
 #include <gtest/gtest.h>
-#include <rclcpp_components/component_manager.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <websocketpp/config/asio_client.hpp>
 
+#include <foxglove_bridge/ros2_foxglove_bridge.hpp>
 #include <foxglove_bridge/test/test_client.hpp>
 #include <foxglove_bridge/websocket_client.hpp>
 
@@ -732,33 +732,23 @@ int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   rclcpp::init(argc, argv);
 
-  auto executor = rclcpp::executors::SingleThreadedExecutor::make_shared();
-
-  rclcpp_components::ComponentManager componentManager(executor, "ComponentManager");
-  const auto componentResources = componentManager.get_component_resources("foxglove_bridge");
-
-  if (componentResources.empty()) {
-    RCLCPP_INFO(componentManager.get_logger(), "No loadable resources found");
-    return EXIT_FAILURE;
-  }
-
-  auto componentFactory = componentManager.create_component_factory(componentResources.front());
+  rclcpp::executors::SingleThreadedExecutor executor;
   rclcpp::NodeOptions nodeOptions;
   // Explicitly allow file:// asset URIs for testing purposes.
   nodeOptions.append_parameter_override("asset_uri_allowlist",
                                         std::vector<std::string>({"file://.*"}));
-  auto node = componentFactory->create_node_instance(nodeOptions);
-  executor->add_node(node.get_node_base_interface());
+  foxglove_bridge::FoxgloveBridge node(nodeOptions);
+  executor.add_node(node.get_node_base_interface());
 
   std::thread spinnerThread([&executor]() {
-    executor->spin();
+    executor.spin();
   });
 
   const auto testResult = RUN_ALL_TESTS();
-  executor->cancel();
+
+  executor.cancel();
   spinnerThread.join();
-  executor.reset();
-  rclcpp::shutdown();
+  executor.remove_node(node.get_node_base_interface());
 
   return testResult;
 }
