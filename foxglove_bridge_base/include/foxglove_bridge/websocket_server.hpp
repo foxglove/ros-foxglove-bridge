@@ -1044,7 +1044,7 @@ inline void Server<ServerConfiguration>::sendServiceFailure(ConnHandle clientHan
                               {"serviceId", serviceId},
                               {"callId", callId},
                               {"message", message}});
-};
+}
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::updateConnectionGraph(
