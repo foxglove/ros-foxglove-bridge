@@ -241,7 +241,7 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
 
     ament_add_gtest(smoke_test ros2_foxglove_bridge/tests/smoke_test.cpp)
     ament_target_dependencies(smoke_test rclcpp rclcpp_components std_msgs std_srvs)
-    target_link_libraries(smoke_test foxglove_bridge_base)
+    target_link_libraries(smoke_test foxglove_bridge_component)
     enable_strict_compiler_warnings(smoke_test)
 
     ament_add_gtest(utils_test ros2_foxglove_bridge/tests/utils_test.cpp)
