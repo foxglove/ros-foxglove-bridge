@@ -33,6 +33,12 @@ static const std::unordered_set<std::string> PRIMITIVE_TYPES{
   "bool",  "byte",   "char",  "float32", "float64", "int8",   "uint8",
   "int16", "uint16", "int32", "uint32",  "int64",   "uint64", "string"};
 
+enum class DefinitionType {
+  Message,
+  Service,
+  Action,
+};
+
 static std::set<std::string> parse_msg_dependencies(const std::string& text,
                                                     const std::string& package_context) {
   std::set<std::string> dependencies;
@@ -74,10 +80,20 @@ std::set<std::string> parse_dependencies(MessageDefinitionFormat format, const s
   }
 }
 
-static const char* extension_for_format(MessageDefinitionFormat format) {
+static const char* extension_for_format(MessageDefinitionFormat format,
+                                        DefinitionType definitionType) {
   switch (format) {
     case MessageDefinitionFormat::MSG:
-      return ".msg";
+      switch (definitionType) {
+        case DefinitionType::Message:
+          return ".msg";
+        case DefinitionType::Service:
+          return ".srv";
+        case DefinitionType::Action:
+          return ".action";
+        default:
+          throw std::runtime_error("unknown definition type");
+      }
     case MessageDefinitionFormat::IDL:
       return ".idl";
     default:
@@ -171,11 +187,6 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
     return it->second;
   }
 
-  if (definition_identifier.format == MessageDefinitionFormat::IDL) {
-    RCUTILS_LOG_ERROR_NAMED("foxglove_bridge", "IDL definitions are currently not supported");
-    throw DefinitionNotFoundError(definition_identifier.package_resource_name);
-  }
-
   std::smatch match;
   if (!std::regex_match(definition_identifier.package_resource_name, match,
                         PACKAGE_TYPENAME_REGEX)) {
@@ -186,17 +197,20 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
   const std::string subfolder = match[2].str();
   const std::string type_name = match[3].str();
 
+  const auto& format = definition_identifier.format;
   std::string filename = "";
   if (subfolder == "action") {
     // The action type name includes the subtype which we have to remove to get the action name.
     // Type name: Fibonacci_FeedbackMessage -> Action name: Fibonacci
-    filename = remove_action_subtype(type_name) + ".action";
+    filename =
+      remove_action_subtype(type_name) + extension_for_format(format, DefinitionType::Action);
   } else if (subfolder == "srv") {
     // The service type name includes the subtype which we have to remove to get the service name.
     // Type name: SetBool_Request -> Service name: SetBool
-    filename = remove_service_subtype(type_name) + ".srv";
+    filename =
+      remove_service_subtype(type_name) + extension_for_format(format, DefinitionType::Service);
   } else {
-    filename = type_name + extension_for_format(definition_identifier.format);
+    filename = type_name + extension_for_format(format, DefinitionType::Message);
   }
 
   // Get the package share directory, or throw a PackageNotFoundError
@@ -226,6 +240,12 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
   }
 
   if (subfolder == "action") {
+    if (definition_identifier.format == MessageDefinitionFormat::IDL) {
+      RCUTILS_LOG_ERROR_NAMED("foxglove_bridge",
+                              "Action IDL definitions are currently not supported");
+      throw DefinitionNotFoundError(definition_identifier.package_resource_name);
+    }
+
     const auto split_definitions = foxglove_bridge::splitMessageDefinitions(file);
     if (split_definitions.size() != 3) {
       throw std::invalid_argument("Invalid action definition in " + filename +
@@ -268,6 +288,12 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
     }
     return it->second;
   } else if (subfolder == "srv") {
+    if (definition_identifier.format == MessageDefinitionFormat::IDL) {
+      RCUTILS_LOG_ERROR_NAMED("foxglove_bridge",
+                              "Service IDL definitions are currently not supported");
+      throw DefinitionNotFoundError(definition_identifier.package_resource_name);
+    }
+
     const auto split_definitions = foxglove_bridge::splitMessageDefinitions(file);
     if (split_definitions.size() != 2) {
       throw std::invalid_argument("Invalid service definition in " + filename +
