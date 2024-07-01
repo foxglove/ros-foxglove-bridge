@@ -51,6 +51,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   _includeHidden = this->get_parameter(PARAM_INCLUDE_HIDDEN).as_bool();
   const auto assetUriAllowlist = this->get_parameter(PARAM_ASSET_URI_ALLOWLIST).as_string_array();
   _assetUriAllowlistPatterns = parseRegexStrings(this, assetUriAllowlist);
+  _disableLoanMessage = this->get_parameter(PARAM_DISABLE_LOAN_MESSAGE).as_bool();
 
   const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
   // Fetching of assets may be blocking, hence we fetch them in a separate thread.
@@ -710,7 +711,11 @@ void FoxgloveBridge::clientMessage(const foxglove::ClientMessage& message, Conne
   rclSerializedMsg.buffer_length = message.getLength();
 
   // Publish the message
-  publisher->publish(serializedMessage);
+  if (_disableLoanMessage || !publisher->can_loan_messages()) {
+    publisher->publish(serializedMessage);
+  } else {
+    publisher->publish_as_loaned_msg(serializedMessage);
+  }
 }
 
 void FoxgloveBridge::setParameters(const std::vector<foxglove::Parameter>& parameters,
