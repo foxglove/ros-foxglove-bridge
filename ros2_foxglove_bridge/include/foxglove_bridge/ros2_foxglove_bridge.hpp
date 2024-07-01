@@ -81,6 +81,7 @@ private:
   std::vector<std::string> _capabilities;
   std::atomic<bool> _subscribeGraphUpdates = false;
   bool _includeHidden = false;
+  bool _disableLoanMessage = false;
   std::unique_ptr<foxglove::CallbackQueue> _fetchAssetQueue;
   std::atomic<bool> _shuttingDown = false;
 

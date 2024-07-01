@@ -84,6 +84,7 @@ Parameters are provided to configure the behavior of the bridge. These parameter
  * (ROS 2) __min_qos_depth__: Minimum depth used for the QoS profile of subscriptions. Defaults to `1`. This is to set a lower limit for a subscriber's QoS depth which is computed by summing up depths of all publishers. See also [#208](https://github.com/foxglove/ros-foxglove-bridge/issues/208).
  * (ROS 2) __max_qos_depth__: Maximum depth used for the QoS profile of subscriptions. Defaults to `25`.
  * (ROS 2) __include_hidden__: Include hidden topics and services. Defaults to `false`.
+ * (ROS 2) __disable_load_message__: Do not publish as loaned message when publishing a client message. Defaults to `false`.
 
 ## Building from source
 
