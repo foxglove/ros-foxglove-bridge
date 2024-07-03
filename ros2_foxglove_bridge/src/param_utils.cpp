@@ -147,6 +147,14 @@ void declareParameters(rclcpp::Node* node) {
   includeHiddenDescription.read_only = true;
   node->declare_parameter(PARAM_INCLUDE_HIDDEN, false, includeHiddenDescription);
 
+  auto disableLoanMessageDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  disableLoanMessageDescription.name = PARAM_DISABLE_LOAN_MESSAGE;
+  disableLoanMessageDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_BOOL;
+  disableLoanMessageDescription.description =
+    "Do not publish as loaned message when publishing a client message";
+  disableLoanMessageDescription.read_only = true;
+  node->declare_parameter(PARAM_DISABLE_LOAN_MESSAGE, true, disableLoanMessageDescription);
+
   auto assetUriAllowlistDescription = rcl_interfaces::msg::ParameterDescriptor{};
   assetUriAllowlistDescription.name = PARAM_ASSET_URI_ALLOWLIST;
   assetUriAllowlistDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
