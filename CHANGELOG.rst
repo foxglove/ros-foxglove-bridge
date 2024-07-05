@@ -2,6 +2,14 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.9 (2024-07-05)
+------------------
+* Fix parsing of IDL message definitions (`#313 <https://github.com/foxglove/ros-foxglove-bridge/issues/313>`_)
+* Support publishing client message as loaned message (`#314 <https://github.com/foxglove/ros-foxglove-bridge/issues/314>`_)
+* fix: remove extra ";" in websocket_server.hpp (`#311 <https://github.com/foxglove/ros-foxglove-bridge/issues/311>`_)
+* Fix rolling smoke tests crashing (`#309 <https://github.com/foxglove/ros-foxglove-bridge/issues/309>`_)
+* Contributors: Andrey Milko, Hans-Joachim Krauch
+
 0.7.8 (2024-06-11)
 ------------------
 * Fix srv definition parsing failing due to carriage return (`#303 <https://github.com/foxglove/ros-foxglove-bridge/issues/303>`_)
