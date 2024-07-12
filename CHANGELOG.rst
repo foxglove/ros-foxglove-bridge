@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.7.10 (2024-07-12)
+-------------------
 * Make ROS1 service type retrieval more robust (`#316 <https://github.com/foxglove/ros-foxglove-bridge/issues/316>`_)
 * Contributors: Hans-Joachim Krauch
 
