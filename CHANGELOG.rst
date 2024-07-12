@@ -2,6 +2,11 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Make ROS1 service type retrieval more robust (`#316 <https://github.com/foxglove/ros-foxglove-bridge/issues/316>`_)
+* Contributors: Hans-Joachim Krauch
+
 0.7.9 (2024-07-05)
 ------------------
 * Fix parsing of IDL message definitions (`#313 <https://github.com/foxglove/ros-foxglove-bridge/issues/313>`_)
