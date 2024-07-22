@@ -712,7 +712,7 @@ void FoxgloveBridge::clientMessage(const foxglove::ClientMessage& message, Conne
     publisher = it2->second;
   }
 
-  auto PublishMessage = [publisher](const void* data, size_t size) {
+  auto PublishMessage = [publisher, this](const void* data, size_t size) {
     // Copy the message payload into a SerializedMessage object
     rclcpp::SerializedMessage serializedMessage{size};
     auto& rclSerializedMsg = serializedMessage.get_rcl_serialized_message();
