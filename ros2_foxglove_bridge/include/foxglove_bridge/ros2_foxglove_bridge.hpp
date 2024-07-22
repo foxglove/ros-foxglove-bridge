@@ -8,6 +8,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
+#include <rosx_introspection/ros_parser.hpp>
 #include <websocketpp/common/connection_hdl.hpp>
 
 #include <foxglove_bridge/callback_queue.hpp>
@@ -19,8 +20,6 @@
 #include <foxglove_bridge/regex_utils.hpp>
 #include <foxglove_bridge/server_factory.hpp>
 #include <foxglove_bridge/utils.hpp>
-
-#include <rosx_introspection/ros_parser.hpp>
 
 namespace foxglove_bridge {
 
