@@ -23,6 +23,7 @@ constexpr char PARAM_USE_COMPRESSION[] = "use_compression";
 constexpr char PARAM_CAPABILITIES[] = "capabilities";
 constexpr char PARAM_CLIENT_TOPIC_WHITELIST[] = "client_topic_whitelist";
 constexpr char PARAM_INCLUDE_HIDDEN[] = "include_hidden";
+constexpr char PARAM_DISABLE_LOAN_MESSAGE[] = "disable_load_message";
 constexpr char PARAM_ASSET_URI_ALLOWLIST[] = "asset_uri_allowlist";
 
 constexpr int64_t DEFAULT_PORT = 8765;

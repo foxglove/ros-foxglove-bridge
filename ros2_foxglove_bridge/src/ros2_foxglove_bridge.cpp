@@ -51,6 +51,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   _includeHidden = this->get_parameter(PARAM_INCLUDE_HIDDEN).as_bool();
   const auto assetUriAllowlist = this->get_parameter(PARAM_ASSET_URI_ALLOWLIST).as_string_array();
   _assetUriAllowlistPatterns = parseRegexStrings(this, assetUriAllowlist);
+  _disableLoanMessage = this->get_parameter(PARAM_DISABLE_LOAN_MESSAGE).as_bool();
 
   const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
   // Fetching of assets may be blocking, hence we fetch them in a separate thread.
@@ -135,6 +136,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
 }
 
 FoxgloveBridge::~FoxgloveBridge() {
+  _shuttingDown = true;
   RCLCPP_INFO(this->get_logger(), "Shutting down %s", this->get_name());
   if (_rosgraphPollThread) {
     _rosgraphPollThread->join();
@@ -148,7 +150,7 @@ void FoxgloveBridge::rosgraphPollThread() {
   updateAdvertisedServices();
 
   auto graphEvent = this->get_graph_event();
-  while (rclcpp::ok()) {
+  while (!_shuttingDown && rclcpp::ok()) {
     try {
       this->wait_for_graph_change(graphEvent, 200ms);
       bool triggered = graphEvent->check_and_clear();
@@ -717,7 +719,11 @@ void FoxgloveBridge::clientMessage(const foxglove::ClientMessage& message, Conne
     std::memcpy(rclSerializedMsg.buffer, data, size);
     rclSerializedMsg.buffer_length = size;
     // Publish the message
-    publisher->publish(serializedMessage);
+    if (_disableLoanMessage || !publisher->can_loan_messages()) {
+      publisher->publish(serializedMessage);
+    } else {
+      publisher->publish_as_loaned_msg(serializedMessage);
+    }
   };
 
   if (message.advertisement.encoding == "cdr") {

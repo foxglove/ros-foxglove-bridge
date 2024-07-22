@@ -9,7 +9,7 @@ if(POLICY CMP0024)
   set(CMAKE_POLICY_DEFAULT_CMP0024 NEW)
 endif()
 
-project(foxglove_bridge LANGUAGES CXX VERSION 0.7.8)
+project(foxglove_bridge LANGUAGES CXX VERSION 0.7.10)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -242,7 +242,7 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
 
     ament_add_gtest(smoke_test ros2_foxglove_bridge/tests/smoke_test.cpp)
     ament_target_dependencies(smoke_test rclcpp rclcpp_components std_msgs std_srvs)
-    target_link_libraries(smoke_test foxglove_bridge_base)
+    target_link_libraries(smoke_test foxglove_bridge_component)
     enable_strict_compiler_warnings(smoke_test)
 
     ament_add_gtest(utils_test ros2_foxglove_bridge/tests/utils_test.cpp)
