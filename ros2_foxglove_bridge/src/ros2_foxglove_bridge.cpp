@@ -266,12 +266,17 @@ void FoxgloveBridge::updateAdvertisedTopics(
                   topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str(), err.what());
       continue;
     }
-    // register the JSON parser for this scheName
-    auto parserIt = _jsonParsers.find(newChannel.topic);
-    if (parserIt == _jsonParsers.end()) {
-      auto parser = std::make_shared<RosMsgParser::Parser>(
-        newChannel.topic, RosMsgParser::ROSType(newChannel.schemaName), newChannel.schema);
-      _jsonParsers.insert({newChannel.topic, parser});
+    // register the JSON parser for this schemaName
+    if(newChannel.schema.empty() && newChannel.encoding == "json") {
+      RCLCPP_ERROR(this->get_logger(), "Schema is empty for topic \"%s\" (%s)", 
+                   newChannel.topic.c_str(), newChannel.schemaName.c_str());
+    } else {
+      auto parserIt = _jsonParsers.find(newChannel.schemaName);
+      if (parserIt == _jsonParsers.end()) {
+        auto parser = std::make_shared<RosMsgParser::Parser>(
+          newChannel.topic, RosMsgParser::ROSType(newChannel.schemaName), newChannel.schema);
+        _jsonParsers.insert({newChannel.schemaName, parser});
+      }
     }
     channelsToAdd.push_back(newChannel);
   }
@@ -732,33 +737,36 @@ void FoxgloveBridge::clientMessage(const foxglove::ClientMessage& message, Conne
     std::shared_ptr<RosMsgParser::Parser> parser;
     {
       std::lock_guard<std::mutex> lock(_subscriptionsMutex);
-      auto parserIt = _jsonParsers.find(message.advertisement.topic);
+      auto parserIt = _jsonParsers.find(message.advertisement.schemaName);
       if (parserIt != _jsonParsers.end()) {
         parser = parserIt->second;
       }
     }
     if (!parser) {
-      RCLCPP_WARN(get_logger(), "No parser found for %s", message.advertisement.topic.c_str());
+      throw foxglove::ClientChannelError(message.advertisement.channelId,
+                                         "Dropping client message from " +
+                                         _server->remoteEndpointString(hdl) +
+                                         " with encoding \"json\": no parser found");
     } else {
       thread_local RosMsgParser::ROS2_Serializer serializer;
       serializer.reset();
-      std::string_view jsonMessage(reinterpret_cast<const char*>(message.getData()),
-                                   message.getLength());
+      const std::string jsonMessage(reinterpret_cast<const char*>(message.getData()),
+                                    message.getLength());
       try {
         parser->serializeFromJson(jsonMessage, &serializer);
         PublishMessage(serializer.getBufferData(), serializer.getBufferSize());
       } catch (const std::exception& ex) {
         throw foxglove::ClientChannelError(message.advertisement.channelId,
-                                           std::string{"Dropping client message from "} +
-                                             _server->remoteEndpointString(hdl) +
-                                             " with encoding \"json\": " + ex.what());
+                                           "Dropping client message from " +
+                                           _server->remoteEndpointString(hdl) +
+                                           " with encoding \"json\": " + ex.what());
       }
     }
   } else {
     throw foxglove::ClientChannelError(
       message.advertisement.channelId,
       "Dropping client message from " + _server->remoteEndpointString(hdl) +
-        " with unknown encoding \"" + message.advertisement.encoding + "\"");
+      " with unknown encoding \"" + message.advertisement.encoding + "\"");
   }
 }
 
