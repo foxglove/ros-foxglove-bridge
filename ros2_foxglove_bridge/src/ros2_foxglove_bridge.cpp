@@ -62,7 +62,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   if (_useSimTime) {
     serverOptions.capabilities.push_back(foxglove::CAPABILITY_TIME);
   }
-  serverOptions.supportedEncodings = {"cdr"};
+  serverOptions.supportedEncodings = {"cdr", "json"};
   serverOptions.metadata = {{"ROS_DISTRO", rosDistro}};
   serverOptions.sendBufferLimitBytes = send_buffer_limit;
   serverOptions.sessionId = std::to_string(std::time(nullptr));
@@ -266,7 +266,6 @@ void FoxgloveBridge::updateAdvertisedTopics(
                   topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str(), err.what());
       continue;
     }
-
     channelsToAdd.push_back(newChannel);
   }
 
@@ -602,6 +601,42 @@ void FoxgloveBridge::clientAdvertise(const foxglove::ClientAdvertisement& advert
         std::to_string(advertisement.channelId) + " it had already advertised");
   }
 
+  if (advertisement.schemaName.empty()) {
+    throw foxglove::ClientChannelError(
+      advertisement.channelId,
+      "Received client advertisement from " + _server->remoteEndpointString(hdl) + " for channel " +
+        std::to_string(advertisement.channelId) + " with empty schema name");
+  }
+
+  if (advertisement.encoding == "json") {
+    // register the JSON parser for this schemaName
+    auto parserIt = _jsonParsers.find(advertisement.schemaName);
+    if (parserIt == _jsonParsers.end()) {
+      const auto& schemaName = advertisement.schemaName;
+      std::string schema = "";
+
+      if (!advertisement.schema.empty()) {
+        // Schema is given by the advertisement
+        schema = std::string(reinterpret_cast<const char*>(advertisement.schema.data()),
+                             advertisement.schema.size());
+      } else {
+        // Schema not given, look it up.
+        auto [format, msgDefinition] = _messageDefinitionCache.get_full_text(schemaName);
+        if (format != foxglove::MessageDefinitionFormat::MSG) {
+          throw foxglove::ClientChannelError(
+            advertisement.channelId,
+            "Message definition (.msg) for schema " + schemaName + " not found.");
+        }
+
+        schema = msgDefinition;
+      }
+
+      auto parser = std::make_shared<RosMsgParser::Parser>(
+        advertisement.topic, RosMsgParser::ROSType(schemaName), schema);
+      _jsonParsers.insert({schemaName, parser});
+    }
+  }
+
   try {
     // Create a new topic advertisement
     const auto& topicName = advertisement.topic;
@@ -629,9 +664,10 @@ void FoxgloveBridge::clientAdvertise(const foxglove::ClientAdvertisement& advert
     publisherOptions.callback_group = _clientPublishCallbackGroup;
     auto publisher = this->create_generic_publisher(topicName, topicType, qos, publisherOptions);
 
-    RCLCPP_INFO(this->get_logger(), "Client %s is advertising \"%s\" (%s) on channel %d",
+    RCLCPP_INFO(this->get_logger(),
+                "Client %s is advertising \"%s\" (%s) on channel %d with encoding \"%s\"",
                 _server->remoteEndpointString(hdl).c_str(), topicName.c_str(), topicType.c_str(),
-                advertisement.channelId);
+                advertisement.channelId, advertisement.encoding.c_str());
 
     // Store the new topic advertisement
     clientPublications.emplace(advertisement.channelId, std::move(publisher));
@@ -704,17 +740,57 @@ void FoxgloveBridge::clientMessage(const foxglove::ClientMessage& message, Conne
     publisher = it2->second;
   }
 
-  // Copy the message payload into a SerializedMessage object
-  rclcpp::SerializedMessage serializedMessage{message.getLength()};
-  auto& rclSerializedMsg = serializedMessage.get_rcl_serialized_message();
-  std::memcpy(rclSerializedMsg.buffer, message.getData(), message.getLength());
-  rclSerializedMsg.buffer_length = message.getLength();
+  auto publishMessage = [publisher, this](const void* data, size_t size) {
+    // Copy the message payload into a SerializedMessage object
+    rclcpp::SerializedMessage serializedMessage{size};
+    auto& rclSerializedMsg = serializedMessage.get_rcl_serialized_message();
+    std::memcpy(rclSerializedMsg.buffer, data, size);
+    rclSerializedMsg.buffer_length = size;
+    // Publish the message
+    if (_disableLoanMessage || !publisher->can_loan_messages()) {
+      publisher->publish(serializedMessage);
+    } else {
+      publisher->publish_as_loaned_msg(serializedMessage);
+    }
+  };
 
-  // Publish the message
-  if (_disableLoanMessage || !publisher->can_loan_messages()) {
-    publisher->publish(serializedMessage);
+  if (message.advertisement.encoding == "cdr") {
+    publishMessage(message.getData(), message.getLength());
+  } else if (message.advertisement.encoding == "json") {
+    // get the specific parser for this schemaName
+    std::shared_ptr<RosMsgParser::Parser> parser;
+    {
+      std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
+      auto parserIt = _jsonParsers.find(message.advertisement.schemaName);
+      if (parserIt != _jsonParsers.end()) {
+        parser = parserIt->second;
+      }
+    }
+    if (!parser) {
+      throw foxglove::ClientChannelError(message.advertisement.channelId,
+                                         "Dropping client message from " +
+                                           _server->remoteEndpointString(hdl) +
+                                           " with encoding \"json\": no parser found");
+    } else {
+      thread_local RosMsgParser::ROS2_Serializer serializer;
+      serializer.reset();
+      const std::string jsonMessage(reinterpret_cast<const char*>(message.getData()),
+                                    message.getLength());
+      try {
+        parser->serializeFromJson(jsonMessage, &serializer);
+        publishMessage(serializer.getBufferData(), serializer.getBufferSize());
+      } catch (const std::exception& ex) {
+        throw foxglove::ClientChannelError(message.advertisement.channelId,
+                                           "Dropping client message from " +
+                                             _server->remoteEndpointString(hdl) +
+                                             " with encoding \"json\": " + ex.what());
+      }
+    }
   } else {
-    publisher->publish_as_loaned_msg(serializedMessage);
+    throw foxglove::ClientChannelError(
+      message.advertisement.channelId,
+      "Dropping client message from " + _server->remoteEndpointString(hdl) +
+        " with unknown encoding \"" + message.advertisement.encoding + "\"");
   }
 }
 

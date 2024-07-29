@@ -761,10 +761,10 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, Mes
                                           length,
                                           data};
         _handlers.clientMessageHandler(clientMessage, hdl);
-      } catch (const ServiceError& e) {
+      } catch (const ClientChannelError& e) {
         sendStatusAndLogMsg(hdl, StatusLevel::Error, e.what());
       } catch (...) {
-        sendStatusAndLogMsg(hdl, StatusLevel::Error, "callService: Failed to execute handler");
+        sendStatusAndLogMsg(hdl, StatusLevel::Error, "clientMessage: Failed to execute handler");
       }
     } break;
     case ClientBinaryOpcode::SERVICE_CALL_REQUEST: {

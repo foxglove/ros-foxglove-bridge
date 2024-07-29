@@ -146,6 +146,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     find_package(rclcpp REQUIRED)
     find_package(rclcpp_components REQUIRED)
     find_package(resource_retriever REQUIRED)
+    find_package(rosx_introspection REQUIRED)
 
     add_library(foxglove_bridge_component SHARED
       ros2_foxglove_bridge/src/message_definition_cache.cpp
@@ -168,7 +169,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include>
         $<INSTALL_INTERFACE:include>
     )
-    ament_target_dependencies(foxglove_bridge_component ament_index_cpp rclcpp rclcpp_components resource_retriever rosgraph_msgs)
+    ament_target_dependencies(foxglove_bridge_component ament_index_cpp rclcpp rclcpp_components resource_retriever rosgraph_msgs rosx_introspection)
     target_link_libraries(foxglove_bridge_component foxglove_bridge_base)
     rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
     enable_strict_compiler_warnings(foxglove_bridge_component)

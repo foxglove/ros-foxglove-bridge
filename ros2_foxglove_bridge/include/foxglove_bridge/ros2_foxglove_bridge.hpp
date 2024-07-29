@@ -8,6 +8,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
+#include <rosx_introspection/ros_parser.hpp>
 #include <websocketpp/common/connection_hdl.hpp>
 
 #include <foxglove_bridge/callback_queue.hpp>
@@ -83,6 +84,7 @@ private:
   bool _includeHidden = false;
   bool _disableLoanMessage = true;
   std::unique_ptr<foxglove::CallbackQueue> _fetchAssetQueue;
+  std::unordered_map<std::string, std::shared_ptr<RosMsgParser::Parser>> _jsonParsers;
   std::atomic<bool> _shuttingDown = false;
 
   void subscribeConnectionGraph(bool subscribe);
