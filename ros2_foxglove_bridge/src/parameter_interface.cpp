@@ -1,6 +1,7 @@
 #include "foxglove_bridge/parameter_interface.hpp"
 
 #include <nlohmann/json.hpp>
+#include <rclcpp/qos.hpp>
 
 #include <foxglove_bridge/regex_utils.hpp>
 #include <foxglove_bridge/utils.hpp>
@@ -196,7 +197,7 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
     if (paramClientIt == _paramClientsByNode.end()) {
       const auto insertedPair = _paramClientsByNode.emplace(
         nodeName, rclcpp::AsyncParametersClient::make_shared(
-                    _node, nodeName, rmw_qos_profile_parameters, _callbackGroup));
+                    _node, nodeName, rclcpp::ParametersQoS(), _callbackGroup));
       paramClientIt = insertedPair.first;
     }
 
@@ -239,7 +240,7 @@ void ParameterInterface::setParams(const ParameterList& parameters,
     if (paramClientIt == _paramClientsByNode.end()) {
       const auto insertedPair = _paramClientsByNode.emplace(
         nodeName, rclcpp::AsyncParametersClient::make_shared(
-                    _node, nodeName, rmw_qos_profile_parameters, _callbackGroup));
+                    _node, nodeName, rclcpp::ParametersQoS(), _callbackGroup));
       paramClientIt = insertedPair.first;
     }
 
@@ -282,7 +283,7 @@ void ParameterInterface::subscribeParams(const std::vector<std::string>& paramNa
     if (paramClientIt == _paramClientsByNode.end()) {
       const auto insertedPair = _paramClientsByNode.emplace(
         nodeName, rclcpp::AsyncParametersClient::make_shared(
-                    _node, nodeName, rmw_qos_profile_parameters, _callbackGroup));
+                    _node, nodeName, rclcpp::ParametersQoS(), _callbackGroup));
       paramClientIt = insertedPair.first;
     }
 
