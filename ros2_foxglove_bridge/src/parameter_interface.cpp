@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 #include <rclcpp/qos.hpp>
+#include <rclcpp/version.h>
 
 #include <foxglove_bridge/regex_utils.hpp>
 #include <foxglove_bridge/utils.hpp>
@@ -9,6 +10,12 @@
 namespace {
 
 constexpr char PARAM_SEP = '.';
+
+#if RCLCPP_VERSION_MAJOR > 16
+const rclcpp::ParametersQoS parameterQoS;
+#else
+const rmw_qos_profile_t& parameterQoS = rmw_qos_profile_parameters;
+#endif
 
 static std::pair<std::string, std::string> getNodeAndParamName(
   const std::string& nodeNameAndParamName) {
@@ -196,8 +203,8 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
     auto paramClientIt = _paramClientsByNode.find(nodeName);
     if (paramClientIt == _paramClientsByNode.end()) {
       const auto insertedPair = _paramClientsByNode.emplace(
-        nodeName, rclcpp::AsyncParametersClient::make_shared(
-                    _node, nodeName, rclcpp::ParametersQoS(), _callbackGroup));
+        nodeName,
+        rclcpp::AsyncParametersClient::make_shared(_node, nodeName, parameterQoS, _callbackGroup));
       paramClientIt = insertedPair.first;
     }
 
@@ -239,8 +246,8 @@ void ParameterInterface::setParams(const ParameterList& parameters,
     auto paramClientIt = _paramClientsByNode.find(nodeName);
     if (paramClientIt == _paramClientsByNode.end()) {
       const auto insertedPair = _paramClientsByNode.emplace(
-        nodeName, rclcpp::AsyncParametersClient::make_shared(
-                    _node, nodeName, rclcpp::ParametersQoS(), _callbackGroup));
+        nodeName,
+        rclcpp::AsyncParametersClient::make_shared(_node, nodeName, parameterQoS, _callbackGroup));
       paramClientIt = insertedPair.first;
     }
 
@@ -282,8 +289,8 @@ void ParameterInterface::subscribeParams(const std::vector<std::string>& paramNa
     auto paramClientIt = _paramClientsByNode.find(nodeName);
     if (paramClientIt == _paramClientsByNode.end()) {
       const auto insertedPair = _paramClientsByNode.emplace(
-        nodeName, rclcpp::AsyncParametersClient::make_shared(
-                    _node, nodeName, rclcpp::ParametersQoS(), _callbackGroup));
+        nodeName,
+        rclcpp::AsyncParametersClient::make_shared(_node, nodeName, parameterQoS, _callbackGroup));
       paramClientIt = insertedPair.first;
     }
 
