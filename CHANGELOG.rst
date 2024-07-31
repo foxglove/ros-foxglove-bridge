@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.8.0 (2024-07-31)
+------------------
 * Fix usage of deprecated AsyncParametersClient constructor (`#319 <https://github.com/foxglove/ros-foxglove-bridge/issues/319>`_)
 * Add ROS2 JSON publishing support (`#307 <https://github.com/foxglove/ros-foxglove-bridge/issues/307>`_)
 * Contributors: Davide Faconti, Hans-Joachim Krauch
