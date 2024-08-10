@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ros_distribution: [melodic, noetic, humble, iron, rolling]
+        ros_distribution: [melodic, noetic, foxy, humble, iron, rolling]
 
     name: Test (ROS ${{ matrix.ros_distribution }})
     runs-on: ubuntu-latest
