@@ -4,9 +4,9 @@
 #include <mutex>
 #include <regex>
 #include <shared_mutex>
+#include <sstream>
 #include <string>
 #include <unordered_set>
-#include <sstream>
 
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.h>
@@ -693,8 +693,7 @@ private:
     _server->publishParameterValues(hdl, params, requestId);
 
     if (!success) {
-
-      for (std::string& param: invalidParams) {
+      for (std::string& param : invalidParams) {
         _invalidParams.insert(param);
       }
 
