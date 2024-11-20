@@ -4,7 +4,6 @@
 #include <mutex>
 #include <regex>
 #include <shared_mutex>
-#include <sstream>
 #include <string>
 #include <unordered_set>
 
@@ -49,6 +48,7 @@ constexpr uint32_t SUBSCRIPTION_QUEUE_LENGTH = 10;
 constexpr double MIN_UPDATE_PERIOD_MS = 100.0;
 constexpr uint32_t PUBLICATION_QUEUE_LENGTH = 10;
 constexpr int DEFAULT_SERVICE_TYPE_RETRIEVAL_TIMEOUT_MS = 250;
+constexpr int MAX_INVALID_PARAMS_TRACKED = 1000;
 
 using ConnectionHandle = websocketpp::connection_hdl;
 using TopicAndDatatype = std::pair<std::string, std::string>;
@@ -694,19 +694,20 @@ private:
 
     if (!success) {
       for (std::string& param : invalidParams) {
-        _invalidParams.insert(param);
+        if (_invalidParams.size() < MAX_INVALID_PARAMS_TRACKED) {
+          _invalidParams.insert(param);
+        }
       }
 
       if (!invalidParams.empty()) {
-        std::ostringstream errorMsg;
-        errorMsg << "Failed to retrieve the following parameters: ";
+        std::string errorMsg = "Failed to retrieve the following parameters: ";
         for (size_t i = 0; i < invalidParams.size(); i++) {
-          errorMsg << invalidParams[i];
+          errorMsg += invalidParams[i];
           if (i < invalidParams.size() - 1) {
-            errorMsg << ", ";
+            errorMsg += ", ";
           }
         }
-        throw std::runtime_error(errorMsg.str());
+        throw std::runtime_error(errorMsg);
       } else {
         throw std::runtime_error("Failed to retrieve one or multiple parameters");
       }
