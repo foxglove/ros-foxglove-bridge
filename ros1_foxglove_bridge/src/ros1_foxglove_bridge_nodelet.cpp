@@ -48,6 +48,7 @@ constexpr uint32_t SUBSCRIPTION_QUEUE_LENGTH = 10;
 constexpr double MIN_UPDATE_PERIOD_MS = 100.0;
 constexpr uint32_t PUBLICATION_QUEUE_LENGTH = 10;
 constexpr int DEFAULT_SERVICE_TYPE_RETRIEVAL_TIMEOUT_MS = 250;
+constexpr int MAX_INVALID_PARAMS_TRACKED = 1000;
 
 using ConnectionHandle = websocketpp::connection_hdl;
 using TopicAndDatatype = std::pair<std::string, std::string>;
@@ -656,6 +657,7 @@ private:
 
     bool success = true;
     std::vector<foxglove::Parameter> params;
+    std::vector<std::string> invalidParams;
     for (const auto& paramName : parameterNames) {
       if (!isWhitelisted(paramName, _paramWhitelistPatterns)) {
         if (allParametersRequested) {
@@ -665,6 +667,9 @@ private:
           success = false;
         }
       }
+      if (_invalidParams.find(paramName) != _invalidParams.end()) {
+        continue;
+      }
 
       try {
         XmlRpc::XmlRpcValue value;
@@ -672,12 +677,15 @@ private:
         params.push_back(fromRosParam(paramName, value));
       } catch (const std::exception& ex) {
         ROS_ERROR("Invalid parameter '%s': %s", paramName.c_str(), ex.what());
+        invalidParams.push_back(paramName);
         success = false;
       } catch (const XmlRpc::XmlRpcException& ex) {
         ROS_ERROR("Invalid parameter '%s': %s", paramName.c_str(), ex.getMessage().c_str());
+        invalidParams.push_back(paramName);
         success = false;
       } catch (...) {
         ROS_ERROR("Invalid parameter '%s'", paramName.c_str());
+        invalidParams.push_back(paramName);
         success = false;
       }
     }
@@ -685,7 +693,24 @@ private:
     _server->publishParameterValues(hdl, params, requestId);
 
     if (!success) {
-      throw std::runtime_error("Failed to retrieve one or multiple parameters");
+      for (std::string& param : invalidParams) {
+        if (_invalidParams.size() < MAX_INVALID_PARAMS_TRACKED) {
+          _invalidParams.insert(param);
+        }
+      }
+
+      if (!invalidParams.empty()) {
+        std::string errorMsg = "Failed to retrieve the following parameters: ";
+        for (size_t i = 0; i < invalidParams.size(); i++) {
+          errorMsg += invalidParams[i];
+          if (i < invalidParams.size() - 1) {
+            errorMsg += ", ";
+          }
+        }
+        throw std::runtime_error(errorMsg);
+      } else {
+        throw std::runtime_error("Failed to retrieve one or multiple parameters");
+      }
     }
   }
 
@@ -922,6 +947,7 @@ private:
   int _serviceRetrievalTimeoutMs = DEFAULT_SERVICE_TYPE_RETRIEVAL_TIMEOUT_MS;
   std::atomic<bool> _subscribeGraphUpdates = false;
   std::unique_ptr<foxglove::CallbackQueue> _fetchAssetQueue;
+  std::unordered_set<std::string> _invalidParams;
 };
 
 }  // namespace foxglove_bridge
