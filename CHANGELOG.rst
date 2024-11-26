@@ -2,6 +2,11 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.8.1 (2024-11-26)
+------------------
+* Improve Error Reporting and Reduce Log Redundancy (`#327 <https://github.com/foxglove/ros-foxglove-bridge/issues/327>`_)
+* Contributors: Robin Dumas
+
 0.8.0 (2024-07-31)
 ------------------
 * Fix usage of deprecated AsyncParametersClient constructor (`#319 <https://github.com/foxglove/ros-foxglove-bridge/issues/319>`_)
