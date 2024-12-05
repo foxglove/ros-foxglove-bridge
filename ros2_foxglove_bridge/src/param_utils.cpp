@@ -84,6 +84,15 @@ void declareParameters(rclcpp::Node* node) {
   maxQosDepthDescription.integer_range[0].step = 1;
   node->declare_parameter(PARAM_MAX_QOS_DEPTH, DEFAULT_MAX_QOS_DEPTH, maxQosDepthDescription);
 
+  auto qosReliabilityDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  qosReliabilityDescription.name = PARAM_QOS_RELIABILITY;
+  qosReliabilityDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
+  qosReliabilityDescription.description =
+    "The default QoS reliability setting for subscriptions the bridge "
+    "creates. Can be 'reliable', 'best_effort', or 'automatic'.";
+  qosReliabilityDescription.read_only = true;
+  node->declare_parameter(PARAM_QOS_RELIABILITY, DEFAULT_QOS_RELIABILITY,
+                          qosReliabilityDescription);
   auto topicWhiteListDescription = rcl_interfaces::msg::ParameterDescriptor{};
   topicWhiteListDescription.name = PARAM_TOPIC_WHITELIST;
   topicWhiteListDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
