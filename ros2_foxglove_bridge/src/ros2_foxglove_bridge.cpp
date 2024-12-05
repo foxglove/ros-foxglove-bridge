@@ -36,6 +36,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   const auto keyfile = this->get_parameter(PARAM_KEYFILE).as_string();
   _minQosDepth = static_cast<size_t>(this->get_parameter(PARAM_MIN_QOS_DEPTH).as_int());
   _maxQosDepth = static_cast<size_t>(this->get_parameter(PARAM_MAX_QOS_DEPTH).as_int());
+  _qosReliability = this->get_parameter(PARAM_QOS_RELIABILITY).as_string();
   const auto topicWhiteList = this->get_parameter(PARAM_TOPIC_WHITELIST).as_string_array();
   _topicWhitelistPatterns = parseRegexStrings(this, topicWhiteList);
   const auto serviceWhiteList = this->get_parameter(PARAM_SERVICE_WHITELIST).as_string_array();
@@ -495,18 +496,25 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
 
   rclcpp::QoS qos{rclcpp::KeepLast(depth)};
 
-  // If all endpoints are reliable, ask for reliable
-  if (!publisherInfo.empty() && reliabilityReliableEndpointsCount == publisherInfo.size()) {
+  // Handle the QoS reliability setting
+  if (_qosReliability == "reliable") {
     qos.reliable();
-  } else {
-    if (reliabilityReliableEndpointsCount > 0) {
-      RCLCPP_WARN(
-        this->get_logger(),
-        "Some, but not all, publishers on topic '%s' are offering QoSReliabilityPolicy.RELIABLE. "
-        "Falling back to QoSReliabilityPolicy.BEST_EFFORT as it will connect to all publishers",
-        topic.c_str());
-    }
+  } else if (_qosReliability == "best_effort") {
     qos.best_effort();
+  } else {
+    // If all endpoints are reliable, ask for reliable
+    if (!publisherInfo.empty() && reliabilityReliableEndpointsCount == publisherInfo.size()) {
+      qos.reliable();
+    } else {
+      if (reliabilityReliableEndpointsCount > 0) {
+        RCLCPP_WARN(
+          this->get_logger(),
+          "Some, but not all, publishers on topic '%s' are offering QoSReliabilityPolicy.RELIABLE. "
+          "Falling back to QoSReliabilityPolicy.BEST_EFFORT as it will connect to all publishers",
+          topic.c_str());
+      }
+      qos.best_effort();
+    }
   }
 
   // If all endpoints are transient_local, ask for transient_local
