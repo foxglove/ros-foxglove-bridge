@@ -501,6 +501,12 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
     qos.reliable();
   } else if (_qosReliability == "best_effort") {
     qos.best_effort();
+  } else if (_qosReliability == "best_effort_if_volatile") {
+    if (durabilityTransientLocalEndpointsCount > 0) {
+      qos.reliable();
+    } else {
+      qos.best_effort();
+    }
   } else {
     // If all endpoints are reliable, ask for reliable
     if (!publisherInfo.empty() && reliabilityReliableEndpointsCount == publisherInfo.size()) {
