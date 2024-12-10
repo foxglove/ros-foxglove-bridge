@@ -89,7 +89,7 @@ void declareParameters(rclcpp::Node* node) {
   qosReliabilityDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
   qosReliabilityDescription.description =
     "The default QoS reliability setting for subscriptions the bridge "
-    "creates. Can be 'reliable', 'best_effort', or 'automatic'.";
+    "creates. Can be 'reliable', 'best_effort', 'best_effort_if_volatile', or 'automatic'.";
   qosReliabilityDescription.read_only = true;
   node->declare_parameter(PARAM_QOS_RELIABILITY, DEFAULT_QOS_RELIABILITY,
                           qosReliabilityDescription);
