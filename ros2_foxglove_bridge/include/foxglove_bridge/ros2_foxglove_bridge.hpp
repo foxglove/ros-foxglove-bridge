@@ -62,6 +62,7 @@ private:
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;
   std::vector<std::regex> _assetUriAllowlistPatterns;
+  std::vector<std::regex> _bestEffortQosTopicWhiteListPatterns;
   std::shared_ptr<ParameterInterface> _paramInterface;
   std::unordered_map<foxglove::ChannelId, foxglove::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove::ServiceId, foxglove::ServiceWithoutId> _advertisedServices;
@@ -77,7 +78,6 @@ private:
   std::unique_ptr<std::thread> _rosgraphPollThread;
   size_t _minQosDepth = DEFAULT_MIN_QOS_DEPTH;
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
-  std::string _qosReliability = DEFAULT_QOS_RELIABILITY;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
   bool _useSimTime = false;
   std::vector<std::string> _capabilities;
