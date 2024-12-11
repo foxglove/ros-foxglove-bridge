@@ -501,20 +501,18 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
   // Force the QoS to be "best_effort" if in the whitelist
   if (isWhitelisted(topic, _bestEffortQosTopicWhiteListPatterns)) {
     qos.best_effort();
-  } else {
+  } else if (!publisherInfo.empty() && reliabilityReliableEndpointsCount == publisherInfo.size()) {
     // If all endpoints are reliable, ask for reliable
-    if (!publisherInfo.empty() && reliabilityReliableEndpointsCount == publisherInfo.size()) {
-      qos.reliable();
-    } else {
-      if (reliabilityReliableEndpointsCount > 0) {
-        RCLCPP_WARN(
-          this->get_logger(),
-          "Some, but not all, publishers on topic '%s' are offering QoSReliabilityPolicy.RELIABLE. "
-          "Falling back to QoSReliabilityPolicy.BEST_EFFORT as it will connect to all publishers",
-          topic.c_str());
-      }
-      qos.best_effort();
+    qos.reliable();
+  } else {
+    if (reliabilityReliableEndpointsCount > 0) {
+      RCLCPP_WARN(
+        this->get_logger(),
+        "Some, but not all, publishers on topic '%s' are offering QoSReliabilityPolicy.RELIABLE. "
+        "Falling back to QoSReliabilityPolicy.BEST_EFFORT as it will connect to all publishers",
+        topic.c_str());
     }
+    qos.best_effort();
   }
 
   // If all endpoints are transient_local, ask for transient_local
