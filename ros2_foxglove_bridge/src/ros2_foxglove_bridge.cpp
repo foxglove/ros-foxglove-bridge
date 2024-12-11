@@ -498,7 +498,7 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
 
   rclcpp::QoS qos{rclcpp::KeepLast(depth)};
 
-  // Ignore the topic if it is not on the topic whitelist
+  // Force the QoS to be "best_effort" if in the whitelist
   if (isWhitelisted(topic, _bestEffortQosTopicWhiteListPatterns)) {
     qos.best_effort();
   } else {
