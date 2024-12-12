@@ -480,7 +480,7 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
     // broadcasters). See also
     // https://github.com/foxglove/ros-foxglove-bridge/issues/238 and
     // https://github.com/foxglove/ros-foxglove-bridge/issues/208
-    const size_t publisherHistoryDepth = std::max(1ul, qos.depth());
+    const size_t publisherHistoryDepth = std::max(static_cast<size_t>(1), qos.depth());
     depth = depth + publisherHistoryDepth;
   }
 
