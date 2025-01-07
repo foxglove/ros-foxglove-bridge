@@ -36,6 +36,9 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   const auto keyfile = this->get_parameter(PARAM_KEYFILE).as_string();
   _minQosDepth = static_cast<size_t>(this->get_parameter(PARAM_MIN_QOS_DEPTH).as_int());
   _maxQosDepth = static_cast<size_t>(this->get_parameter(PARAM_MAX_QOS_DEPTH).as_int());
+  const auto bestEffortQosTopicWhiteList =
+    this->get_parameter(PARAM_BEST_EFFORT_QOS_TOPIC_WHITELIST).as_string_array();
+  _bestEffortQosTopicWhiteListPatterns = parseRegexStrings(this, bestEffortQosTopicWhiteList);
   const auto topicWhiteList = this->get_parameter(PARAM_TOPIC_WHITELIST).as_string_array();
   _topicWhitelistPatterns = parseRegexStrings(this, topicWhiteList);
   const auto serviceWhiteList = this->get_parameter(PARAM_SERVICE_WHITELIST).as_string_array();
@@ -495,8 +498,11 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
 
   rclcpp::QoS qos{rclcpp::KeepLast(depth)};
 
-  // If all endpoints are reliable, ask for reliable
-  if (!publisherInfo.empty() && reliabilityReliableEndpointsCount == publisherInfo.size()) {
+  // Force the QoS to be "best_effort" if in the whitelist
+  if (isWhitelisted(topic, _bestEffortQosTopicWhiteListPatterns)) {
+    qos.best_effort();
+  } else if (!publisherInfo.empty() && reliabilityReliableEndpointsCount == publisherInfo.size()) {
+    // If all endpoints are reliable, ask for reliable
     qos.reliable();
   } else {
     if (reliabilityReliableEndpointsCount > 0) {
@@ -524,8 +530,10 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
   }
 
   if (firstSubscription) {
-    RCLCPP_INFO(this->get_logger(), "Subscribing to topic \"%s\" (%s) on channel %d", topic.c_str(),
-                datatype.c_str(), channelId);
+    RCLCPP_INFO(
+      this->get_logger(), "Subscribing to topic \"%s\" (%s) on channel %d with reliablity \"%s\"",
+      topic.c_str(), datatype.c_str(), channelId,
+      qos.reliability() == rclcpp::ReliabilityPolicy::Reliable ? "reliable" : "best_effort");
 
   } else {
     RCLCPP_INFO(this->get_logger(), "Adding subscriber #%zu to topic \"%s\" (%s) on channel %d",
