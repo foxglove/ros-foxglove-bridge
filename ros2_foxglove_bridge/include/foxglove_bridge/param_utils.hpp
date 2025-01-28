@@ -16,6 +16,7 @@ constexpr char PARAM_CERTFILE[] = "certfile";
 constexpr char PARAM_KEYFILE[] = "keyfile";
 constexpr char PARAM_MIN_QOS_DEPTH[] = "min_qos_depth";
 constexpr char PARAM_MAX_QOS_DEPTH[] = "max_qos_depth";
+constexpr char PARAM_BEST_EFFORT_QOS_TOPIC_WHITELIST[] = "best_effort_qos_topic_whitelist";
 constexpr char PARAM_TOPIC_WHITELIST[] = "topic_whitelist";
 constexpr char PARAM_SERVICE_WHITELIST[] = "service_whitelist";
 constexpr char PARAM_PARAMETER_WHITELIST[] = "param_whitelist";

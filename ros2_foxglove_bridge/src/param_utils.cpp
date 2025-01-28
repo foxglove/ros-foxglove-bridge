@@ -84,6 +84,18 @@ void declareParameters(rclcpp::Node* node) {
   maxQosDepthDescription.integer_range[0].step = 1;
   node->declare_parameter(PARAM_MAX_QOS_DEPTH, DEFAULT_MAX_QOS_DEPTH, maxQosDepthDescription);
 
+  auto bestEffortQosTopicWhiteListDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  bestEffortQosTopicWhiteListDescription.name = PARAM_BEST_EFFORT_QOS_TOPIC_WHITELIST;
+  bestEffortQosTopicWhiteListDescription.type =
+    rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  bestEffortQosTopicWhiteListDescription.description =
+    "List of regular expressions (ECMAScript) for topics that should be forced to use "
+    "'best_effort' QoS. Unmatched topics will use 'reliable' QoS if ALL publishers are 'reliable', "
+    "'best_effort' if any publishers are 'best_effort'.";
+  bestEffortQosTopicWhiteListDescription.read_only = true;
+  node->declare_parameter(PARAM_BEST_EFFORT_QOS_TOPIC_WHITELIST, std::vector<std::string>({"(?!)"}),
+                          bestEffortQosTopicWhiteListDescription);
+
   auto topicWhiteListDescription = rcl_interfaces::msg::ParameterDescriptor{};
   topicWhiteListDescription.name = PARAM_TOPIC_WHITELIST;
   topicWhiteListDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;

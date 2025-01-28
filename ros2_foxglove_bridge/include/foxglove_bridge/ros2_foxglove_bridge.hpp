@@ -62,6 +62,7 @@ private:
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;
   std::vector<std::regex> _assetUriAllowlistPatterns;
+  std::vector<std::regex> _bestEffortQosTopicWhiteListPatterns;
   std::shared_ptr<ParameterInterface> _paramInterface;
   std::unordered_map<foxglove::ChannelId, foxglove::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove::ServiceId, foxglove::ServiceWithoutId> _advertisedServices;
