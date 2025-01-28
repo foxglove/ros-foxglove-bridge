@@ -89,7 +89,7 @@ void declareParameters(rclcpp::Node* node) {
   bestEffortQosTopicWhiteListDescription.type =
     rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
   bestEffortQosTopicWhiteListDescription.description =
-    "List of regular expressions (ECMAScript) for topics that should use be forced to use "
+    "List of regular expressions (ECMAScript) for topics that should be forced to use "
     "'best_effort' QoS. Unmatched topics will use 'reliable' QoS if ALL publishers are 'reliable', "
     "'best_effort' if any publishers are 'best_effort'.";
   bestEffortQosTopicWhiteListDescription.read_only = true;
