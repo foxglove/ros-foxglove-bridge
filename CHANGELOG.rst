@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.8.3 (2025-02-03)
+------------------
 * add best_effort_qos_topic_whitelist param (`#329 <https://github.com/foxglove/ros-foxglove-bridge/issues/329>`_)
 * Add missing functional include in message_definition_cache.cpp (`#334 <https://github.com/foxglove/ros-foxglove-bridge/issues/334>`_)
 * Contributors: David Revay, Silvio Traversaro
