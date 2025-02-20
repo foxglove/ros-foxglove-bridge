@@ -47,6 +47,7 @@ struct ServerOptions {
   std::vector<std::string> supportedEncodings;
   std::unordered_map<std::string, std::string> metadata;
   size_t sendBufferLimitBytes = DEFAULT_SEND_BUFFER_LIMIT_BYTES;
+  bool sendBufferQueue = false;
   bool useTls = false;
   std::string certfile = "";
   std::string keyfile = "";
