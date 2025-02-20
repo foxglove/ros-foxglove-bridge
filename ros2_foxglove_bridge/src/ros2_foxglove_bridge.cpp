@@ -31,6 +31,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   const auto address = this->get_parameter(PARAM_ADDRESS).as_string();
   const auto send_buffer_limit =
     static_cast<size_t>(this->get_parameter(PARAM_SEND_BUFFER_LIMIT).as_int());
+  const auto sendBufferQueue = this->get_parameter(PARAM_SEND_BUFFER_QUEUE).as_bool();
   const auto useTLS = this->get_parameter(PARAM_USETLS).as_bool();
   const auto certfile = this->get_parameter(PARAM_CERTFILE).as_string();
   const auto keyfile = this->get_parameter(PARAM_KEYFILE).as_string();
@@ -68,6 +69,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   serverOptions.supportedEncodings = {"cdr", "json"};
   serverOptions.metadata = {{"ROS_DISTRO", rosDistro}};
   serverOptions.sendBufferLimitBytes = send_buffer_limit;
+  serverOptions.sendBufferQueue = sendBufferQueue;
   serverOptions.sessionId = std::to_string(std::time(nullptr));
   serverOptions.useCompression = useCompression;
   serverOptions.useTls = useTLS;
@@ -122,7 +124,6 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   _rosgraphPollThread =
     std::make_unique<std::thread>(std::bind(&FoxgloveBridge::rosgraphPollThread, this));
 
-  _subscriptionCallbackGroup = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   _clientPublishCallbackGroup =
     this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
   _servicesCallbackGroup = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
@@ -456,9 +457,13 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
                  topic.c_str(), datatype.c_str());
   };
 
+  auto subscriptionCallbackGroup =
+    this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  _subscriptionCallbackGroups.emplace(channelId, subscriptionCallbackGroup);
+
   rclcpp::SubscriptionOptions subscriptionOptions;
   subscriptionOptions.event_callbacks = eventCallbacks;
-  subscriptionOptions.callback_group = _subscriptionCallbackGroup;
+  subscriptionOptions.callback_group = subscriptionCallbackGroup;
 
   // Select an appropriate subscription QOS profile. This is similar to how ros2 topic echo
   // does it:
@@ -483,7 +488,7 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
     // broadcasters). See also
     // https://github.com/foxglove/ros-foxglove-bridge/issues/238 and
     // https://github.com/foxglove/ros-foxglove-bridge/issues/208
-    const size_t publisherHistoryDepth = std::max(1ul, qos.depth());
+    const size_t publisherHistoryDepth = std::max(static_cast<size_t>(1), qos.depth());
     depth = depth + publisherHistoryDepth;
   }
 
@@ -579,11 +584,14 @@ void FoxgloveBridge::unsubscribe(foxglove::ChannelId channelId, ConnectionHandle
                    "from a client that was not subscribed to this channel");
   }
 
+  auto callbackGroupIt = _subscriptionCallbackGroups.find(channelId);
+
   subscriptionsByClient.erase(clientSubscription);
   if (subscriptionsByClient.empty()) {
     RCLCPP_INFO(this->get_logger(), "Unsubscribing from topic \"%s\" (%s) on channel %d",
                 channel.topic.c_str(), channel.schemaName.c_str(), channelId);
     _subscriptions.erase(subscriptionsIt);
+    _subscriptionCallbackGroups.erase(callbackGroupIt);
   } else {
     RCLCPP_INFO(this->get_logger(),
                 "Removed one subscription from channel %d (%zu subscription(s) left)", channelId,
