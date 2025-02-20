@@ -69,7 +69,8 @@ private:
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
   PublicationsByClient _clientAdvertisedTopics;
   std::unordered_map<foxglove::ServiceId, GenericClient::SharedPtr> _serviceClients;
-  std::unordered_map<foxglove::ChannelId, rclcpp::CallbackGroup::SharedPtr> _subscriptionCallbackGroups;
+  std::unordered_map<foxglove::ChannelId, rclcpp::CallbackGroup::SharedPtr>
+    _subscriptionCallbackGroups;
   rclcpp::CallbackGroup::SharedPtr _clientPublishCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _servicesCallbackGroup;
   std::mutex _subscriptionsMutex;

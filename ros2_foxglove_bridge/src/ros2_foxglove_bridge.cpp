@@ -457,7 +457,8 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
                  topic.c_str(), datatype.c_str());
   };
 
-  auto subscriptionCallbackGroup = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  auto subscriptionCallbackGroup =
+    this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
   _subscriptionCallbackGroups.emplace(channelId, subscriptionCallbackGroup);
 
   rclcpp::SubscriptionOptions subscriptionOptions;
