@@ -964,13 +964,23 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
     return;
   }
 
-  const auto bufferSizeinBytes = con->get_buffered_amount();
-  if (bufferSizeinBytes + payloadSize >= _options.sendBufferLimitBytes) {
-    const auto logFn = [this, clientHandle]() {
-      sendStatusAndLogMsg(clientHandle, StatusLevel::Warning, "Send buffer limit reached");
-    };
-    FOXGLOVE_DEBOUNCE(logFn, 2500);
-    return;
+  // Wait until the websocket message queue is small enough to accept the message
+  // This is blocking which allows the ROS subscription QoS depth to be respected
+  if (_options.sendBufferQueue) {
+    while (con->get_buffered_amount() >= _options.sendBufferLimitBytes) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  } else {
+    // Otherwise, just check if the buffer is full and log a warning
+    // Discard the message if the buffer is full
+    const auto bufferSizeinBytes = con->get_buffered_amount();
+    if (bufferSizeinBytes + payloadSize >= _options.sendBufferLimitBytes) {
+      const auto logFn = [this, clientHandle]() {
+        sendStatusAndLogMsg(clientHandle, StatusLevel::Warning, "Send buffer limit reached");
+      };
+      FOXGLOVE_DEBOUNCE(logFn, 2500);
+      return;
+    }
   }
 
   SubscriptionId subId = std::numeric_limits<SubscriptionId>::max();

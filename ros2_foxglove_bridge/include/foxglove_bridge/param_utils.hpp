@@ -11,6 +11,7 @@ namespace foxglove_bridge {
 constexpr char PARAM_PORT[] = "port";
 constexpr char PARAM_ADDRESS[] = "address";
 constexpr char PARAM_SEND_BUFFER_LIMIT[] = "send_buffer_limit";
+constexpr char PARAM_SEND_BUFFER_QUEUE[] = "send_buffer_queue";
 constexpr char PARAM_USETLS[] = "tls";
 constexpr char PARAM_CERTFILE[] = "certfile";
 constexpr char PARAM_KEYFILE[] = "keyfile";
