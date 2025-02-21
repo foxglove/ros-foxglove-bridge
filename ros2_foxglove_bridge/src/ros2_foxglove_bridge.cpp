@@ -29,9 +29,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
 
   const auto port = static_cast<uint16_t>(this->get_parameter(PARAM_PORT).as_int());
   const auto address = this->get_parameter(PARAM_ADDRESS).as_string();
-  const auto send_buffer_limit =
+  const auto sendBufferLimit =
     static_cast<size_t>(this->get_parameter(PARAM_SEND_BUFFER_LIMIT).as_int());
-  const auto sendBufferQueue = this->get_parameter(PARAM_SEND_BUFFER_QUEUE).as_bool();
   const auto useTLS = this->get_parameter(PARAM_USETLS).as_bool();
   const auto certfile = this->get_parameter(PARAM_CERTFILE).as_string();
   const auto keyfile = this->get_parameter(PARAM_KEYFILE).as_string();
@@ -40,6 +39,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   const auto bestEffortQosTopicWhiteList =
     this->get_parameter(PARAM_BEST_EFFORT_QOS_TOPIC_WHITELIST).as_string_array();
   _bestEffortQosTopicWhiteListPatterns = parseRegexStrings(this, bestEffortQosTopicWhiteList);
+  const auto bestEffortQosSendBufferLimit =
+    static_cast<size_t>(this->get_parameter(PARAM_BEST_EFFORT_QOS_SEND_BUFFER_LIMIT).as_int());
   const auto topicWhiteList = this->get_parameter(PARAM_TOPIC_WHITELIST).as_string_array();
   _topicWhitelistPatterns = parseRegexStrings(this, topicWhiteList);
   const auto serviceWhiteList = this->get_parameter(PARAM_SERVICE_WHITELIST).as_string_array();
@@ -68,8 +69,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   }
   serverOptions.supportedEncodings = {"cdr", "json"};
   serverOptions.metadata = {{"ROS_DISTRO", rosDistro}};
-  serverOptions.sendBufferLimitBytes = send_buffer_limit;
-  serverOptions.sendBufferQueue = sendBufferQueue;
+  serverOptions.sendBufferLimitBytes = sendBufferLimit;
+  serverOptions.bestEffortQosSendBufferLimitBytes = bestEffortQosSendBufferLimit;
   serverOptions.sessionId = std::to_string(std::time(nullptr));
   serverOptions.useCompression = useCompression;
   serverOptions.useTls = useTLS;
@@ -124,6 +125,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   _rosgraphPollThread =
     std::make_unique<std::thread>(std::bind(&FoxgloveBridge::rosgraphPollThread, this));
 
+  _subscriptionCallbackGroup = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   _clientPublishCallbackGroup =
     this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
   _servicesCallbackGroup = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
@@ -457,13 +459,9 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
                  topic.c_str(), datatype.c_str());
   };
 
-  auto subscriptionCallbackGroup =
-    this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-  _subscriptionCallbackGroups.emplace(channelId, subscriptionCallbackGroup);
-
   rclcpp::SubscriptionOptions subscriptionOptions;
   subscriptionOptions.event_callbacks = eventCallbacks;
-  subscriptionOptions.callback_group = subscriptionCallbackGroup;
+  subscriptionOptions.callback_group = _subscriptionCallbackGroup;
 
   // Select an appropriate subscription QOS profile. This is similar to how ros2 topic echo
   // does it:
@@ -548,8 +546,8 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
   try {
     auto subscriber = this->create_generic_subscription(
       topic, datatype, qos,
-      [this, channelId, clientHandle](std::shared_ptr<const rclcpp::SerializedMessage> msg) {
-        this->rosMessageHandler(channelId, clientHandle, msg);
+      [this, channelId, clientHandle, qos](std::shared_ptr<const rclcpp::SerializedMessage> msg) {
+        this->rosMessageHandler(channelId, clientHandle, msg, qos);
       },
       subscriptionOptions);
     subscriptionsByClient.emplace(clientHandle, std::move(subscriber));
@@ -584,14 +582,11 @@ void FoxgloveBridge::unsubscribe(foxglove::ChannelId channelId, ConnectionHandle
                    "from a client that was not subscribed to this channel");
   }
 
-  auto callbackGroupIt = _subscriptionCallbackGroups.find(channelId);
-
   subscriptionsByClient.erase(clientSubscription);
   if (subscriptionsByClient.empty()) {
     RCLCPP_INFO(this->get_logger(), "Unsubscribing from topic \"%s\" (%s) on channel %d",
                 channel.topic.c_str(), channel.schemaName.c_str(), channelId);
     _subscriptions.erase(subscriptionsIt);
-    _subscriptionCallbackGroups.erase(callbackGroupIt);
   } else {
     RCLCPP_INFO(this->get_logger(),
                 "Removed one subscription from channel %d (%zu subscription(s) left)", channelId,
@@ -868,14 +863,16 @@ void FoxgloveBridge::logHandler(LogLevel level, char const* msg) {
 
 void FoxgloveBridge::rosMessageHandler(const foxglove::ChannelId& channelId,
                                        ConnectionHandle clientHandle,
-                                       std::shared_ptr<const rclcpp::SerializedMessage> msg) {
+                                       std::shared_ptr<const rclcpp::SerializedMessage> msg,
+                                       rclcpp::QoS qos) {
   // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
   // to `/rosout` will cause a feedback loop
   const auto timestamp = this->now().nanoseconds();
   assert(timestamp >= 0 && "Timestamp is negative");
   const auto rclSerializedMsg = msg->get_rcl_serialized_message();
+  auto bestEffort = qos.reliability() == rclcpp::ReliabilityPolicy::BestEffort;
   _server->sendMessage(clientHandle, channelId, static_cast<uint64_t>(timestamp),
-                       rclSerializedMsg.buffer, rclSerializedMsg.buffer_length);
+                       rclSerializedMsg.buffer, rclSerializedMsg.buffer_length, bestEffort);
 }
 
 void FoxgloveBridge::serviceRequest(const foxglove::ServiceRequest& request,

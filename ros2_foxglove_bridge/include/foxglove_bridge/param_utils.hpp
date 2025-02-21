@@ -11,13 +11,13 @@ namespace foxglove_bridge {
 constexpr char PARAM_PORT[] = "port";
 constexpr char PARAM_ADDRESS[] = "address";
 constexpr char PARAM_SEND_BUFFER_LIMIT[] = "send_buffer_limit";
-constexpr char PARAM_SEND_BUFFER_QUEUE[] = "send_buffer_queue";
 constexpr char PARAM_USETLS[] = "tls";
 constexpr char PARAM_CERTFILE[] = "certfile";
 constexpr char PARAM_KEYFILE[] = "keyfile";
 constexpr char PARAM_MIN_QOS_DEPTH[] = "min_qos_depth";
 constexpr char PARAM_MAX_QOS_DEPTH[] = "max_qos_depth";
 constexpr char PARAM_BEST_EFFORT_QOS_TOPIC_WHITELIST[] = "best_effort_qos_topic_whitelist";
+constexpr char PARAM_BEST_EFFORT_QOS_SEND_BUFFER_LIMIT[] = "best_effort_qos_send_buffer_limit";
 constexpr char PARAM_TOPIC_WHITELIST[] = "topic_whitelist";
 constexpr char PARAM_SERVICE_WHITELIST[] = "service_whitelist";
 constexpr char PARAM_PARAMETER_WHITELIST[] = "param_whitelist";

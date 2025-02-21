@@ -69,8 +69,7 @@ private:
   std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
   PublicationsByClient _clientAdvertisedTopics;
   std::unordered_map<foxglove::ServiceId, GenericClient::SharedPtr> _serviceClients;
-  std::unordered_map<foxglove::ChannelId, rclcpp::CallbackGroup::SharedPtr>
-    _subscriptionCallbackGroups;
+  rclcpp::CallbackGroup::SharedPtr _subscriptionCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _clientPublishCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _servicesCallbackGroup;
   std::mutex _subscriptionsMutex;
@@ -115,7 +114,7 @@ private:
   void logHandler(LogLevel level, char const* msg);
 
   void rosMessageHandler(const foxglove::ChannelId& channelId, ConnectionHandle clientHandle,
-                         std::shared_ptr<const rclcpp::SerializedMessage> msg);
+                         std::shared_ptr<const rclcpp::SerializedMessage> msg, rclcpp::QoS qos);
 
   void serviceRequest(const foxglove::ServiceRequest& request, ConnectionHandle clientHandle);
 

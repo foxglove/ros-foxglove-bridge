@@ -47,7 +47,7 @@ struct ServerOptions {
   std::vector<std::string> supportedEncodings;
   std::unordered_map<std::string, std::string> metadata;
   size_t sendBufferLimitBytes = DEFAULT_SEND_BUFFER_LIMIT_BYTES;
-  bool sendBufferQueue = false;
+  size_t bestEffortQosSendBufferLimitBytes = DEFAULT_SEND_BUFFER_LIMIT_BYTES;
   bool useTls = false;
   std::string certfile = "";
   std::string keyfile = "";
@@ -96,7 +96,7 @@ public:
   virtual void setHandlers(ServerHandlers<ConnectionHandle>&& handlers) = 0;
 
   virtual void sendMessage(ConnectionHandle clientHandle, ChannelId chanId, uint64_t timestamp,
-                           const uint8_t* payload, size_t payloadSize) = 0;
+                           const uint8_t* payload, size_t payloadSize, bool bestEffort) = 0;
   virtual void broadcastTime(uint64_t timestamp) = 0;
   virtual void sendServiceResponse(ConnectionHandle clientHandle,
                                    const ServiceResponse& response) = 0;

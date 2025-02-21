@@ -96,6 +96,19 @@ void declareParameters(rclcpp::Node* node) {
   node->declare_parameter(PARAM_BEST_EFFORT_QOS_TOPIC_WHITELIST, std::vector<std::string>({"(?!)"}),
                           bestEffortQosTopicWhiteListDescription);
 
+  auto bestEffortQosSendBufferLimit = rcl_interfaces::msg::ParameterDescriptor{};
+  bestEffortQosSendBufferLimit.name = PARAM_BEST_EFFORT_QOS_SEND_BUFFER_LIMIT;
+  bestEffortQosSendBufferLimit.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+  bestEffortQosSendBufferLimit.description =
+    "Connection send buffer limit in bytes for 'best_effort' messages";
+  bestEffortQosSendBufferLimit.read_only = true;
+  bestEffortQosSendBufferLimit.integer_range.resize(1);
+  bestEffortQosSendBufferLimit.integer_range[0].from_value = 0;
+  bestEffortQosSendBufferLimit.integer_range[0].to_value = std::numeric_limits<int64_t>::max();
+  bestEffortQosSendBufferLimit.read_only = true;
+  node->declare_parameter(PARAM_BEST_EFFORT_QOS_SEND_BUFFER_LIMIT, DEFAULT_SEND_BUFFER_LIMIT,
+                          bestEffortQosSendBufferLimit);
+
   auto topicWhiteListDescription = rcl_interfaces::msg::ParameterDescriptor{};
   topicWhiteListDescription.name = PARAM_TOPIC_WHITELIST;
   topicWhiteListDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
@@ -179,16 +192,6 @@ void declareParameters(rclcpp::Node* node) {
       {"^package://(?:\\w+/"
        ")*\\w+\\.(?:dae|fbx|glb|gltf|jpeg|jpg|mtl|obj|png|stl|tif|tiff|urdf|webp|xacro)$"}),
     paramWhiteListDescription);
-
-  auto sendBufferQueue = rcl_interfaces::msg::ParameterDescriptor{};
-  sendBufferQueue.name = PARAM_SEND_BUFFER_QUEUE;
-  sendBufferQueue.type = rcl_interfaces::msg::ParameterType::PARAMETER_BOOL;
-  sendBufferQueue.description =
-    "If 'false', messages will be dropped when a connection's send buffer reaches the limit (not "
-    "respecting QoS). If 'true', when the send buffer reaches the limit, subscriptions will queue "
-    "(respecting QoS depth) until the send buffer has space.";
-  sendBufferQueue.read_only = true;
-  node->declare_parameter(PARAM_SEND_BUFFER_QUEUE, false, sendBufferQueue);
 }
 
 std::vector<std::regex> parseRegexStrings(rclcpp::Node* node,
