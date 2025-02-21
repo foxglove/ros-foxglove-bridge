@@ -142,7 +142,7 @@ public:
   void setHandlers(ServerHandlers<ConnHandle>&& handlers) override;
 
   void sendMessage(ConnHandle clientHandle, ChannelId chanId, uint64_t timestamp,
-                   const uint8_t* payload, size_t payloadSize) override;
+                   const uint8_t* payload, size_t payloadSize, bool bestEffort) override;
   void broadcastTime(uint64_t timestamp) override;
   void sendServiceResponse(ConnHandle clientHandle, const ServiceResponse& response) override;
   void sendServiceFailure(ConnHandle clientHandle, ServiceId serviceId, uint32_t callId,
@@ -957,7 +957,7 @@ inline void Server<ServerConfiguration>::removeServices(const std::vector<Servic
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, ChannelId chanId,
                                                      uint64_t timestamp, const uint8_t* payload,
-                                                     size_t payloadSize) {
+                                                     size_t payloadSize, bool bestEffort) {
   websocketpp::lib::error_code ec;
   const auto con = _server.get_con_from_hdl(clientHandle, ec);
   if (ec || !con) {
@@ -965,12 +965,27 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
   }
 
   const auto bufferSizeinBytes = con->get_buffered_amount();
-  if (bufferSizeinBytes + payloadSize >= _options.sendBufferLimitBytes) {
-    const auto logFn = [this, clientHandle]() {
-      sendStatusAndLogMsg(clientHandle, StatusLevel::Warning, "Send buffer limit reached");
-    };
-    FOXGLOVE_DEBOUNCE(logFn, 2500);
-    return;
+  // There are 2 different buffer limits to consider, one for "best_effort" and one for "reliable"
+  // topics
+
+  if (bestEffort) {
+    if (bufferSizeinBytes + payloadSize >= _options.bestEffortQosSendBufferLimitBytes) {
+      const auto logFn = [this, clientHandle]() {
+        sendStatusAndLogMsg(clientHandle, StatusLevel::Warning,
+                            "'Best Effort' send buffer limit reached");
+      };
+      FOXGLOVE_DEBOUNCE(logFn, 2500);
+      return;
+    }
+  } else {
+    if (bufferSizeinBytes + payloadSize >= _options.sendBufferLimitBytes) {
+      const auto logFn = [this, clientHandle]() {
+        sendStatusAndLogMsg(clientHandle, StatusLevel::Warning,
+                            "'Reliable' send buffer limit reached");
+      };
+      FOXGLOVE_DEBOUNCE(logFn, 2500);
+      return;
+    }
   }
 
   SubscriptionId subId = std::numeric_limits<SubscriptionId>::max();
