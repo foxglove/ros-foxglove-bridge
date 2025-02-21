@@ -969,7 +969,7 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
   // topics
 
   if (bestEffort) {
-    if (bufferSizeinBytes + payloadSize >= _options.bestEffortQosSendBufferLimitBytes) {
+    if (bufferSizeinBytes >= _options.bestEffortQosSendBufferLimitBytes) {
       const auto logFn = [this, clientHandle]() {
         sendStatusAndLogMsg(clientHandle, StatusLevel::Warning,
                             "'Best Effort' send buffer limit reached");
@@ -978,7 +978,7 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
       return;
     }
   } else {
-    if (bufferSizeinBytes + payloadSize >= _options.sendBufferLimitBytes) {
+    if (bufferSizeinBytes >= _options.sendBufferLimitBytes) {
       const auto logFn = [this, clientHandle]() {
         sendStatusAndLogMsg(clientHandle, StatusLevel::Warning,
                             "'Reliable' send buffer limit reached");
