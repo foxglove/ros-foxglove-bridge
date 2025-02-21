@@ -489,17 +489,22 @@ private:
 
   void updateAdvertisedTopics() {
     // Get the current list of visible topics and datatypes from the ROS graph
-    std::vector<ros::master::TopicInfo> topicNamesAndTypes;
-    if (!ros::master::getTopics(topicNamesAndTypes)) {
-      ROS_WARN("Failed to retrieve published topics from ROS master.");
+    // For this, we call the ros master's `getTopicTypes` method (See
+    // https://wiki.ros.org/ROS/Master_API) which also includes topics without publisher(s) and only
+    // subscriber(s).
+    XmlRpc::XmlRpcValue request, response, topicNamesAndTypes;
+    request[0] = ros::this_node::getName();
+
+    if (!ros::master::execute("getTopicTypes", request, response, topicNamesAndTypes, false)) {
+      ROS_WARN("Failed to retrieve topics from ROS master.");
       return;
     }
 
     std::unordered_set<TopicAndDatatype, PairHash> latestTopics;
     latestTopics.reserve(topicNamesAndTypes.size());
-    for (const auto& topicNameAndType : topicNamesAndTypes) {
-      const auto& topicName = topicNameAndType.name;
-      const auto& datatype = topicNameAndType.datatype;
+    for (int i = 0; i < topicNamesAndTypes.size(); ++i) {
+      const std::string topicName = topicNamesAndTypes[i][0];
+      const std::string datatype = topicNamesAndTypes[i][1];
 
       // Ignore the topic if it is not on the topic whitelist
       if (isWhitelisted(topicName, _topicWhitelistPatterns)) {
