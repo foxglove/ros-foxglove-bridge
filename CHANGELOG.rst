@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.8.4 (2025-02-21)
+------------------
 * also advertise channels for ROS1 topics without publishers (`#341 <https://github.com/foxglove/ros-foxglove-bridge/issues/341>`_)
 * Contributors: Hans-Joachim Krauch
 
