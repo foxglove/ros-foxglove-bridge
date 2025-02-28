@@ -553,7 +553,7 @@ inline void Server<ServerConfiguration>::start(const std::string& host, uint16_t
   websocketpp::lib::asio::error_code asioEc;
   auto endpoint = _server.get_local_endpoint(asioEc);
   if (asioEc) {
-    throw std::runtime_error("Failed to resolve the local endpoint: " + ec.message());
+    throw std::runtime_error("Failed to resolve the local endpoint: " + asioEc.message());
   }
 
   const std::string protocol = _options.useTls ? "wss" : "ws";
