@@ -19,7 +19,8 @@ using ParamUpdateFunc = std::function<void(const ParameterList&)>;
 
 class ParameterInterface {
 public:
-  ParameterInterface(rclcpp::Node* node, std::vector<std::regex> paramWhitelistPatterns);
+  ParameterInterface(rclcpp::Node* node, std::vector<std::regex> paramWhitelistPatterns,
+                     bool retry_unresponsive_nodes);
 
   ParameterList getParams(const std::vector<std::string>& paramNames,
                           const std::chrono::duration<double>& timeout);
@@ -36,6 +37,8 @@ private:
   std::unordered_map<std::string, rclcpp::AsyncParametersClient::SharedPtr> _paramClientsByNode;
   std::unordered_map<std::string, std::unordered_set<std::string>> _subscribedParamsByNode;
   std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> _paramSubscriptionsByNode;
+  std::unordered_set<std::string> _ignoredNodeNames;
+  bool _ignoreUnresponsiveNodes;
   ParamUpdateFunc _paramUpdateFunc;
 
   ParameterList getNodeParameters(rclcpp::AsyncParametersClient::SharedPtr paramClient,

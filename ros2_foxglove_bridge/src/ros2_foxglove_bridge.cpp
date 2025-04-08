@@ -55,6 +55,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   const auto assetUriAllowlist = this->get_parameter(PARAM_ASSET_URI_ALLOWLIST).as_string_array();
   _assetUriAllowlistPatterns = parseRegexStrings(this, assetUriAllowlist);
   _disableLoanMessage = this->get_parameter(PARAM_DISABLE_LOAN_MESSAGE).as_bool();
+  const auto ignoreUnresponsiveParamNodes =
+    this->get_parameter(PARAM_IGN_UNRESPONSIVE_PARAM_NODES).as_bool();
 
   const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
   // Fetching of assets may be blocking, hence we fetch them in a separate thread.
@@ -95,7 +97,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
     hdlrs.parameterSubscriptionHandler =
       std::bind(&FoxgloveBridge::subscribeParameters, this, _1, _2, _3);
 
-    _paramInterface = std::make_shared<ParameterInterface>(this, paramWhitelistPatterns);
+    _paramInterface = std::make_shared<ParameterInterface>(this, paramWhitelistPatterns,
+                                                           ignoreUnresponsiveParamNodes);
     _paramInterface->setParamUpdateCallback(std::bind(&FoxgloveBridge::parameterUpdates, this, _1));
   }
 

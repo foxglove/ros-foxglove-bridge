@@ -135,10 +135,13 @@ namespace foxglove_bridge {
 using foxglove::isWhitelisted;
 
 ParameterInterface::ParameterInterface(rclcpp::Node* node,
-                                       std::vector<std::regex> paramWhitelistPatterns)
+                                       std::vector<std::regex> paramWhitelistPatterns,
+                                       bool ignoreUnresponsiveNodes)
     : _node(node)
     , _paramWhitelistPatterns(paramWhitelistPatterns)
-    , _callbackGroup(node->create_callback_group(rclcpp::CallbackGroupType::Reentrant)) {}
+    , _callbackGroup(node->create_callback_group(rclcpp::CallbackGroupType::Reentrant))
+    , _ignoredNodeNames({node->get_fully_qualified_name()})
+    , _ignoreUnresponsiveNodes(ignoreUnresponsiveNodes) {}
 
 ParameterList ParameterInterface::getParams(const std::vector<std::string>& paramNames,
                                             const std::chrono::duration<double>& timeout) {
@@ -161,7 +164,7 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
     // Make a map of node names to empty parameter lists
     // Only consider nodes that offer services to list & get parameters.
     for (const auto& fqnNodeName : _node->get_node_names()) {
-      if (fqnNodeName == thisNode) {
+      if (_ignoredNodeNames.find(fqnNodeName) != _ignoredNodeNames.end()) {
         continue;
       }
       const auto [nodeNs, nodeName] = getNodeAndNodeNamespace(fqnNodeName);
@@ -194,7 +197,7 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
     }
   }
 
-  std::vector<std::future<ParameterList>> getParametersFuture;
+  std::unordered_map<std::string, std::future<ParameterList>> getParametersFuture;
   for (const auto& [nodeName, nodeParamNames] : paramNamesByNodeName) {
     if (nodeName == thisNode) {
       continue;
@@ -208,18 +211,32 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
       paramClientIt = insertedPair.first;
     }
 
-    getParametersFuture.emplace_back(
-      std::async(std::launch::async, &ParameterInterface::getNodeParameters, this,
-                 paramClientIt->second, nodeName, nodeParamNames, timeout));
+    getParametersFuture.emplace(
+      nodeName, std::async(std::launch::async, &ParameterInterface::getNodeParameters, this,
+                           paramClientIt->second, nodeName, nodeParamNames, timeout));
   }
 
   ParameterList result;
-  for (auto& future : getParametersFuture) {
+  for (auto& [nodeName, future] : getParametersFuture) {
     try {
       const auto params = future.get();
       result.insert(result.begin(), params.begin(), params.end());
     } catch (const std::exception& e) {
-      RCLCPP_ERROR(_node->get_logger(), "Exception when getting parameters: %s", e.what());
+      RCLCPP_ERROR(_node->get_logger(), "Failed to retrieve parameters from node '%s': %s",
+                   nodeName.c_str(), e.what());
+
+      if (_ignoreUnresponsiveNodes) {
+        // Certain nodes may fail to handle incoming service requests — for example, if they're
+        // stuck in a busy loop or otherwise unresponsive. In such cases, attempting to retrieve
+        // parameter names or values can result in timeouts. To avoid repeated failures, these nodes
+        // are added to an ignore list, and future parameter-related service calls to them will be
+        // skipped.
+        _ignoredNodeNames.insert(nodeName);
+        RCLCPP_WARN(_node->get_logger(),
+                    "Adding node %s to the ignore list to prevent repeated timeouts or failures in "
+                    "future parameter requests.",
+                    nodeName.c_str());
+      }
     }
   }
 

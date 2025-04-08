@@ -179,6 +179,14 @@ void declareParameters(rclcpp::Node* node) {
       {"^package://(?:[-\\w]+/"
        ")*[-\\w]+\\.(?:dae|fbx|glb|gltf|jpeg|jpg|mtl|obj|png|stl|tif|tiff|urdf|webp|xacro)$"}),
     paramWhiteListDescription);
+
+  auto ignUnresponsiveParamNodes = rcl_interfaces::msg::ParameterDescriptor{};
+  ignUnresponsiveParamNodes.name = PARAM_IGN_UNRESPONSIVE_PARAM_NODES;
+  ignUnresponsiveParamNodes.type = rcl_interfaces::msg::ParameterType::PARAMETER_BOOL;
+  ignUnresponsiveParamNodes.description =
+    "Avoid requesting parameters from previously unresponsive nodes";
+  ignUnresponsiveParamNodes.read_only = true;
+  node->declare_parameter(PARAM_IGN_UNRESPONSIVE_PARAM_NODES, true, ignUnresponsiveParamNodes);
 }
 
 std::vector<std::regex> parseRegexStrings(rclcpp::Node* node,
