@@ -98,7 +98,9 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
       std::bind(&FoxgloveBridge::subscribeParameters, this, _1, _2, _3);
 
     _paramInterface = std::make_shared<ParameterInterface>(this, paramWhitelistPatterns,
-                                                           ignoreUnresponsiveParamNodes);
+                                                           ignoreUnresponsiveParamNodes
+                                                             ? UnresponsiveNodePolicy::Ignore
+                                                             : UnresponsiveNodePolicy::Retry);
     _paramInterface->setParamUpdateCallback(std::bind(&FoxgloveBridge::parameterUpdates, this, _1));
   }
 

@@ -136,12 +136,12 @@ using foxglove::isWhitelisted;
 
 ParameterInterface::ParameterInterface(rclcpp::Node* node,
                                        std::vector<std::regex> paramWhitelistPatterns,
-                                       bool ignoreUnresponsiveNodes)
+                                       UnresponsiveNodePolicy unresponsiveNodePolicy)
     : _node(node)
     , _paramWhitelistPatterns(paramWhitelistPatterns)
     , _callbackGroup(node->create_callback_group(rclcpp::CallbackGroupType::Reentrant))
     , _ignoredNodeNames({node->get_fully_qualified_name()})
-    , _ignoreUnresponsiveNodes(ignoreUnresponsiveNodes) {}
+    , _unresponsiveNodePolicy(unresponsiveNodePolicy) {}
 
 ParameterList ParameterInterface::getParams(const std::vector<std::string>& paramNames,
                                             const std::chrono::duration<double>& timeout) {
@@ -225,7 +225,7 @@ ParameterList ParameterInterface::getParams(const std::vector<std::string>& para
       RCLCPP_ERROR(_node->get_logger(), "Failed to retrieve parameters from node '%s': %s",
                    nodeName.c_str(), e.what());
 
-      if (_ignoreUnresponsiveNodes) {
+      if (_unresponsiveNodePolicy == UnresponsiveNodePolicy::Ignore) {
         // Certain nodes may fail to handle incoming service requests — for example, if they're
         // stuck in a busy loop or otherwise unresponsive. In such cases, attempting to retrieve
         // parameter names or values can result in timeouts. To avoid repeated failures, these nodes
