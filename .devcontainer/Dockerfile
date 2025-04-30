@@ -1,18 +1,6 @@
 ARG ROS_DISTRIBUTION=humble
 FROM ros:$ROS_DISTRIBUTION-ros-base
 
-# Install clang and set as default compiler.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-  clang \
-  && rm -rf /var/lib/apt/lists/*
-
-ENV CC=clang
-ENV CXX=clang++
-
-# Set environment and working directory
-ENV ROS_WS /ros2_ws
-WORKDIR $ROS_WS
-
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
   bash-completion \
@@ -33,20 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   sudo \
   && rm -rf /var/lib/apt/lists/*
 
-# Add package.xml so we can install package dependencies
-COPY package.xml src/ros-foxglove-bridge/
-
-# Install rosdep dependencies
-RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
-    apt-get update && rosdep update --include-eol-distros && rosdep install -y \
-      --from-paths \
-        src \
-      --ignore-src \
-    && rm -rf /var/lib/apt/lists/*
-
-ENV COLCON_DEFAULTS_FILE=/ros_ws/src/ros-foxglove-bridge/.devcontainer/colcon_defaults.yaml
-
-SHELL ["/bin/bash", "-c"]
+# Set clang as default compiler
+ENV CC=clang
+ENV CXX=clang++
 
 # Create a non-root user
 # Taken from https://code.visualstudio.com/remote/advancedcontainers/add-nonroot-user#_creating-a-nonroot-user
@@ -61,6 +38,26 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 
 USER $USERNAME
+
+# Set environment and working directory
+ENV ROS_WS=/ros_ws
+WORKDIR $ROS_WS
+RUN sudo mkdir -p $ROS_WS/src && sudo chown -R $USERNAME:$USERNAME $ROS_WS
+
+# Add package.xml so we can install package dependencies
+COPY --chown=$USERNAME:$USERNAME package.xml src/ros-foxglove-bridge/
+
+# Update rosdep and install dependencies
+RUN rosdep update --include-eol-distros
+RUN sudo apt-get update && rosdep install -y \
+      --from-paths \
+        src \
+      --ignore-src \
+    && sudo rm -rf /var/lib/apt/lists/*
+
+ENV COLCON_DEFAULTS_FILE=/$ROS_WS/src/ros-foxglove-bridge/.devcontainer/colcon_defaults.yaml
+
+SHELL ["/bin/bash", "-c"]
 
 # Add aliases to .bashrc
 RUN echo $'\
