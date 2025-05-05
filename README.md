@@ -87,6 +87,7 @@ Parameters are provided to configure the behavior of the bridge. These parameter
  * (ROS 2) __best_effort_qos_topic_whitelist__: List of regular expressions (ECMAScript) for topics that should be forced to use 'best_effort' QoS. Unmatched topics will use 'reliable' QoS if ALL publishers are 'reliable', 'best_effort' if any publishers are 'best_effort'. Defaults to `["(?!)"]` (match nothing).
  * (ROS 2) __include_hidden__: Include hidden topics and services. Defaults to `false`.
  * (ROS 2) __disable_load_message__: Do not publish as loaned message when publishing a client message. Defaults to `true`.
+ * (ROS 2) __ignore_unresponsive_param_nodes__: Avoid requesting parameters from previously unresponsive nodes. Defaults to `true`.
 
 ## Building from source
 
