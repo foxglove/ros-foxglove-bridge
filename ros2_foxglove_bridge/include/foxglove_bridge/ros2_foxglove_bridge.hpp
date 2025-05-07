@@ -114,7 +114,7 @@ private:
   void logHandler(LogLevel level, char const* msg);
 
   void rosMessageHandler(const foxglove::ChannelId& channelId, ConnectionHandle clientHandle,
-                         std::shared_ptr<const rclcpp::SerializedMessage> msg);
+                         std::shared_ptr<const rclcpp::SerializedMessage> msg, rclcpp::QoS qos);
 
   void serviceRequest(const foxglove::ServiceRequest& request, ConnectionHandle clientHandle);
 
