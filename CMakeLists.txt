@@ -156,6 +156,13 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
       ros2_foxglove_bridge/src/generic_client.cpp
     )
 
+    target_compile_definitions(foxglove_bridge_component
+      PRIVATE
+        RESOURCE_RETRIEVER_VERSION_MAJOR=${resource_retriever_VERSION_MAJOR}
+        RESOURCE_RETRIEVER_VERSION_MINOR=${resource_retriever_VERSION_MINOR}
+        RESOURCE_RETRIEVER_VERSION_PATCH=${resource_retriever_VERSION_PATCH}
+    )
+
     target_include_directories(foxglove_bridge_component
       PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
