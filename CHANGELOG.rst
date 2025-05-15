@@ -2,8 +2,8 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.8.5 (2025-05-15)
+------------------
 * fix rolling/kilted builds due to resource_retriever API changes (`#351 <https://github.com/foxglove/ros-foxglove-bridge/issues/351>`_)
 * avoid requesting parameters from unresponsive nodes (`#345 <https://github.com/foxglove/ros-foxglove-bridge/issues/345>`_)
 * Update default `asset_uri_allowlist` parameter to allow dashes (`#347 <https://github.com/foxglove/ros-foxglove-bridge/issues/347>`_)
