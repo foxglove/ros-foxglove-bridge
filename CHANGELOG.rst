@@ -2,6 +2,16 @@
 Changelog for package foxglove_bridge
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* fix rolling/kilted builds due to resource_retriever API changes (`#351 <https://github.com/foxglove/ros-foxglove-bridge/issues/351>`_)
+* avoid requesting parameters from unresponsive nodes (`#345 <https://github.com/foxglove/ros-foxglove-bridge/issues/345>`_)
+* Update default `asset_uri_allowlist` parameter to allow dashes (`#347 <https://github.com/foxglove/ros-foxglove-bridge/issues/347>`_)
+* reorganize devcontainer dockerfile (`#350 <https://github.com/foxglove/ros-foxglove-bridge/issues/350>`_)
+* Use RCLCPP_VERSION_GTE from rclcpp/version.h in generic_client.cpp (`#344 <https://github.com/foxglove/ros-foxglove-bridge/issues/344>`_)
+* Fixed logging typo (`#343 <https://github.com/foxglove/ros-foxglove-bridge/issues/343>`_)
+* Contributors: Hans-Joachim Krauch, Meet Gandhi, johannesschrimpf
+
 0.8.4 (2025-02-21)
 ------------------
 * also advertise channels for ROS1 topics without publishers (`#341 <https://github.com/foxglove/ros-foxglove-bridge/issues/341>`_)
