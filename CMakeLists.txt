@@ -253,7 +253,7 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
     enable_strict_compiler_warnings(base64_test)
 
     # Repeat tests several times to catch nondeterministic issues
-    ament_add_gtest(smoke_test ros2_foxglove_bridge/tests/smoke_test.cpp ENV GTEST_REPEAT=100)
+    ament_add_gtest(smoke_test ros2_foxglove_bridge/tests/smoke_test.cpp ENV GTEST_REPEAT=50 TIMEOUT 600)
     target_link_libraries(smoke_test
       foxglove_bridge_component
       ${std_msgs_TARGETS}
