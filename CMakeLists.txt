@@ -169,15 +169,27 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include>
         $<INSTALL_INTERFACE:include>
     )
-    ament_target_dependencies(foxglove_bridge_component ament_index_cpp rclcpp rclcpp_components resource_retriever rosgraph_msgs rosx_introspection)
-    target_link_libraries(foxglove_bridge_component foxglove_bridge_base)
+    target_link_libraries(foxglove_bridge_component
+      foxglove_bridge_base
+      ${rosgraph_msgs_TARGETS}
+      ament_index_cpp::ament_index_cpp
+      rclcpp::rclcpp
+      rclcpp_components::component
+      rclcpp_components::component_manager
+      resource_retriever::resource_retriever
+      rosx_introspection::rosx_introspection
+    )
     rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
     enable_strict_compiler_warnings(foxglove_bridge_component)
     add_executable(foxglove_bridge
       ros2_foxglove_bridge/src/ros2_foxglove_bridge_node.cpp
     )
     target_include_directories(foxglove_bridge SYSTEM PRIVATE ${rclcpp_INCLUDE_DIRS})
-    ament_target_dependencies(foxglove_bridge rclcpp rclcpp_components)
+    target_link_libraries(foxglove_bridge
+      rclcpp::rclcpp
+      rclcpp_components::component
+      rclcpp_components::component_manager
+    )
     enable_strict_compiler_warnings(foxglove_bridge)
   else()
     message(FATAL_ERROR "Could not find ament_cmake")
@@ -241,8 +253,14 @@ elseif(ROS_BUILD_TYPE STREQUAL "ament_cmake")
     enable_strict_compiler_warnings(base64_test)
 
     ament_add_gtest(smoke_test ros2_foxglove_bridge/tests/smoke_test.cpp)
-    ament_target_dependencies(smoke_test rclcpp rclcpp_components std_msgs std_srvs)
-    target_link_libraries(smoke_test foxglove_bridge_component)
+    target_link_libraries(smoke_test
+      foxglove_bridge_component
+      ${std_msgs_TARGETS}
+      ${std_srvs_TARGETS}
+      rclcpp::rclcpp
+      rclcpp_components::component
+      rclcpp_components::component_manager
+    )
     enable_strict_compiler_warnings(smoke_test)
 
     ament_add_gtest(utils_test ros2_foxglove_bridge/tests/utils_test.cpp)
