@@ -1240,8 +1240,8 @@ void Server<ServerConfiguration>::handleSubscribe(const nlohmann::json& payload,
     }
 
     {
-    std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
-    _clients.at(hdl).subscriptionsByChannel.emplace(channelId, subId);
+      std::unique_lock<std::shared_mutex> clientsLock(_clientsMutex);
+      _clients.at(hdl).subscriptionsByChannel.emplace(channelId, subId);
     }
 
     // In case the subscribeHandler triggers an immediate sendMessage, this must be done *after*
