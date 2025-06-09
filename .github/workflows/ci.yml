@@ -14,19 +14,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: make lint
 
   test:
     strategy:
       fail-fast: false
       matrix:
-        ros_distribution: [melodic, noetic, humble, iron, rolling]
+        ros_distribution: [melodic, noetic, humble, iron, jazzy, kilted, rolling]
 
     name: Test (ROS ${{ matrix.ros_distribution }})
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: make ${{ matrix.ros_distribution }}-test
 
   test-boost-asio:
@@ -38,5 +38,5 @@ jobs:
     name: Test (ROS ${{ matrix.ros_distribution }}, Boost Asio)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: make ${{ matrix.ros_distribution }}-test-boost-asio
