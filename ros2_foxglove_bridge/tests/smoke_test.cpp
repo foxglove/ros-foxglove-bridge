@@ -284,8 +284,8 @@ TEST_P(PublisherTest, testPublishing) {
 
   // Set up the client, advertise and publish the binary message
   auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
-  ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
   auto channelFuture = foxglove::waitForChannel(client, advertisement.topic);
+  ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
   client->advertise({advertisement});
 
   // Wait until the advertisement got advertised as channel by the server
@@ -334,11 +334,11 @@ TEST_P(ExistingPublisherTest, testPublishingWithExistingPublisher) {
 
   // Set up the client, advertise and publish the binary message
   auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  auto channelFuture = foxglove::waitForChannel(client, advertisement.topic);
   ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
   client->advertise({advertisement});
 
   // Wait until the advertisement got advertised as channel by the server
-  auto channelFuture = foxglove::waitForChannel(client, advertisement.topic);
   ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(ONE_SECOND));
 
   // Publish the message and unadvertise again
