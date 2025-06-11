@@ -6,7 +6,7 @@
     <license>MIT</license>
     <url type="website">https://github.com/foxglove/ros-foxglove-bridge</url>
     <author email="ros-tooling+foxglove_bridge@foxglove.dev">Foxglove</author>
-    <maintainer email="achim@foxglove.dev">Hans-Joachim Krauch</maintainer>
+    <maintainer email="ros-tooling+foxglove_bridge@foxglove.dev">Foxglove</maintainer>
 
     <buildtool_depend condition="$ROS_VERSION == 1">catkin</buildtool_depend>
     <buildtool_depend condition="$ROS_VERSION == 2">ament_cmake</buildtool_depend>
