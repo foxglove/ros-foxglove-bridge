@@ -260,10 +260,13 @@ TEST(SmokeTest, testSubscriptionParallel) {
 
 TEST_P(PublisherTest, testPublishing) {
   const auto& [encoding, message] = GetParam();
+  // use a unique topic for each test to prevent tests from interfering with each other
+  static size_t testPublishingCount = 0;
+  ++testPublishingCount;
 
   foxglove::ClientAdvertisement advertisement;
   advertisement.channelId = 1;
-  advertisement.topic = "/foo";
+  advertisement.topic = "/testPublishing_" + std::to_string(testPublishingCount);
   advertisement.encoding = encoding;
   advertisement.schemaName = "std_msgs/msg/String";
   advertisement.schema =
@@ -281,11 +284,11 @@ TEST_P(PublisherTest, testPublishing) {
 
   // Set up the client, advertise and publish the binary message
   auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  auto channelFuture = foxglove::waitForChannel(client, advertisement.topic);
   ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
   client->advertise({advertisement});
 
   // Wait until the advertisement got advertised as channel by the server
-  auto channelFuture = foxglove::waitForChannel(client, advertisement.topic);
   ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(ONE_SECOND));
 
   // Publish the message and unadvertise again
@@ -331,11 +334,11 @@ TEST_P(ExistingPublisherTest, testPublishingWithExistingPublisher) {
 
   // Set up the client, advertise and publish the binary message
   auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  auto channelFuture = foxglove::waitForChannel(client, advertisement.topic);
   ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
   client->advertise({advertisement});
 
   // Wait until the advertisement got advertised as channel by the server
-  auto channelFuture = foxglove::waitForChannel(client, advertisement.topic);
   ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(ONE_SECOND));
 
   // Publish the message and unadvertise again
