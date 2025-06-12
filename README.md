@@ -75,7 +75,7 @@ Parameters are provided to configure the behavior of the bridge. These parameter
  * __topic_whitelist__: List of regular expressions ([ECMAScript grammar](https://en.cppreference.com/w/cpp/regex/ecmascript)) of whitelisted topic names. Defaults to `[".*"]`.
  * __service_whitelist__: List of regular expressions ([ECMAScript grammar](https://en.cppreference.com/w/cpp/regex/ecmascript)) of whitelisted service names. Defaults to `[".*"]`.
  * __param_whitelist__: List of regular expressions ([ECMAScript grammar](https://en.cppreference.com/w/cpp/regex/ecmascript)) of whitelisted parameter names. Defaults to `[".*"]`.
-  * __client_topic_whitelist__: List of regular expressions ([ECMAScript grammar](https://en.cppreference.com/w/cpp/regex/ecmascript)) of whitelisted client-published topic names. Defaults to `[".*"]`.
+ * __client_topic_whitelist__: List of regular expressions ([ECMAScript grammar](https://en.cppreference.com/w/cpp/regex/ecmascript)) of whitelisted client-published topic names. Defaults to `[".*"]`.
  * __send_buffer_limit__: Connection send buffer limit in bytes. Messages will be dropped when a connection's send buffer reaches this limit to avoid a queue of outdated messages building up. Defaults to `10000000` (10 MB).
  * __use_compression__: Use websocket compression (permessage-deflate). It is recommended to leave this turned off as it increases CPU usage and per-message compression often yields low compression ratios for robotics data. Defaults to `false`.
  * __capabilities__: List of supported [server capabilities](https://github.com/foxglove/ws-protocol/blob/main/docs/spec.md). Defaults to `[clientPublish,parameters,parametersSubscribe,services,connectionGraph,assets]`.
@@ -86,9 +86,13 @@ Parameters are provided to configure the behavior of the bridge. These parameter
  * (ROS 2) __min_qos_depth__: Minimum depth used for the QoS profile of subscriptions. Defaults to `1`. This is to set a lower limit for a subscriber's QoS depth which is computed by summing up depths of all publishers. See also [#208](https://github.com/foxglove/ros-foxglove-bridge/issues/208).
  * (ROS 2) __max_qos_depth__: Maximum depth used for the QoS profile of subscriptions. Defaults to `25`.
  * (ROS 2) __best_effort_qos_topic_whitelist__: List of regular expressions (ECMAScript) for topics that should be forced to use 'best_effort' QoS. Unmatched topics will use 'reliable' QoS if ALL publishers are 'reliable', 'best_effort' if any publishers are 'best_effort'. Defaults to `["(?!)"]` (match nothing).
+ * (ROS 2) __best_effort_qos_send_buffer_limit__: Connection send buffer limit in bytes for `best_effort` messages. Defaults to `10000000` (10 MB).
  * (ROS 2) __include_hidden__: Include hidden topics and services. Defaults to `false`.
  * (ROS 2) __disable_load_message__: Do not publish as loaned message when publishing a client message. Defaults to `true`.
  * (ROS 2) __ignore_unresponsive_param_nodes__: Avoid requesting parameters from previously unresponsive nodes. Defaults to `true`.
+
+#### Running in a bandwidth-constrained environment
+When running the foxglove bridge in a bandwidth constrained environment, messages may queue up in the `send_buffer` resulting in dropped messages. In order to control which messages are dropped, `best_effort_qos_topic_whitelist` can be used to force some topics to be "best_effort" rather than reliable. This can be used in conjunction with a high `send_buffer_limit` (for reliable messages) and a lower `best_effort_qos_send_buffer_limit` to ensure `best_effort` messages are dropped first.
 
 ## Building from source
 

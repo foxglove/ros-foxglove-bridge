@@ -846,7 +846,7 @@ private:
     const ros::MessageEvent<ros_babel_fish::BabelFishMessage const>& msgEvent) {
     const auto& msg = msgEvent.getConstMessage();
     const auto receiptTimeNs = msgEvent.getReceiptTime().toNSec();
-    _server->sendMessage(clientHandle, channelId, receiptTimeNs, msg->buffer(), msg->size());
+    _server->sendMessage(clientHandle, channelId, receiptTimeNs, msg->buffer(), msg->size(), false);
   }
 
   void serviceRequest(const foxglove::ServiceRequest& request, ConnectionHandle clientHandle) {
