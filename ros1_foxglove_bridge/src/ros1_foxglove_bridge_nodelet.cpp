@@ -53,9 +53,9 @@ constexpr int MAX_INVALID_PARAMS_TRACKED = 1000;
 using ConnectionHandle = websocketpp::connection_hdl;
 using TopicAndDatatype = std::pair<std::string, std::string>;
 using SubscriptionsByClient = std::map<ConnectionHandle, ros::Subscriber, std::owner_less<>>;
-using ClientPublications = std::unordered_map<foxglove::ClientChannelId, ros::Publisher>;
+using ClientPublications = std::unordered_map<foxglove_ws::ClientChannelId, ros::Publisher>;
 using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std::owner_less<>>;
-using foxglove::isWhitelisted;
+using foxglove_ws::isWhitelisted;
 
 class FoxgloveBridge : public nodelet::Nodelet {
 public:
@@ -65,7 +65,7 @@ public:
     const auto address = nhp.param<std::string>("address", DEFAULT_ADDRESS);
     const int port = nhp.param<int>("port", DEFAULT_PORT);
     const auto send_buffer_limit = static_cast<size_t>(
-      nhp.param<int>("send_buffer_limit", foxglove::DEFAULT_SEND_BUFFER_LIMIT_BYTES));
+      nhp.param<int>("send_buffer_limit", foxglove_ws::DEFAULT_SEND_BUFFER_LIMIT_BYTES));
     const auto useTLS = nhp.param<bool>("tls", false);
     const auto certfile = nhp.param<std::string>("certfile", "");
     const auto keyfile = nhp.param<std::string>("keyfile", "");
@@ -74,8 +74,8 @@ public:
     _useSimTime = nhp.param<bool>("/use_sim_time", false);
     const auto sessionId = nhp.param<std::string>("/run_id", std::to_string(std::time(nullptr)));
     _capabilities = nhp.param<std::vector<std::string>>(
-      "capabilities", std::vector<std::string>(foxglove::DEFAULT_CAPABILITIES.begin(),
-                                               foxglove::DEFAULT_CAPABILITIES.end()));
+      "capabilities", std::vector<std::string>(foxglove_ws::DEFAULT_CAPABILITIES.begin(),
+                                               foxglove_ws::DEFAULT_CAPABILITIES.end()));
     _serviceRetrievalTimeoutMs = nhp.param<int>("service_type_retrieval_timeout_ms",
                                                 DEFAULT_SERVICE_TYPE_RETRIEVAL_TIMEOUT_MS);
 
@@ -119,10 +119,10 @@ public:
              foxglove::WebSocketUserAgent());
 
     try {
-      foxglove::ServerOptions serverOptions;
+      foxglove_ws::ServerOptions serverOptions;
       serverOptions.capabilities = _capabilities;
       if (_useSimTime) {
-        serverOptions.capabilities.push_back(foxglove::CAPABILITY_TIME);
+        serverOptions.capabilities.push_back(foxglove_ws::CAPABILITY_TIME);
       }
       serverOptions.supportedEncodings = {ROS1_CHANNEL_ENCODING};
       serverOptions.metadata = {{"ROS_DISTRO", rosDistro}};
@@ -138,11 +138,12 @@ public:
         std::bind(&FoxgloveBridge::logHandler, this, std::placeholders::_1, std::placeholders::_2);
 
       // Fetching of assets may be blocking, hence we fetch them in a separate thread.
-      _fetchAssetQueue = std::make_unique<foxglove::CallbackQueue>(logHandler, 1 /* num_threads */);
+      _fetchAssetQueue =
+        std::make_unique<foxglove_ws::CallbackQueue>(logHandler, 1 /* num_threads */);
 
-      _server = foxglove::ServerFactory::createServer<ConnectionHandle>("foxglove_bridge",
-                                                                        logHandler, serverOptions);
-      foxglove::ServerHandlers<ConnectionHandle> hdlrs;
+      _server = foxglove_ws::ServerFactory::createServer<ConnectionHandle>(
+        "foxglove_bridge", logHandler, serverOptions);
+      foxglove_ws::ServerHandlers<ConnectionHandle> hdlrs;
       hdlrs.subscribeHandler =
         std::bind(&FoxgloveBridge::subscribe, this, std::placeholders::_1, std::placeholders::_2);
       hdlrs.unsubscribeHandler =
@@ -168,9 +169,9 @@ public:
         _subscribeGraphUpdates = subscribe;
       };
 
-      if (hasCapability(foxglove::CAPABILITY_ASSETS)) {
+      if (hasCapability(foxglove_ws::CAPABILITY_ASSETS)) {
         hdlrs.fetchAssetHandler = [this](const std::string& uri, uint32_t requestId,
-                                         foxglove::ConnHandle hdl) {
+                                         foxglove_ws::ConnHandle hdl) {
           _fetchAssetQueue->addCallback(
             std::bind(&FoxgloveBridge::fetchAsset, this, uri, requestId, hdl));
         };
@@ -213,7 +214,7 @@ private:
     }
   };
 
-  void subscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
+  void subscribe(foxglove_ws::ChannelId channelId, ConnectionHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
     auto it = _advertisedTopics.find(channelId);
@@ -221,7 +222,7 @@ private:
       const std::string errMsg =
         "Received subscribe request for unknown channel " + std::to_string(channelId);
       ROS_WARN_STREAM(errMsg);
-      throw foxglove::ChannelError(channelId, errMsg);
+      throw foxglove_ws::ChannelError(channelId, errMsg);
     }
 
     const auto& channel = it->second;
@@ -238,7 +239,7 @@ private:
       const std::string errMsg =
         "Client is already subscribed to channel " + std::to_string(channelId);
       ROS_WARN_STREAM(errMsg);
-      throw foxglove::ChannelError(channelId, errMsg);
+      throw foxglove_ws::ChannelError(channelId, errMsg);
     }
 
     try {
@@ -259,11 +260,11 @@ private:
       const std::string errMsg =
         "Failed to subscribe to topic '" + topic + "' (" + datatype + "): " + ex.what();
       ROS_ERROR_STREAM(errMsg);
-      throw foxglove::ChannelError(channelId, errMsg);
+      throw foxglove_ws::ChannelError(channelId, errMsg);
     }
   }
 
-  void unsubscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle) {
+  void unsubscribe(foxglove_ws::ChannelId channelId, ConnectionHandle clientHandle) {
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
     const auto channelIt = _advertisedTopics.find(channelId);
@@ -271,21 +272,21 @@ private:
       const std::string errMsg =
         "Received unsubscribe request for unknown channel " + std::to_string(channelId);
       ROS_WARN_STREAM(errMsg);
-      throw foxglove::ChannelError(channelId, errMsg);
+      throw foxglove_ws::ChannelError(channelId, errMsg);
     }
     const auto& channel = channelIt->second;
 
     auto subscriptionsIt = _subscriptions.find(channelId);
     if (subscriptionsIt == _subscriptions.end()) {
-      throw foxglove::ChannelError(channelId, "Received unsubscribe request for channel " +
-                                                std::to_string(channelId) +
-                                                " that was not subscribed to ");
+      throw foxglove_ws::ChannelError(channelId, "Received unsubscribe request for channel " +
+                                                   std::to_string(channelId) +
+                                                   " that was not subscribed to ");
     }
 
     auto& subscriptionsByClient = subscriptionsIt->second;
     const auto clientSubscription = subscriptionsByClient.find(clientHandle);
     if (clientSubscription == subscriptionsByClient.end()) {
-      throw foxglove::ChannelError(
+      throw foxglove_ws::ChannelError(
         channelId, "Received unsubscribe request for channel " + std::to_string(channelId) +
                      "from a client that was not subscribed to this channel");
     }
@@ -301,10 +302,10 @@ private:
     }
   }
 
-  void clientAdvertise(const foxglove::ClientAdvertisement& channel,
+  void clientAdvertise(const foxglove_ws::ClientAdvertisement& channel,
                        ConnectionHandle clientHandle) {
     if (channel.encoding != ROS1_CHANNEL_ENCODING) {
-      throw foxglove::ClientChannelError(
+      throw foxglove_ws::ClientChannelError(
         channel.channelId, "Unsupported encoding. Only '" + std::string(ROS1_CHANNEL_ENCODING) +
                              "' encoding is supported at the moment.");
     }
@@ -318,7 +319,7 @@ private:
     auto& clientPublications = clientPublicationsIt->second;
     if (!isFirstPublication &&
         clientPublications.find(channel.channelId) != clientPublications.end()) {
-      throw foxglove::ClientChannelError(
+      throw foxglove_ws::ClientChannelError(
         channel.channelId, "Received client advertisement from " +
                              _server->remoteEndpointString(clientHandle) + " for channel " +
                              std::to_string(channel.channelId) + " it had already advertised");
@@ -326,7 +327,7 @@ private:
 
     const auto msgDescription = _rosTypeInfoProvider.getMessageDescription(channel.schemaName);
     if (!msgDescription) {
-      throw foxglove::ClientChannelError(
+      throw foxglove_ws::ClientChannelError(
         channel.channelId, "Failed to retrieve type information of data type '" +
                              channel.schemaName + "'. Unable to advertise topic " + channel.topic);
     }
@@ -352,16 +353,16 @@ private:
       const auto errMsg =
         "Failed to create publisher for topic " + channel.topic + "(" + channel.schemaName + ")";
       ROS_ERROR_STREAM(errMsg);
-      throw foxglove::ClientChannelError(channel.channelId, errMsg);
+      throw foxglove_ws::ClientChannelError(channel.channelId, errMsg);
     }
   }
 
-  void clientUnadvertise(foxglove::ClientChannelId channelId, ConnectionHandle clientHandle) {
+  void clientUnadvertise(foxglove_ws::ClientChannelId channelId, ConnectionHandle clientHandle) {
     std::unique_lock<std::shared_mutex> lock(_publicationsMutex);
 
     auto clientPublicationsIt = _clientAdvertisedTopics.find(clientHandle);
     if (clientPublicationsIt == _clientAdvertisedTopics.end()) {
-      throw foxglove::ClientChannelError(
+      throw foxglove_ws::ClientChannelError(
         channelId, "Ignoring client unadvertisement from " +
                      _server->remoteEndpointString(clientHandle) + " for unknown channel " +
                      std::to_string(channelId) + ", client has no advertised topics");
@@ -371,7 +372,7 @@ private:
 
     auto channelPublicationIt = clientPublications.find(channelId);
     if (channelPublicationIt == clientPublications.end()) {
-      throw foxglove::ClientChannelError(
+      throw foxglove_ws::ClientChannelError(
         channelId, "Ignoring client unadvertisement from " +
                      _server->remoteEndpointString(clientHandle) + " for unknown channel " +
                      std::to_string(channelId) + ", client has " +
@@ -389,7 +390,7 @@ private:
     }
   }
 
-  void clientMessage(const foxglove::ClientMessage& clientMsg, ConnectionHandle clientHandle) {
+  void clientMessage(const foxglove_ws::ClientMessage& clientMsg, ConnectionHandle clientHandle) {
     ros_babel_fish::BabelFishMessage::Ptr msg(new ros_babel_fish::BabelFishMessage);
     msg->read(clientMsg);
 
@@ -398,7 +399,7 @@ private:
 
     auto clientPublicationsIt = _clientAdvertisedTopics.find(clientHandle);
     if (clientPublicationsIt == _clientAdvertisedTopics.end()) {
-      throw foxglove::ClientChannelError(
+      throw foxglove_ws::ClientChannelError(
         channelId, "Dropping client message from " + _server->remoteEndpointString(clientHandle) +
                      " for unknown channel " + std::to_string(channelId) +
                      ", client has no advertised topics");
@@ -408,7 +409,7 @@ private:
 
     auto channelPublicationIt = clientPublications.find(clientMsg.advertisement.channelId);
     if (channelPublicationIt == clientPublications.end()) {
-      throw foxglove::ClientChannelError(
+      throw foxglove_ws::ClientChannelError(
         channelId, "Dropping client message from " + _server->remoteEndpointString(clientHandle) +
                      " for unknown channel " + std::to_string(channelId) + ", client has " +
                      std::to_string(clientPublications.size()) + " advertised topic(s)");
@@ -417,9 +418,9 @@ private:
     try {
       channelPublicationIt->second.publish(msg);
     } catch (const std::exception& ex) {
-      throw foxglove::ClientChannelError(channelId, "Failed to publish message on topic '" +
-                                                      channelPublicationIt->second.getTopic() +
-                                                      "': " + ex.what());
+      throw foxglove_ws::ClientChannelError(channelId, "Failed to publish message on topic '" +
+                                                         channelPublicationIt->second.getTopic() +
+                                                         "': " + ex.what());
     }
   }
 
@@ -429,11 +430,11 @@ private:
       return;
     }
 
-    const bool servicesEnabled = hasCapability(foxglove::CAPABILITY_SERVICES);
+    const bool servicesEnabled = hasCapability(foxglove_ws::CAPABILITY_SERVICES);
     const bool querySystemState = servicesEnabled || _subscribeGraphUpdates;
 
     std::vector<std::string> serviceNames;
-    foxglove::MapOfSets publishers, subscribers, services;
+    foxglove_ws::MapOfSets publishers, subscribers, services;
 
     // Retrieve system state from ROS master.
     if (querySystemState) {
@@ -521,7 +522,7 @@ private:
     std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
     // Remove channels for which the topic does not exist anymore
-    std::vector<foxglove::ChannelId> channelIdsToRemove;
+    std::vector<foxglove_ws::ChannelId> channelIdsToRemove;
     for (auto channelIt = _advertisedTopics.begin(); channelIt != _advertisedTopics.end();) {
       const TopicAndDatatype topicAndDatatype = {channelIt->second.topic,
                                                  channelIt->second.schemaName};
@@ -539,7 +540,7 @@ private:
     _server->removeChannels(channelIdsToRemove);
 
     // Add new channels for new topics
-    std::vector<foxglove::ChannelWithoutId> channelsToAdd;
+    std::vector<foxglove_ws::ChannelWithoutId> channelsToAdd;
     for (const auto& topicAndDatatype : latestTopics) {
       if (std::find_if(_advertisedTopics.begin(), _advertisedTopics.end(),
                        [topicAndDatatype](const auto& channelIdAndChannel) {
@@ -550,7 +551,7 @@ private:
         continue;  // Topic already advertised
       }
 
-      foxglove::ChannelWithoutId newChannel{};
+      foxglove_ws::ChannelWithoutId newChannel{};
       newChannel.topic = topicAndDatatype.first;
       newChannel.schemaName = topicAndDatatype.second;
       newChannel.encoding = ROS1_CHANNEL_ENCODING;
@@ -589,7 +590,7 @@ private:
     std::unique_lock<std::shared_mutex> lock(_servicesMutex);
 
     // Remove advertisements for services that have been removed
-    std::vector<foxglove::ServiceId> servicesToRemove;
+    std::vector<foxglove_ws::ServiceId> servicesToRemove;
     for (const auto& service : _advertisedServices) {
       const auto it =
         std::find_if(serviceNames.begin(), serviceNames.end(), [service](const auto& serviceName) {
@@ -605,7 +606,7 @@ private:
     _server->removeServices(servicesToRemove);
 
     // Advertise new services
-    std::vector<foxglove::ServiceWithoutId> newServices;
+    std::vector<foxglove_ws::ServiceWithoutId> newServices;
     for (const auto& serviceName : serviceNames) {
       if (std::find_if(_advertisedServices.begin(), _advertisedServices.end(),
                        [&serviceName](const auto& idWithService) {
@@ -619,7 +620,7 @@ private:
           retrieveServiceType(serviceName, std::chrono::milliseconds(_serviceRetrievalTimeoutMs));
         const auto srvDescription = _rosTypeInfoProvider.getServiceDescription(serviceType);
 
-        foxglove::ServiceWithoutId service;
+        foxglove_ws::ServiceWithoutId service;
         service.name = serviceName;
         service.type = serviceType;
 
@@ -661,7 +662,7 @@ private:
     }
 
     bool success = true;
-    std::vector<foxglove::Parameter> params;
+    std::vector<foxglove_ws::Parameter> params;
     std::vector<std::string> invalidParams;
     for (const auto& paramName : parameterNames) {
       if (!isWhitelisted(paramName, _paramWhitelistPatterns)) {
@@ -719,9 +720,9 @@ private:
     }
   }
 
-  void setParameters(const std::vector<foxglove::Parameter>& parameters,
+  void setParameters(const std::vector<foxglove_ws::Parameter>& parameters,
                      const std::optional<std::string>& requestId, ConnectionHandle hdl) {
-    using foxglove::ParameterType;
+    using foxglove_ws::ParameterType;
     auto nh = this->getMTNodeHandle();
 
     bool success = true;
@@ -768,9 +769,9 @@ private:
   }
 
   void subscribeParameters(const std::vector<std::string>& parameters,
-                           foxglove::ParameterSubscriptionOperation op, ConnectionHandle) {
+                           foxglove_ws::ParameterSubscriptionOperation op, ConnectionHandle) {
     const auto opVerb =
-      (op == foxglove::ParameterSubscriptionOperation::SUBSCRIBE) ? "subscribe" : "unsubscribe";
+      (op == foxglove_ws::ParameterSubscriptionOperation::SUBSCRIBE) ? "subscribe" : "unsubscribe";
     bool success = true;
     for (const auto& paramName : parameters) {
       if (!isWhitelisted(paramName, _paramWhitelistPatterns)) {
@@ -821,42 +822,42 @@ private:
     }
   }
 
-  void logHandler(foxglove::WebSocketLogLevel level, char const* msg) {
+  void logHandler(foxglove_ws::WebSocketLogLevel level, char const* msg) {
     switch (level) {
-      case foxglove::WebSocketLogLevel::Debug:
+      case foxglove_ws::WebSocketLogLevel::Debug:
         ROS_DEBUG("[WS] %s", msg);
         break;
-      case foxglove::WebSocketLogLevel::Info:
+      case foxglove_ws::WebSocketLogLevel::Info:
         ROS_INFO("[WS] %s", msg);
         break;
-      case foxglove::WebSocketLogLevel::Warn:
+      case foxglove_ws::WebSocketLogLevel::Warn:
         ROS_WARN("[WS] %s", msg);
         break;
-      case foxglove::WebSocketLogLevel::Error:
+      case foxglove_ws::WebSocketLogLevel::Error:
         ROS_ERROR("[WS] %s", msg);
         break;
-      case foxglove::WebSocketLogLevel::Critical:
+      case foxglove_ws::WebSocketLogLevel::Critical:
         ROS_FATAL("[WS] %s", msg);
         break;
     }
   }
 
   void rosMessageHandler(
-    const foxglove::ChannelId channelId, ConnectionHandle clientHandle,
+    const foxglove_ws::ChannelId channelId, ConnectionHandle clientHandle,
     const ros::MessageEvent<ros_babel_fish::BabelFishMessage const>& msgEvent) {
     const auto& msg = msgEvent.getConstMessage();
     const auto receiptTimeNs = msgEvent.getReceiptTime().toNSec();
     _server->sendMessage(clientHandle, channelId, receiptTimeNs, msg->buffer(), msg->size());
   }
 
-  void serviceRequest(const foxglove::ServiceRequest& request, ConnectionHandle clientHandle) {
+  void serviceRequest(const foxglove_ws::ServiceRequest& request, ConnectionHandle clientHandle) {
     std::shared_lock<std::shared_mutex> lock(_servicesMutex);
     const auto serviceIt = _advertisedServices.find(request.serviceId);
     if (serviceIt == _advertisedServices.end()) {
       const auto errMsg =
         "Service with id " + std::to_string(request.serviceId) + " does not exist";
       ROS_ERROR_STREAM(errMsg);
-      throw foxglove::ServiceError(request.serviceId, errMsg);
+      throw foxglove_ws::ServiceError(request.serviceId, errMsg);
     }
     const auto& serviceName = serviceIt->second.name;
     const auto& serviceType = serviceIt->second.type;
@@ -864,8 +865,8 @@ private:
               serviceType.c_str());
 
     if (!ros::service::exists(serviceName, false)) {
-      throw foxglove::ServiceError(request.serviceId,
-                                   "Service '" + serviceName + "' does not exist");
+      throw foxglove_ws::ServiceError(request.serviceId,
+                                      "Service '" + serviceName + "' does not exist");
     }
 
     const auto srvDescription = _rosTypeInfoProvider.getServiceDescription(serviceType);
@@ -873,7 +874,7 @@ private:
       const auto errMsg =
         "Failed to retrieve type information for service " + serviceName + "(" + serviceType + ")";
       ROS_ERROR_STREAM(errMsg);
-      throw foxglove::ServiceError(request.serviceId, errMsg);
+      throw foxglove_ws::ServiceError(request.serviceId, errMsg);
     }
 
     GenericService genReq, genRes;
@@ -882,20 +883,20 @@ private:
     genReq.data = request.data;
 
     if (ros::service::call(serviceName, genReq, genRes)) {
-      foxglove::ServiceResponse res;
+      foxglove_ws::ServiceResponse res;
       res.serviceId = request.serviceId;
       res.callId = request.callId;
       res.encoding = request.encoding;
       res.data = genRes.data;
       _server->sendServiceResponse(clientHandle, res);
     } else {
-      throw foxglove::ServiceError(
+      throw foxglove_ws::ServiceError(
         request.serviceId, "Failed to call service " + serviceName + "(" + serviceType + ")");
     }
   }
 
   void fetchAsset(const std::string& uri, uint32_t requestId, ConnectionHandle clientHandle) {
-    foxglove::FetchAssetResponse response;
+    foxglove_ws::FetchAssetResponse response;
     response.requestId = requestId;
 
     try {
@@ -910,13 +911,13 @@ private:
 
       resource_retriever::Retriever resource_retriever;
       const resource_retriever::MemoryResource memoryResource = resource_retriever.get(uri);
-      response.status = foxglove::FetchAssetStatus::Success;
+      response.status = foxglove_ws::FetchAssetStatus::Success;
       response.errorMessage = "";
       response.data.resize(memoryResource.size);
       std::memcpy(response.data.data(), memoryResource.data.get(), memoryResource.size);
     } catch (const std::exception& ex) {
       ROS_WARN("Failed to retrieve asset '%s': %s", uri.c_str(), ex.what());
-      response.status = foxglove::FetchAssetStatus::Error;
+      response.status = foxglove_ws::FetchAssetStatus::Error;
       response.errorMessage = "Failed to retrieve asset " + uri;
     }
 
@@ -929,16 +930,16 @@ private:
     return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
   }
 
-  std::unique_ptr<foxglove::ServerInterface<ConnectionHandle>> _server;
+  std::unique_ptr<foxglove_ws::ServerInterface<ConnectionHandle>> _server;
   ros_babel_fish::IntegratedDescriptionProvider _rosTypeInfoProvider;
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _paramWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;
   std::vector<std::regex> _assetUriAllowlistPatterns;
   ros::XMLRPCManager xmlrpcServer;
-  std::unordered_map<foxglove::ChannelId, foxglove::ChannelWithoutId> _advertisedTopics;
-  std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
-  std::unordered_map<foxglove::ServiceId, foxglove::ServiceWithoutId> _advertisedServices;
+  std::unordered_map<foxglove_ws::ChannelId, foxglove_ws::ChannelWithoutId> _advertisedTopics;
+  std::unordered_map<foxglove_ws::ChannelId, SubscriptionsByClient> _subscriptions;
+  std::unordered_map<foxglove_ws::ServiceId, foxglove_ws::ServiceWithoutId> _advertisedServices;
   PublicationsByClient _clientAdvertisedTopics;
   std::mutex _subscriptionsMutex;
   std::shared_mutex _publicationsMutex;
@@ -951,7 +952,7 @@ private:
   std::vector<std::string> _capabilities;
   int _serviceRetrievalTimeoutMs = DEFAULT_SERVICE_TYPE_RETRIEVAL_TIMEOUT_MS;
   std::atomic<bool> _subscribeGraphUpdates = false;
-  std::unique_ptr<foxglove::CallbackQueue> _fetchAssetQueue;
+  std::unique_ptr<foxglove_ws::CallbackQueue> _fetchAssetQueue;
   std::unordered_set<std::string> _invalidParams;
 };
 

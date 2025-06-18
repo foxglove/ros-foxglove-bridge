@@ -10,8 +10,8 @@
 
 namespace foxglove_bridge {
 
-foxglove::Parameter fromRosParam(const std::string& name, const XmlRpc::XmlRpcValue& value);
-XmlRpc::XmlRpcValue toRosParam(const foxglove::ParameterValue& param);
+foxglove_ws::Parameter fromRosParam(const std::string& name, const XmlRpc::XmlRpcValue& value);
+XmlRpc::XmlRpcValue toRosParam(const foxglove_ws::ParameterValue& param);
 
 std::vector<std::regex> parseRegexPatterns(const std::vector<std::string>& strings);
 

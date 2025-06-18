@@ -6,29 +6,29 @@
 
 namespace foxglove_bridge {
 
-foxglove::ParameterValue fromRosParam(const XmlRpc::XmlRpcValue& value) {
+foxglove_ws::ParameterValue fromRosParam(const XmlRpc::XmlRpcValue& value) {
   const auto type = value.getType();
 
   if (type == XmlRpc::XmlRpcValue::Type::TypeBoolean) {
-    return foxglove::ParameterValue(static_cast<bool>(value));
+    return foxglove_ws::ParameterValue(static_cast<bool>(value));
   } else if (type == XmlRpc::XmlRpcValue::Type::TypeInt) {
-    return foxglove::ParameterValue(static_cast<int64_t>(static_cast<int>(value)));
+    return foxglove_ws::ParameterValue(static_cast<int64_t>(static_cast<int>(value)));
   } else if (type == XmlRpc::XmlRpcValue::Type::TypeDouble) {
-    return foxglove::ParameterValue(static_cast<double>(value));
+    return foxglove_ws::ParameterValue(static_cast<double>(value));
   } else if (type == XmlRpc::XmlRpcValue::Type::TypeString) {
-    return foxglove::ParameterValue(static_cast<std::string>(value));
+    return foxglove_ws::ParameterValue(static_cast<std::string>(value));
   } else if (type == XmlRpc::XmlRpcValue::Type::TypeStruct) {
-    std::unordered_map<std::string, foxglove::ParameterValue> paramMap;
+    std::unordered_map<std::string, foxglove_ws::ParameterValue> paramMap;
     for (const auto& [elementName, elementVal] : value) {
       paramMap.insert({elementName, fromRosParam(elementVal)});
     }
-    return foxglove::ParameterValue(paramMap);
+    return foxglove_ws::ParameterValue(paramMap);
   } else if (type == XmlRpc::XmlRpcValue::Type::TypeArray) {
-    std::vector<foxglove::ParameterValue> paramVec;
+    std::vector<foxglove_ws::ParameterValue> paramVec;
     for (int i = 0; i < value.size(); ++i) {
       paramVec.push_back(fromRosParam(value[i]));
     }
-    return foxglove::ParameterValue(paramVec);
+    return foxglove_ws::ParameterValue(paramVec);
   } else if (type == XmlRpc::XmlRpcValue::Type::TypeInvalid) {
     throw std::runtime_error("Parameter not set");
   } else {
@@ -36,31 +36,31 @@ foxglove::ParameterValue fromRosParam(const XmlRpc::XmlRpcValue& value) {
   }
 }
 
-foxglove::Parameter fromRosParam(const std::string& name, const XmlRpc::XmlRpcValue& value) {
-  return foxglove::Parameter(name, fromRosParam(value));
+foxglove_ws::Parameter fromRosParam(const std::string& name, const XmlRpc::XmlRpcValue& value) {
+  return foxglove_ws::Parameter(name, fromRosParam(value));
 }
 
-XmlRpc::XmlRpcValue toRosParam(const foxglove::ParameterValue& param) {
+XmlRpc::XmlRpcValue toRosParam(const foxglove_ws::ParameterValue& param) {
   const auto paramType = param.getType();
-  if (paramType == foxglove::ParameterType::PARAMETER_BOOL) {
+  if (paramType == foxglove_ws::ParameterType::PARAMETER_BOOL) {
     return param.getValue<bool>();
-  } else if (paramType == foxglove::ParameterType::PARAMETER_INTEGER) {
+  } else if (paramType == foxglove_ws::ParameterType::PARAMETER_INTEGER) {
     return static_cast<int>(param.getValue<int64_t>());
-  } else if (paramType == foxglove::ParameterType::PARAMETER_DOUBLE) {
+  } else if (paramType == foxglove_ws::ParameterType::PARAMETER_DOUBLE) {
     return param.getValue<double>();
-  } else if (paramType == foxglove::ParameterType::PARAMETER_STRING) {
+  } else if (paramType == foxglove_ws::ParameterType::PARAMETER_STRING) {
     return param.getValue<std::string>();
-  } else if (paramType == foxglove::ParameterType::PARAMETER_STRUCT) {
+  } else if (paramType == foxglove_ws::ParameterType::PARAMETER_STRUCT) {
     XmlRpc::XmlRpcValue valueStruct;
     const auto& paramMap =
-      param.getValue<std::unordered_map<std::string, foxglove::ParameterValue>>();
+      param.getValue<std::unordered_map<std::string, foxglove_ws::ParameterValue>>();
     for (const auto& [paramName, paramElement] : paramMap) {
       valueStruct[paramName] = toRosParam(paramElement);
     }
     return valueStruct;
-  } else if (paramType == foxglove::ParameterType::PARAMETER_ARRAY) {
+  } else if (paramType == foxglove_ws::ParameterType::PARAMETER_ARRAY) {
     XmlRpc::XmlRpcValue arr;
-    const auto vec = param.getValue<std::vector<foxglove::ParameterValue>>();
+    const auto vec = param.getValue<std::vector<foxglove_ws::ParameterValue>>();
     for (int i = 0; i < static_cast<int>(vec.size()); ++i) {
       arr[i] = toRosParam(vec[i]);
     }
