@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace foxglove {
+namespace foxglove_ws {
 
 enum class ParameterSubscriptionOperation {
   SUBSCRIBE,
@@ -74,4 +74,4 @@ private:
   ParameterValue _value;
 };
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

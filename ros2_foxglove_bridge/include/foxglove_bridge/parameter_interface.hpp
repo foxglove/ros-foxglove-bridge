@@ -14,7 +14,7 @@
 
 namespace foxglove_bridge {
 
-using ParameterList = std::vector<foxglove::Parameter>;
+using ParameterList = std::vector<foxglove_ws::Parameter>;
 using ParamUpdateFunc = std::function<void(const ParameterList&)>;
 
 enum class UnresponsiveNodePolicy {

@@ -8,7 +8,7 @@
 #include "common.hpp"
 #include "server_interface.hpp"
 
-namespace foxglove {
+namespace foxglove_ws {
 
 class ServerFactory {
 public:
@@ -18,4 +18,4 @@ public:
     const ServerOptions& options);
 };
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

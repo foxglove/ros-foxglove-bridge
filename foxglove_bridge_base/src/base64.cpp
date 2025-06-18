@@ -2,7 +2,7 @@
 
 #include <foxglove_bridge/base64.hpp>
 
-namespace foxglove {
+namespace foxglove_ws {
 
 // Adapted from:
 // https://gist.github.com/tomykaira/f0fd86b6c73063283afe550bc5d77594
@@ -103,4 +103,4 @@ std::vector<unsigned char> base64Decode(const std::string& input) {
   return decoded;
 }
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

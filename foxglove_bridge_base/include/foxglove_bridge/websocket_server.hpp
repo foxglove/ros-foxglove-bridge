@@ -61,7 +61,7 @@ constexpr auto UNSUBSCRIBE_CONNECTION_GRAPH = StringHash("unsubscribeConnectionG
 constexpr auto FETCH_ASSET = StringHash("fetchAsset");
 }  // namespace
 
-namespace foxglove {
+namespace foxglove_ws {
 
 using json = nlohmann::json;
 
@@ -436,7 +436,7 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
     }
   }
 
-}  // namespace foxglove
+}  // namespace foxglove_ws
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::setHandlers(ServerHandlers<ConnHandle>&& handlers) {
@@ -695,7 +695,7 @@ inline void Server<ServerConfiguration>::handleTextMessage(ConnHandle hdl, Messa
     const std::string postfix = " (op: " + op + ")";
     sendStatusAndLogMsg(hdl, StatusLevel::Error, "Failed to execute handler" + postfix);
   }
-}  // namespace foxglove
+}  // namespace foxglove_ws
 
 template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, MessagePtr msg) {
@@ -792,7 +792,7 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, Mes
 
       try {
         if (!_handlers.serviceRequestHandler) {
-          throw foxglove::ServiceError(request.serviceId, "No service handler");
+          throw foxglove_ws::ServiceError(request.serviceId, "No service handler");
         }
 
         _handlers.serviceRequestHandler(request, hdl);
@@ -992,8 +992,8 @@ inline void Server<ServerConfiguration>::sendMessage(ConnHandle clientHandle, Ch
 
   std::array<uint8_t, 1 + 4 + 8> msgHeader;
   msgHeader[0] = uint8_t(BinaryOpcode::MESSAGE_DATA);
-  foxglove::WriteUint32LE(msgHeader.data() + 1, subId);
-  foxglove::WriteUint64LE(msgHeader.data() + 5, timestamp);
+  foxglove_ws::WriteUint32LE(msgHeader.data() + 1, subId);
+  foxglove_ws::WriteUint64LE(msgHeader.data() + 5, timestamp);
 
   const size_t messageSize = msgHeader.size() + payloadSize;
   auto message = con->get_message(OpCode::BINARY, messageSize);
@@ -1008,7 +1008,7 @@ template <typename ServerConfiguration>
 inline void Server<ServerConfiguration>::broadcastTime(uint64_t timestamp) {
   std::array<uint8_t, 1 + 8> message;
   message[0] = uint8_t(BinaryOpcode::TIME_DATA);
-  foxglove::WriteUint64LE(message.data() + 1, timestamp);
+  foxglove_ws::WriteUint64LE(message.data() + 1, timestamp);
 
   std::shared_lock<std::shared_mutex> lock(_clientsMutex);
   for (const auto& [hdl, clientInfo] : _clients) {
@@ -1507,13 +1507,13 @@ inline void Server<ServerConfiguration>::sendFetchAssetResponse(
   message->append_payload(&op, 1);
 
   std::array<uint8_t, 4> uint32Data;
-  foxglove::WriteUint32LE(uint32Data.data(), response.requestId);
+  foxglove_ws::WriteUint32LE(uint32Data.data(), response.requestId);
   message->append_payload(uint32Data.data(), uint32Data.size());
 
   const uint8_t status = static_cast<uint8_t>(response.status);
   message->append_payload(&status, 1);
 
-  foxglove::WriteUint32LE(uint32Data.data(), response.errorMessage.size());
+  foxglove_ws::WriteUint32LE(uint32Data.data(), response.errorMessage.size());
   message->append_payload(uint32Data.data(), uint32Data.size());
   message->append_payload(response.errorMessage.data(), errMsgSize);
 
@@ -1521,4 +1521,4 @@ inline void Server<ServerConfiguration>::sendFetchAssetResponse(
   con->send(message);
 }
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

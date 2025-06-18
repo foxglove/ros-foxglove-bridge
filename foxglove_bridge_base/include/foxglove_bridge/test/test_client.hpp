@@ -9,7 +9,7 @@
 #include "../parameter.hpp"
 #include "../websocket_client.hpp"
 
-namespace foxglove {
+namespace foxglove_ws {
 
 std::future<std::vector<uint8_t>> waitForChannelMsg(ClientInterface* client,
                                                     SubscriptionId subscriptionId);
@@ -29,4 +29,4 @@ std::future<FetchAssetResponse> waitForFetchAssetResponse(std::shared_ptr<Client
 
 extern template class Client<websocketpp::config::asio_client>;
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

@@ -1,6 +1,6 @@
 #include <foxglove_bridge/parameter.hpp>
 
-namespace foxglove {
+namespace foxglove_ws {
 
 ParameterValue::ParameterValue()
     : _type(ParameterType::PARAMETER_NOT_SET) {}
@@ -40,4 +40,4 @@ Parameter::Parameter(const std::string& name, const ParameterValue& value)
     : _name(name)
     , _value(value) {}
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

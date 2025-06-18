@@ -16,7 +16,7 @@
 #include "parameter.hpp"
 #include "serialization.hpp"
 
-namespace foxglove {
+namespace foxglove_ws {
 
 inline void to_json(nlohmann::json& j, const ClientAdvertisement& p) {
   j = nlohmann::json{{"id", p.channelId},
@@ -180,7 +180,7 @@ public:
   void publish(ClientChannelId channelId, const uint8_t* buffer, size_t size) override {
     std::vector<uint8_t> payload(1 + 4 + size);
     payload[0] = uint8_t(ClientBinaryOpcode::MESSAGE_DATA);
-    foxglove::WriteUint32LE(payload.data() + 1, channelId);
+    foxglove_ws::WriteUint32LE(payload.data() + 1, channelId);
     std::memcpy(payload.data() + 1 + 4, buffer, size);
     sendBinary(payload.data(), payload.size());
   }
@@ -256,4 +256,4 @@ protected:
   BinaryMessageHandler _binaryMessageHandler;
 };
 
-}  // namespace foxglove
+}  // namespace foxglove_ws
