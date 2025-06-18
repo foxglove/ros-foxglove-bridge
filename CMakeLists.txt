@@ -51,41 +51,6 @@ if (ENDIAN)
   add_compile_definitions(ARCH_IS_BIG_ENDIAN=1)
 endif()
 
-# Download Foxglove SDK shared lib
-# TODO: Add conditionals and URL/SHA lookup table for other OS/architecture combos
-# using CMAKE_SYSTEM_PROCESSOR and CMAKE_SYSTEM_NAME
-include(FetchContent)
-FetchContent_Declare(
-  foxglove_sdk
-  URL https://github.com/foxglove/foxglove-sdk/releases/download/sdk%2Fv0.9.0/foxglove-v0.9.0-cpp-aarch64-unknown-linux-gnu.zip
-  URL_HASH SHA256=a554f82b3d1c3096457887bccee7088646b729494ec18909846ac7fcdd06ee1d
-)
-FetchContent_MakeAvailable(foxglove_sdk)
-
-file(GLOB_RECURSE _foxglove_sdk_sources ${foxglove_sdk_SOURCE_DIR}/src/*.cpp)
-add_library(foxglove_sdk SHARED
-  ${_foxglove_sdk_sources}
-)
-file(GLOB_RECURSE _foxglove_sdk_headers ${foxglove_sdk_SOURCE_DIR}/include/*.hpp)
-target_include_directories(foxglove_sdk
-  PUBLIC
-    $<BUILD_INTERFACE:${foxglove_sdk_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-)
-target_link_libraries(foxglove_sdk
-  PUBLIC
-    ${foxglove_sdk_SOURCE_DIR}/lib/libfoxglove.so
-)
-install(FILES ${_foxglove_sdk_headers}
-  DESTINATION include/${PROJECT_NAME}
-)
-install(TARGETS foxglove_sdk
-  EXPORT foxglove_sdk
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION bin
-)
-
 # Get git commit hash and replace variables in version.cpp.in
 find_program(GIT_SCM git DOC "Git version control")
 if (GIT_SCM)
