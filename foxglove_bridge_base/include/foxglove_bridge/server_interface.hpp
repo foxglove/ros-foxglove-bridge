@@ -11,7 +11,7 @@
 #include "common.hpp"
 #include "parameter.hpp"
 
-namespace foxglove {
+namespace foxglove_ws {
 
 constexpr size_t DEFAULT_SEND_BUFFER_LIMIT_BYTES = 10000000UL;  // 10 MB
 
@@ -111,4 +111,4 @@ public:
   virtual std::string remoteEndpointString(ConnectionHandle clientHandle) = 0;
 };
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

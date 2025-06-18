@@ -6,7 +6,7 @@
 
 #include "./websocket_logging.hpp"
 
-namespace foxglove {
+namespace foxglove_ws {
 
 struct WebSocketNoTls : public websocketpp::config::core {
   typedef WebSocketNoTls type;
@@ -43,4 +43,4 @@ struct WebSocketNoTls : public websocketpp::config::core {
     permessage_deflate_type;
 };
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

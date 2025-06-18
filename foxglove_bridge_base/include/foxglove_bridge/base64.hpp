@@ -5,10 +5,10 @@
 #include <string_view>
 #include <vector>
 
-namespace foxglove {
+namespace foxglove_ws {
 
 std::string base64Encode(const std::string_view& input);
 
 std::vector<unsigned char> base64Decode(const std::string& input);
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

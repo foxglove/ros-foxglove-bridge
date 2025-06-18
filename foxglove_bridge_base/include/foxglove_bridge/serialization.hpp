@@ -7,7 +7,7 @@
 #include "common.hpp"
 #include "parameter.hpp"
 
-namespace foxglove {
+namespace foxglove_ws {
 
 inline void WriteUint64LE(uint8_t* buf, uint64_t val) {
 #ifdef ARCH_IS_BIG_ENDIAN
@@ -53,4 +53,4 @@ void from_json(const nlohmann::json& j, Parameter& p);
 void to_json(nlohmann::json& j, const Service& p);
 void from_json(const nlohmann::json& j, Service& p);
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

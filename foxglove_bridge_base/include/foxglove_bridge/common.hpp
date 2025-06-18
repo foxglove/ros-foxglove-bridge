@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace foxglove {
+namespace foxglove_ws {
 
 constexpr char SUPPORTED_SUBPROTOCOL[] = "foxglove.websocket.v1";
 constexpr char CAPABILITY_CLIENT_PUBLISH[] = "clientPublish";
@@ -159,4 +159,4 @@ struct FetchAssetResponse {
   std::vector<uint8_t> data;
 };
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

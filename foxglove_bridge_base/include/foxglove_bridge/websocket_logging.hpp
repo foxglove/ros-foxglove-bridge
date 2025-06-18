@@ -7,7 +7,7 @@
 
 #include "common.hpp"
 
-namespace foxglove {
+namespace foxglove_ws {
 
 using LogCallback = std::function<void(WebSocketLogLevel, char const*)>;
 
@@ -97,4 +97,4 @@ private:
   LogCallback _callback;
 };
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

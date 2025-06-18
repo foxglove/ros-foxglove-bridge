@@ -5,16 +5,18 @@
 #include <foxglove_bridge/websocket_server.hpp>
 #include <foxglove_bridge/websocket_tls.hpp>
 
-namespace foxglove {
+namespace foxglove_ws {
 
 template <>
 std::unique_ptr<ServerInterface<websocketpp::connection_hdl>> ServerFactory::createServer(
   const std::string& name, const std::function<void(WebSocketLogLevel, char const*)>& logHandler,
   const ServerOptions& options) {
   if (options.useTls) {
-    return std::make_unique<foxglove::Server<foxglove::WebSocketTls>>(name, logHandler, options);
+    return std::make_unique<foxglove_ws::Server<foxglove_ws::WebSocketTls>>(name, logHandler,
+                                                                            options);
   } else {
-    return std::make_unique<foxglove::Server<foxglove::WebSocketNoTls>>(name, logHandler, options);
+    return std::make_unique<foxglove_ws::Server<foxglove_ws::WebSocketNoTls>>(name, logHandler,
+                                                                              options);
   }
 }
 
@@ -59,4 +61,4 @@ inline void Server<WebSocketTls>::setupTlsHandler() {
   });
 }
 
-}  // namespace foxglove
+}  // namespace foxglove_ws
