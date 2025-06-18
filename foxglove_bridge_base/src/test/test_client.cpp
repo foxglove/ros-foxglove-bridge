@@ -6,7 +6,7 @@
 #include <foxglove_bridge/test/test_client.hpp>
 #include <foxglove_bridge/websocket_client.hpp>
 
-namespace foxglove {
+namespace foxglove_ws {
 
 std::future<std::vector<uint8_t>> waitForChannelMsg(ClientInterface* client,
                                                     SubscriptionId subscriptionId) {
@@ -58,7 +58,7 @@ std::future<ServiceResponse> waitForServiceResponse(std::shared_ptr<ClientInterf
         return;
       }
 
-      foxglove::ServiceResponse response;
+      foxglove_ws::ServiceResponse response;
       response.read(data + 1, dataLength - 1);
       promise->set_value(response);
     });
@@ -122,11 +122,11 @@ std::future<FetchAssetResponse> waitForFetchAssetResponse(std::shared_ptr<Client
         return;
       }
 
-      foxglove::FetchAssetResponse response;
+      foxglove_ws::FetchAssetResponse response;
       size_t offset = 1;
       response.requestId = ReadUint32LE(data + offset);
       offset += 4;
-      response.status = static_cast<foxglove::FetchAssetStatus>(data[offset]);
+      response.status = static_cast<foxglove_ws::FetchAssetStatus>(data[offset]);
       offset += 1;
       const size_t errorMsgLength = static_cast<size_t>(ReadUint32LE(data + offset));
       offset += 4;
@@ -144,4 +144,4 @@ std::future<FetchAssetResponse> waitForFetchAssetResponse(std::shared_ptr<Client
 // Explicit template instantiation
 template class Client<websocketpp::config::asio_client>;
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

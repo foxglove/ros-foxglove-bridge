@@ -10,7 +10,7 @@
 
 #include "websocket_logging.hpp"
 
-namespace foxglove {
+namespace foxglove_ws {
 
 class CallbackQueue {
 public:
@@ -78,4 +78,4 @@ private:
   std::vector<std::thread> _workerThreads;
 };
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

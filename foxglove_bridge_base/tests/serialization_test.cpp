@@ -3,7 +3,7 @@
 #include <foxglove_bridge/serialization.hpp>
 
 TEST(SerializationTest, ServiceRequestSerialization) {
-  foxglove::ServiceRequest req;
+  foxglove_ws::ServiceRequest req;
   req.serviceId = 2;
   req.callId = 1;
   req.encoding = "json";
@@ -12,7 +12,7 @@ TEST(SerializationTest, ServiceRequestSerialization) {
   std::vector<uint8_t> data(req.size());
   req.write(data.data());
 
-  foxglove::ServiceRequest req2;
+  foxglove_ws::ServiceRequest req2;
   req2.read(data.data(), data.size());
   EXPECT_EQ(req.serviceId, req2.serviceId);
   EXPECT_EQ(req.callId, req2.callId);

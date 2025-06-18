@@ -1,7 +1,7 @@
 #include <foxglove_bridge/base64.hpp>
 #include <foxglove_bridge/serialization.hpp>
 
-namespace foxglove {
+namespace foxglove_ws {
 
 void to_json(nlohmann::json& j, const Channel& c) {
   j = {
@@ -157,15 +157,15 @@ void ServiceResponse::read(const uint8_t* data, size_t dataLength) {
 
 void ServiceResponse::write(uint8_t* data) const {
   size_t offset = 0;
-  foxglove::WriteUint32LE(data + offset, this->serviceId);
+  foxglove_ws::WriteUint32LE(data + offset, this->serviceId);
   offset += 4;
-  foxglove::WriteUint32LE(data + offset, this->callId);
+  foxglove_ws::WriteUint32LE(data + offset, this->callId);
   offset += 4;
-  foxglove::WriteUint32LE(data + offset, static_cast<uint32_t>(this->encoding.size()));
+  foxglove_ws::WriteUint32LE(data + offset, static_cast<uint32_t>(this->encoding.size()));
   offset += 4;
   std::memcpy(data + offset, this->encoding.data(), this->encoding.size());
   offset += this->encoding.size();
   std::memcpy(data + offset, this->data.data(), this->data.size());
 }
 
-}  // namespace foxglove
+}  // namespace foxglove_ws

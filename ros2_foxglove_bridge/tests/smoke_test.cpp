@@ -87,7 +87,7 @@ protected:
     executor.add_node(_paramNode1);
     executor.add_node(_paramNode2);
 
-    _wsClient = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+    _wsClient = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
     ASSERT_EQ(std::future_status::ready, _wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
   }
 
@@ -98,7 +98,7 @@ protected:
 
   rclcpp::Node::SharedPtr _paramNode1;
   rclcpp::Node::SharedPtr _paramNode2;
-  std::shared_ptr<foxglove::Client<websocketpp::config::asio_client>> _wsClient;
+  std::shared_ptr<foxglove_ws::Client<websocketpp::config::asio_client>> _wsClient;
 };
 
 class ServiceTest : public TestWithExecutor {
@@ -123,7 +123,7 @@ protected:
 
   rclcpp::Node::SharedPtr _node;
   rclcpp::ServiceBase::SharedPtr _service;
-  std::shared_ptr<foxglove::Client<websocketpp::config::asio_client>> _wsClient;
+  std::shared_ptr<foxglove_ws::Client<websocketpp::config::asio_client>> _wsClient;
 };
 
 class PublisherTest
@@ -171,7 +171,7 @@ std::shared_ptr<T> deserializeMsg(const rcl_serialized_message_t* msg) {
 }
 
 TEST(SmokeTest, testConnection) {
-  foxglove::Client<websocketpp::config::asio_client> wsClient;
+  foxglove_ws::Client<websocketpp::config::asio_client> wsClient;
   EXPECT_EQ(std::future_status::ready, wsClient.connect(URI).wait_for(DEFAULT_TIMEOUT));
 }
 
@@ -192,12 +192,12 @@ TEST(SmokeTest, testSubscription) {
   const auto clientCount = 3;
   for (auto i = 0; i < clientCount; ++i) {
     // Set up a client and subscribe to the channel.
-    auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
-    auto channelFuture = foxglove::waitForChannel(client, topic_name);
+    auto client = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
+    auto channelFuture = foxglove_ws::waitForChannel(client, topic_name);
     ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
     ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(ONE_SECOND));
-    const foxglove::Channel channel = channelFuture.get();
-    const foxglove::SubscriptionId subscriptionId = 1;
+    const foxglove_ws::Channel channel = channelFuture.get();
+    const foxglove_ws::SubscriptionId subscriptionId = 1;
 
     // Subscribe to the channel and confirm that the promise resolves
     auto msgFuture = waitForChannelMsg(client.get(), subscriptionId);
@@ -226,11 +226,11 @@ TEST(SmokeTest, testSubscriptionParallel) {
   pub->publish(rosMsg);
 
   // Connect a few clients (in parallel) and make sure that they receive the correct message
-  const foxglove::SubscriptionId subscriptionId = 1;
+  const foxglove_ws::SubscriptionId subscriptionId = 1;
   auto clients = {
-    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
-    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
-    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>(),
   };
 
   std::vector<std::future<std::vector<uint8_t>>> futures;
@@ -239,10 +239,10 @@ TEST(SmokeTest, testSubscriptionParallel) {
   }
 
   for (auto client : clients) {
-    auto channelFuture = foxglove::waitForChannel(client, topic_name);
+    auto channelFuture = foxglove_ws::waitForChannel(client, topic_name);
     ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
     ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(ONE_SECOND));
-    const foxglove::Channel channel = channelFuture.get();
+    const foxglove_ws::Channel channel = channelFuture.get();
     client->subscribe({{subscriptionId, channel.id}});
   }
 
@@ -264,7 +264,7 @@ TEST_P(PublisherTest, testPublishing) {
   static size_t testPublishingCount = 0;
   ++testPublishingCount;
 
-  foxglove::ClientAdvertisement advertisement;
+  foxglove_ws::ClientAdvertisement advertisement;
   advertisement.channelId = 1;
   advertisement.topic = "/testPublishing_" + std::to_string(testPublishingCount);
   advertisement.encoding = encoding;
@@ -283,8 +283,8 @@ TEST_P(PublisherTest, testPublishing) {
   this->executor.add_node(node);
 
   // Set up the client, advertise and publish the binary message
-  auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
-  auto channelFuture = foxglove::waitForChannel(client, advertisement.topic);
+  auto client = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
+  auto channelFuture = foxglove_ws::waitForChannel(client, advertisement.topic);
   ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
   client->advertise({advertisement});
 
@@ -314,7 +314,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(ExistingPublisherTest, testPublishingWithExistingPublisher) {
   const auto& [encoding, message] = GetParam();
 
-  foxglove::ClientAdvertisement advertisement;
+  foxglove_ws::ClientAdvertisement advertisement;
   advertisement.channelId = 1;
   advertisement.topic = TOPIC_NAME;
   advertisement.encoding = encoding;
@@ -333,8 +333,8 @@ TEST_P(ExistingPublisherTest, testPublishingWithExistingPublisher) {
   executor.add_node(node);
 
   // Set up the client, advertise and publish the binary message
-  auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
-  auto channelFuture = foxglove::waitForChannel(client, advertisement.topic);
+  auto client = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
+  auto channelFuture = foxglove_ws::waitForChannel(client, advertisement.topic);
   ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
   client->advertise({advertisement});
 
@@ -363,21 +363,21 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_F(ParameterTest, testGetAllParams) {
   const std::string requestId = "req-testGetAllParams";
-  auto future = foxglove::waitForParameters(_wsClient, requestId);
+  auto future = foxglove_ws::waitForParameters(_wsClient, requestId);
   _wsClient->getParameters({}, requestId);
   ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
-  std::vector<foxglove::Parameter> params = future.get();
+  std::vector<foxglove_ws::Parameter> params = future.get();
 
   EXPECT_GE(params.size(), 2UL);
 }
 
 TEST_F(ParameterTest, testGetNonExistingParameters) {
   const std::string requestId = "req-testGetNonExistingParameters";
-  auto future = foxglove::waitForParameters(_wsClient, requestId);
+  auto future = foxglove_ws::waitForParameters(_wsClient, requestId);
   _wsClient->getParameters(
     {"/foo_1.non_existing_parameter", "/foo_2.non_existing.nested_parameter"}, requestId);
   ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
-  std::vector<foxglove::Parameter> params = future.get();
+  std::vector<foxglove_ws::Parameter> params = future.get();
 
   EXPECT_TRUE(params.empty());
 }
@@ -387,10 +387,10 @@ TEST_F(ParameterTest, testGetParameters) {
   const auto p2 = NODE_2_NAME + "." + PARAM_2_NAME;
 
   const std::string requestId = "req-testGetParameters";
-  auto future = foxglove::waitForParameters(_wsClient, requestId);
+  auto future = foxglove_ws::waitForParameters(_wsClient, requestId);
   _wsClient->getParameters({p1, p2}, requestId);
   ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
-  std::vector<foxglove::Parameter> params = future.get();
+  std::vector<foxglove_ws::Parameter> params = future.get();
 
   EXPECT_EQ(2UL, params.size());
   auto p1Iter = std::find_if(params.begin(), params.end(), [&p1](const auto& param) {
@@ -404,7 +404,7 @@ TEST_F(ParameterTest, testGetParameters) {
   ASSERT_NE(p2Iter, params.end());
 
   std::vector<int64_t> int_array_val;
-  const auto array_params = p2Iter->getValue().getValue<std::vector<foxglove::ParameterValue>>();
+  const auto array_params = p2Iter->getValue().getValue<std::vector<foxglove_ws::ParameterValue>>();
   for (const auto& paramValue : array_params) {
     int_array_val.push_back(paramValue.getValue<int64_t>());
   }
@@ -415,19 +415,19 @@ TEST_F(ParameterTest, testSetParameters) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
   const auto p2 = NODE_2_NAME + "." + PARAM_2_NAME;
   const PARAM_1_TYPE newP1value = "world";
-  const std::vector<foxglove::ParameterValue> newP2value = {4, 5, 6};
+  const std::vector<foxglove_ws::ParameterValue> newP2value = {4, 5, 6};
 
-  const std::vector<foxglove::Parameter> parameters = {
-    foxglove::Parameter(p1, newP1value),
-    foxglove::Parameter(p2, newP2value),
+  const std::vector<foxglove_ws::Parameter> parameters = {
+    foxglove_ws::Parameter(p1, newP1value),
+    foxglove_ws::Parameter(p2, newP2value),
   };
 
   _wsClient->setParameters(parameters);
   const std::string requestId = "req-testSetParameters";
-  auto future = foxglove::waitForParameters(_wsClient, requestId);
+  auto future = foxglove_ws::waitForParameters(_wsClient, requestId);
   _wsClient->getParameters({p1, p2}, requestId);
   ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
-  std::vector<foxglove::Parameter> params = future.get();
+  std::vector<foxglove_ws::Parameter> params = future.get();
 
   EXPECT_EQ(2UL, params.size());
   auto p1Iter = std::find_if(params.begin(), params.end(), [&p1](const auto& param) {
@@ -441,7 +441,7 @@ TEST_F(ParameterTest, testSetParameters) {
   ASSERT_NE(p2Iter, params.end());
 
   std::vector<int64_t> int_array_val;
-  const auto array_params = p2Iter->getValue().getValue<std::vector<foxglove::ParameterValue>>();
+  const auto array_params = p2Iter->getValue().getValue<std::vector<foxglove_ws::ParameterValue>>();
   for (const auto& paramValue : array_params) {
     int_array_val.push_back(paramValue.getValue<int64_t>());
   }
@@ -452,15 +452,15 @@ TEST_F(ParameterTest, testSetParameters) {
 TEST_F(ParameterTest, testSetParametersWithReqId) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
   const PARAM_1_TYPE newP1value = "world";
-  const std::vector<foxglove::Parameter> parameters = {
-    foxglove::Parameter(p1, newP1value),
+  const std::vector<foxglove_ws::Parameter> parameters = {
+    foxglove_ws::Parameter(p1, newP1value),
   };
 
   const std::string requestId = "req-testSetParameters";
-  auto future = foxglove::waitForParameters(_wsClient, requestId);
+  auto future = foxglove_ws::waitForParameters(_wsClient, requestId);
   _wsClient->setParameters(parameters, requestId);
   ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
-  std::vector<foxglove::Parameter> params = future.get();
+  std::vector<foxglove_ws::Parameter> params = future.get();
 
   EXPECT_EQ(1UL, params.size());
 }
@@ -471,7 +471,7 @@ TEST_F(ParameterTest, testSetFloatParametersWithIntegers) {
   const int64_t floatParamVal = 10;
   const std::vector<int64_t> floatArrayParamVal = {3, 2, 1};
   const std::string requestId = "req-testSetFloatParametersWithIntegers";
-  auto future = foxglove::waitForParameters(_wsClient, requestId);
+  auto future = foxglove_ws::waitForParameters(_wsClient, requestId);
   const nlohmann::json::array_t parameters = {
     {{"name", floatParamName}, {"value", floatParamVal}, {"type", "float64"}},
     {{"name", floatArrayParamName}, {"value", floatArrayParamVal}, {"type", "float64_array"}},
@@ -479,25 +479,25 @@ TEST_F(ParameterTest, testSetFloatParametersWithIntegers) {
   _wsClient->sendText(
     nlohmann::json{{"op", "setParameters"}, {"id", requestId}, {"parameters", parameters}}.dump());
   ASSERT_EQ(std::future_status::ready, future.wait_for(ONE_SECOND));
-  std::vector<foxglove::Parameter> params = future.get();
+  std::vector<foxglove_ws::Parameter> params = future.get();
 
   {
     const auto param =
-      std::find_if(params.begin(), params.end(), [floatParamName](const foxglove::Parameter& p) {
+      std::find_if(params.begin(), params.end(), [floatParamName](const foxglove_ws::Parameter& p) {
         return p.getName() == floatParamName;
       });
     ASSERT_NE(param, params.end());
-    EXPECT_EQ(param->getType(), foxglove::ParameterType::PARAMETER_DOUBLE);
+    EXPECT_EQ(param->getType(), foxglove_ws::ParameterType::PARAMETER_DOUBLE);
     EXPECT_NEAR(param->getValue().getValue<double>(), static_cast<double>(floatParamVal), 1e-9);
   }
   {
     const auto param = std::find_if(params.begin(), params.end(),
-                                    [floatArrayParamName](const foxglove::Parameter& p) {
+                                    [floatArrayParamName](const foxglove_ws::Parameter& p) {
                                       return p.getName() == floatArrayParamName;
                                     });
     ASSERT_NE(param, params.end());
-    EXPECT_EQ(param->getType(), foxglove::ParameterType::PARAMETER_ARRAY);
-    const auto paramValue = param->getValue().getValue<std::vector<foxglove::ParameterValue>>();
+    EXPECT_EQ(param->getType(), foxglove_ws::ParameterType::PARAMETER_ARRAY);
+    const auto paramValue = param->getValue().getValue<std::vector<foxglove_ws::ParameterValue>>();
     ASSERT_EQ(paramValue.size(), floatArrayParamVal.size());
     for (size_t i = 0; i < paramValue.size(); ++i) {
       EXPECT_NEAR(paramValue[i].getValue<double>(), static_cast<double>(floatArrayParamVal[i]),
@@ -508,15 +508,15 @@ TEST_F(ParameterTest, testSetFloatParametersWithIntegers) {
 
 TEST_F(ParameterTest, testUnsetParameter) {
   const auto p1 = NODE_1_NAME + "." + DELETABLE_PARAM_NAME;
-  const std::vector<foxglove::Parameter> parameters = {
-    foxglove::Parameter(p1),
+  const std::vector<foxglove_ws::Parameter> parameters = {
+    foxglove_ws::Parameter(p1),
   };
 
   const std::string requestId = "req-testUnsetParameter";
-  auto future = foxglove::waitForParameters(_wsClient, requestId);
+  auto future = foxglove_ws::waitForParameters(_wsClient, requestId);
   _wsClient->setParameters(parameters, requestId);
   ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
-  std::vector<foxglove::Parameter> params = future.get();
+  std::vector<foxglove_ws::Parameter> params = future.get();
 
   EXPECT_EQ(0UL, params.size());
 }
@@ -525,36 +525,36 @@ TEST_F(ParameterTest, testParameterSubscription) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
 
   _wsClient->subscribeParameterUpdates({p1});
-  auto future = foxglove::waitForParameters(_wsClient);
-  _wsClient->setParameters({foxglove::Parameter(p1, "foo")});
+  auto future = foxglove_ws::waitForParameters(_wsClient);
+  _wsClient->setParameters({foxglove_ws::Parameter(p1, "foo")});
   ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
-  std::vector<foxglove::Parameter> params = future.get();
+  std::vector<foxglove_ws::Parameter> params = future.get();
 
   ASSERT_EQ(1UL, params.size());
   EXPECT_EQ(params.front().getName(), p1);
 
   _wsClient->unsubscribeParameterUpdates({p1});
-  _wsClient->setParameters({foxglove::Parameter(p1, "bar")});
+  _wsClient->setParameters({foxglove_ws::Parameter(p1, "bar")});
 
-  future = foxglove::waitForParameters(_wsClient);
+  future = foxglove_ws::waitForParameters(_wsClient);
   ASSERT_EQ(std::future_status::timeout, future.wait_for(ONE_SECOND));
 }
 
 TEST_F(ParameterTest, testGetParametersParallel) {
   // Connect a few clients (in parallel) and make sure that they all receive parameters
   auto clients = {
-    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
-    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
-    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>(),
   };
 
-  std::vector<std::future<std::vector<foxglove::Parameter>>> futures;
+  std::vector<std::future<std::vector<foxglove_ws::Parameter>>> futures;
   for (auto client : clients) {
     futures.push_back(
-      std::async(std::launch::async, [client]() -> std::vector<foxglove::Parameter> {
+      std::async(std::launch::async, [client]() -> std::vector<foxglove_ws::Parameter> {
         if (std::future_status::ready == client->connect(URI).wait_for(DEFAULT_TIMEOUT)) {
           const std::string requestId = "req-123";
-          auto future = foxglove::waitForParameters(client, requestId);
+          auto future = foxglove_ws::waitForParameters(client, requestId);
           client->getParameters({}, requestId);
           future.wait_for(DEFAULT_TIMEOUT);
           if (future.valid()) {
@@ -567,18 +567,18 @@ TEST_F(ParameterTest, testGetParametersParallel) {
 
   for (auto& future : futures) {
     ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
-    std::vector<foxglove::Parameter> parameters;
+    std::vector<foxglove_ws::Parameter> parameters;
     EXPECT_NO_THROW(parameters = future.get());
     EXPECT_GE(parameters.size(), 2UL);
   }
 }
 
 TEST_F(ServiceTest, testAdvertiseService) {
-  auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
-  auto serviceFuture = foxglove::waitForService(client, SERVICE_NAME);
+  auto client = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
+  auto serviceFuture = foxglove_ws::waitForService(client, SERVICE_NAME);
   ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
   ASSERT_EQ(std::future_status::ready, serviceFuture.wait_for(DEFAULT_TIMEOUT));
-  const foxglove::Service service = serviceFuture.get();
+  const foxglove_ws::Service service = serviceFuture.get();
 
   EXPECT_EQ(service.name, SERVICE_NAME);
   EXPECT_EQ(service.type, "std_srvs/srv/SetBool");
@@ -591,39 +591,39 @@ TEST_F(ServiceTest, testAdvertiseService) {
 TEST_F(ServiceTest, testCallServiceParallel) {
   // Connect a few clients (in parallel) and make sure that they can all call the service
   auto clients = {
-    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
-    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
-    std::make_shared<foxglove::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>(),
+    std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>(),
   };
 
-  auto serviceFuture = foxglove::waitForService(*clients.begin(), SERVICE_NAME);
+  auto serviceFuture = foxglove_ws::waitForService(*clients.begin(), SERVICE_NAME);
   for (auto client : clients) {
     ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
   }
   ASSERT_EQ(std::future_status::ready, serviceFuture.wait_for(DEFAULT_TIMEOUT));
-  const foxglove::Service service = serviceFuture.get();
+  const foxglove_ws::Service service = serviceFuture.get();
 
   std_srvs::srv::SetBool::Request requestMsg;
   requestMsg.data = true;
   const auto serializedRequest = serializeMsg(&requestMsg);
   const auto& serRequestMsg = serializedRequest->get_rcl_serialized_message();
 
-  foxglove::ServiceRequest request;
+  foxglove_ws::ServiceRequest request;
   request.serviceId = service.id;
   request.callId = 123lu;
   request.encoding = "cdr";
   request.data.resize(serRequestMsg.buffer_length);
   std::memcpy(request.data.data(), serRequestMsg.buffer, serRequestMsg.buffer_length);
 
-  std::vector<std::future<foxglove::ServiceResponse>> futures;
+  std::vector<std::future<foxglove_ws::ServiceResponse>> futures;
   for (auto client : clients) {
-    futures.push_back(foxglove::waitForServiceResponse(client));
+    futures.push_back(foxglove_ws::waitForServiceResponse(client));
     client->sendServiceRequest(request);
   }
 
   for (auto& future : futures) {
     ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
-    foxglove::ServiceResponse response;
+    foxglove_ws::ServiceResponse response;
     EXPECT_NO_THROW(response = future.get());
     EXPECT_EQ(response.serviceId, request.serviceId);
     EXPECT_EQ(response.callId, request.callId);
@@ -641,7 +641,7 @@ TEST_F(ServiceTest, testCallServiceParallel) {
 }
 
 TEST_F(ServiceTest, testCallNonexistentService) {
-  auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  auto client = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
   ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(std::chrono::seconds(5)));
 
   std::promise<nlohmann::json> promise;
@@ -653,7 +653,7 @@ TEST_F(ServiceTest, testCallNonexistentService) {
     }
   });
 
-  foxglove::ServiceRequest request;
+  foxglove_ws::ServiceRequest request;
   request.serviceId = 99u;
   request.callId = 123u;
   request.encoding = "";
@@ -662,7 +662,7 @@ TEST_F(ServiceTest, testCallNonexistentService) {
 
   ASSERT_EQ(std::future_status::ready, serviceFailureFuture.wait_for(std::chrono::seconds(5)));
   const auto failureMsg = serviceFailureFuture.get();
-  EXPECT_EQ(failureMsg["serviceId"].get<foxglove::ServiceId>(), request.serviceId);
+  EXPECT_EQ(failureMsg["serviceId"].get<foxglove_ws::ServiceId>(), request.serviceId);
   EXPECT_EQ(failureMsg["callId"].get<uint32_t>(), request.callId);
 }
 
@@ -689,12 +689,12 @@ TEST(SmokeTest, receiveMessagesOfMultipleTransientLocalPublishers) {
   }
 
   // Set up a client and subscribe to the channel.
-  auto client = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
-  auto channelFuture = foxglove::waitForChannel(client, topicName);
+  auto client = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
+  auto channelFuture = foxglove_ws::waitForChannel(client, topicName);
   ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
   ASSERT_EQ(std::future_status::ready, channelFuture.wait_for(ONE_SECOND));
-  const foxglove::Channel channel = channelFuture.get();
-  const foxglove::SubscriptionId subscriptionId = 1;
+  const foxglove_ws::Channel channel = channelFuture.get();
+  const foxglove_ws::SubscriptionId subscriptionId = 1;
 
   // Set up binary message handler to resolve the promise when all nPub message have been received
   std::promise<void> promise;
@@ -718,7 +718,7 @@ TEST(SmokeTest, receiveMessagesOfMultipleTransientLocalPublishers) {
 }
 
 TEST(FetchAssetTest, fetchExistingAsset) {
-  auto wsClient = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  auto wsClient = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
   EXPECT_EQ(std::future_status::ready, wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
 
   const auto millisSinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -733,13 +733,13 @@ TEST(FetchAssetTest, fetchExistingAsset) {
   const std::string uri = std::string("file://") + tmpFilePath.string();
   const uint32_t requestId = 123;
 
-  auto future = foxglove::waitForFetchAssetResponse(wsClient);
+  auto future = foxglove_ws::waitForFetchAssetResponse(wsClient);
   wsClient->fetchAsset(uri, requestId);
   ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
-  const foxglove::FetchAssetResponse response = future.get();
+  const foxglove_ws::FetchAssetResponse response = future.get();
 
   EXPECT_EQ(response.requestId, requestId);
-  EXPECT_EQ(response.status, foxglove::FetchAssetStatus::Success);
+  EXPECT_EQ(response.status, foxglove_ws::FetchAssetStatus::Success);
   // +1 since NULL terminator is not written to file.
   ASSERT_EQ(response.data.size() + 1ul, sizeof(content));
   EXPECT_EQ(0, std::memcmp(content, response.data.data(), response.data.size()));
@@ -747,19 +747,19 @@ TEST(FetchAssetTest, fetchExistingAsset) {
 }
 
 TEST(FetchAssetTest, fetchNonExistingAsset) {
-  auto wsClient = std::make_shared<foxglove::Client<websocketpp::config::asio_client>>();
+  auto wsClient = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
   EXPECT_EQ(std::future_status::ready, wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
 
   const std::string assetId = "file:///foo/bar";
   const uint32_t requestId = 456;
 
-  auto future = foxglove::waitForFetchAssetResponse(wsClient);
+  auto future = foxglove_ws::waitForFetchAssetResponse(wsClient);
   wsClient->fetchAsset(assetId, requestId);
   ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
-  const foxglove::FetchAssetResponse response = future.get();
+  const foxglove_ws::FetchAssetResponse response = future.get();
 
   EXPECT_EQ(response.requestId, requestId);
-  EXPECT_EQ(response.status, foxglove::FetchAssetStatus::Error);
+  EXPECT_EQ(response.status, foxglove_ws::FetchAssetStatus::Error);
   EXPECT_FALSE(response.errorMessage.empty());
 }
 

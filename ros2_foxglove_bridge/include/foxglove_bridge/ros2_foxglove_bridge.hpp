@@ -24,11 +24,11 @@
 namespace foxglove_bridge {
 
 using ConnectionHandle = websocketpp::connection_hdl;
-using LogLevel = foxglove::WebSocketLogLevel;
+using LogLevel = foxglove_ws::WebSocketLogLevel;
 using Subscription = rclcpp::GenericSubscription::SharedPtr;
 using SubscriptionsByClient = std::map<ConnectionHandle, Subscription, std::owner_less<>>;
 using Publication = rclcpp::GenericPublisher::SharedPtr;
-using ClientPublications = std::unordered_map<foxglove::ClientChannelId, Publication>;
+using ClientPublications = std::unordered_map<foxglove_ws::ClientChannelId, Publication>;
 using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std::owner_less<>>;
 
 class FoxgloveBridge : public rclcpp::Node {
@@ -57,18 +57,18 @@ private:
     }
   };
 
-  std::unique_ptr<foxglove::ServerInterface<ConnectionHandle>> _server;
+  std::unique_ptr<foxglove_ws::ServerInterface<ConnectionHandle>> _server;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;
   std::vector<std::regex> _assetUriAllowlistPatterns;
   std::vector<std::regex> _bestEffortQosTopicWhiteListPatterns;
   std::shared_ptr<ParameterInterface> _paramInterface;
-  std::unordered_map<foxglove::ChannelId, foxglove::ChannelWithoutId> _advertisedTopics;
-  std::unordered_map<foxglove::ServiceId, foxglove::ServiceWithoutId> _advertisedServices;
-  std::unordered_map<foxglove::ChannelId, SubscriptionsByClient> _subscriptions;
+  std::unordered_map<foxglove_ws::ChannelId, foxglove_ws::ChannelWithoutId> _advertisedTopics;
+  std::unordered_map<foxglove_ws::ServiceId, foxglove_ws::ServiceWithoutId> _advertisedServices;
+  std::unordered_map<foxglove_ws::ChannelId, SubscriptionsByClient> _subscriptions;
   PublicationsByClient _clientAdvertisedTopics;
-  std::unordered_map<foxglove::ServiceId, GenericClient::SharedPtr> _serviceClients;
+  std::unordered_map<foxglove_ws::ServiceId, GenericClient::SharedPtr> _serviceClients;
   rclcpp::CallbackGroup::SharedPtr _subscriptionCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _clientPublishCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _servicesCallbackGroup;
@@ -84,39 +84,39 @@ private:
   std::atomic<bool> _subscribeGraphUpdates = false;
   bool _includeHidden = false;
   bool _disableLoanMessage = true;
-  std::unique_ptr<foxglove::CallbackQueue> _fetchAssetQueue;
+  std::unique_ptr<foxglove_ws::CallbackQueue> _fetchAssetQueue;
   std::unordered_map<std::string, std::shared_ptr<RosMsgParser::Parser>> _jsonParsers;
   std::atomic<bool> _shuttingDown = false;
 
   void subscribeConnectionGraph(bool subscribe);
 
-  void subscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle);
+  void subscribe(foxglove_ws::ChannelId channelId, ConnectionHandle clientHandle);
 
-  void unsubscribe(foxglove::ChannelId channelId, ConnectionHandle clientHandle);
+  void unsubscribe(foxglove_ws::ChannelId channelId, ConnectionHandle clientHandle);
 
-  void clientAdvertise(const foxglove::ClientAdvertisement& advertisement, ConnectionHandle hdl);
+  void clientAdvertise(const foxglove_ws::ClientAdvertisement& advertisement, ConnectionHandle hdl);
 
-  void clientUnadvertise(foxglove::ChannelId channelId, ConnectionHandle hdl);
+  void clientUnadvertise(foxglove_ws::ChannelId channelId, ConnectionHandle hdl);
 
-  void clientMessage(const foxglove::ClientMessage& message, ConnectionHandle hdl);
+  void clientMessage(const foxglove_ws::ClientMessage& message, ConnectionHandle hdl);
 
-  void setParameters(const std::vector<foxglove::Parameter>& parameters,
+  void setParameters(const std::vector<foxglove_ws::Parameter>& parameters,
                      const std::optional<std::string>& requestId, ConnectionHandle hdl);
 
   void getParameters(const std::vector<std::string>& parameters,
                      const std::optional<std::string>& requestId, ConnectionHandle hdl);
 
   void subscribeParameters(const std::vector<std::string>& parameters,
-                           foxglove::ParameterSubscriptionOperation op, ConnectionHandle);
+                           foxglove_ws::ParameterSubscriptionOperation op, ConnectionHandle);
 
-  void parameterUpdates(const std::vector<foxglove::Parameter>& parameters);
+  void parameterUpdates(const std::vector<foxglove_ws::Parameter>& parameters);
 
   void logHandler(LogLevel level, char const* msg);
 
-  void rosMessageHandler(const foxglove::ChannelId& channelId, ConnectionHandle clientHandle,
+  void rosMessageHandler(const foxglove_ws::ChannelId& channelId, ConnectionHandle clientHandle,
                          std::shared_ptr<const rclcpp::SerializedMessage> msg);
 
-  void serviceRequest(const foxglove::ServiceRequest& request, ConnectionHandle clientHandle);
+  void serviceRequest(const foxglove_ws::ServiceRequest& request, ConnectionHandle clientHandle);
 
   void fetchAsset(const std::string& assetId, uint32_t requestId, ConnectionHandle clientHandle);
 
