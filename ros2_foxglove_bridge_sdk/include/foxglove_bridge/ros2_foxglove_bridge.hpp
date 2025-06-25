@@ -11,6 +11,8 @@
 #include <rosx_introspection/ros_parser.hpp>
 #include <websocketpp/common/connection_hdl.hpp>
 
+#include <foxglove/foxglove.hpp>
+#include <foxglove/server.hpp>
 #include <foxglove_bridge/callback_queue.hpp>
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/generic_client.hpp>
@@ -30,6 +32,9 @@ using SubscriptionsByClient = std::map<ConnectionHandle, Subscription, std::owne
 using Publication = rclcpp::GenericPublisher::SharedPtr;
 using ClientPublications = std::unordered_map<foxglove_ws::ClientChannelId, Publication>;
 using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std::owner_less<>>;
+
+using SubscriptionCount = std::pair<Subscription, size_t>;
+using MapOfSets = std::unordered_map<std::string, std::unordered_set<std::string>>;
 
 class FoxgloveBridge : public rclcpp::Node {
 public:
@@ -56,6 +61,12 @@ private:
       return std::hash<T1>()(pair.first) ^ std::hash<T2>()(pair.second);
     }
   };
+
+  // BEGIN New SDK Components
+  std::unique_ptr<foxglove::WebSocketServer> _sdkServer;
+  std::unordered_map<uint64_t, foxglove::RawChannel> _sdkChannels;
+  std::unordered_map<uint64_t, SubscriptionCount> _sdkSubscriptions;
+  // END New SDK Components
 
   std::unique_ptr<foxglove_ws::ServerInterface<ConnectionHandle>> _server;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
@@ -90,9 +101,9 @@ private:
 
   void subscribeConnectionGraph(bool subscribe);
 
-  void subscribe(foxglove_ws::ChannelId channelId, ConnectionHandle clientHandle);
+  void subscribe(uint64_t channelId);
 
-  void unsubscribe(foxglove_ws::ChannelId channelId, ConnectionHandle clientHandle);
+  void unsubscribe(uint64_t channelId);
 
   void clientAdvertise(const foxglove_ws::ClientAdvertisement& advertisement, ConnectionHandle hdl);
 
@@ -113,7 +124,7 @@ private:
 
   void logHandler(LogLevel level, char const* msg);
 
-  void rosMessageHandler(const foxglove_ws::ChannelId& channelId, ConnectionHandle clientHandle,
+  void rosMessageHandler(const uint64_t channelId,
                          std::shared_ptr<const rclcpp::SerializedMessage> msg);
 
   void serviceRequest(const foxglove_ws::ServiceRequest& request, ConnectionHandle clientHandle);
@@ -121,6 +132,8 @@ private:
   void fetchAsset(const std::string& assetId, uint32_t requestId, ConnectionHandle clientHandle);
 
   bool hasCapability(const std::string& capability);
+
+  rclcpp::QoS determineQoS(const std::string& topic);
 };
 
 }  // namespace foxglove_bridge
