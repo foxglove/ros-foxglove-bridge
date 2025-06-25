@@ -67,5 +67,7 @@ SHELL ["/bin/bash", "-c"]
 RUN echo $'\
 alias ros2_build_debug="source /opt/ros/humble/setup.bash && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"\n\
 alias ros2_build_release="source /opt/ros/humble/setup.bash && colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo"\n\
+alias ros2_build_debug_sdk="source /opt/ros/humble/setup.bash && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Debug -DUSE_FOXGLOVE_SDK=ON"\n\
+alias ros2_build_release_sdk="source /opt/ros/humble/setup.bash && colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DUSE_FOXGLOVE_SDK=ON"\n\
 alias ros2_foxglove_bridge="source /ros_ws/install_ros2/setup.bash && ros2 run foxglove_bridge foxglove_bridge --ros-args --log-level debug --log-level rcl:=INFO"\n\
 ' >> ~/.bashrc
