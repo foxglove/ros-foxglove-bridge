@@ -1,5 +1,7 @@
 #include <rclcpp_components/component_manager.hpp>
 
+#include <foxglove_bridge/ros2_foxglove_bridge.hpp>
+
 int main(int argc, char* argv[]) {
   rclcpp::init(argc, argv);
 
@@ -27,18 +29,7 @@ int main(int argc, char* argv[]) {
   auto executor =
     rclcpp::executors::MultiThreadedExecutor::make_shared(rclcpp::ExecutorOptions{}, numThreads);
 
-  rclcpp_components::ComponentManager componentManager(executor,
-                                                       "foxglove_bridge_component_manager");
-  const auto componentResources = componentManager.get_component_resources("foxglove_bridge");
-
-  if (componentResources.empty()) {
-    RCLCPP_INFO(componentManager.get_logger(), "No loadable resources found");
-    return EXIT_FAILURE;
-  }
-
-  auto componentFactory = componentManager.create_component_factory(componentResources.front());
-  auto node = componentFactory->create_node_instance(rclcpp::NodeOptions());
-
+  foxglove_bridge::FoxgloveBridge node;
   executor->add_node(node.get_node_base_interface());
   executor->spin();
   rclcpp::shutdown();
