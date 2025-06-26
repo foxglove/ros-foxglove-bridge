@@ -11,6 +11,7 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        "llvm-vs-code-extensions.vscode-clangd",
         "ms-vscode.cpptools",
         "xaver.clang-format",
         "twxs.cmake"
@@ -25,7 +26,13 @@
             ],
             "icon": "terminal-bash"
           }
-        }
+        },
+        "clangd.arguments": [
+          "-log=verbose",
+          "-pretty",
+          "--background-index",
+          "--compile-commands-dir=/ros_ws/build_ros2"
+        ]
       }
     }
   },
