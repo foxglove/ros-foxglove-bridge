@@ -186,6 +186,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     )
     target_include_directories(foxglove_bridge SYSTEM PRIVATE ${rclcpp_INCLUDE_DIRS})
     target_link_libraries(foxglove_bridge
+      foxglove_bridge_component
       rclcpp::rclcpp
       rclcpp_components::component
       rclcpp_components::component_manager
