@@ -192,80 +192,53 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     find_package(rosx_introspection REQUIRED)
 
     if(USE_FOXGLOVE_SDK)
-      add_library(foxglove_bridge_component SHARED
-        ros2_foxglove_bridge_sdk/src/message_definition_cache.cpp
-        ros2_foxglove_bridge_sdk/src/param_utils.cpp
-        ros2_foxglove_bridge_sdk/src/ros2_foxglove_bridge.cpp
-        ros2_foxglove_bridge_sdk/src/parameter_interface.cpp
-        ros2_foxglove_bridge_sdk/src/generic_client.cpp
-      )
-
-      target_compile_definitions(foxglove_bridge_component
-        PRIVATE
-          RESOURCE_RETRIEVER_VERSION_MAJOR=${resource_retriever_VERSION_MAJOR}
-          RESOURCE_RETRIEVER_VERSION_MINOR=${resource_retriever_VERSION_MINOR}
-          RESOURCE_RETRIEVER_VERSION_PATCH=${resource_retriever_VERSION_PATCH}
-      )
-
-      target_include_directories(foxglove_bridge_component
-        PUBLIC
-          $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
-          $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge_sdk/include>
-          $<INSTALL_INTERFACE:include>
-      )
-
-      target_link_libraries(foxglove_bridge_component
-        foxglove_sdk
-        foxglove_bridge_base
-        ${rosgraph_msgs_TARGETS}
-        ament_index_cpp::ament_index_cpp
-        rclcpp::rclcpp
-        rclcpp_components::component
-        rclcpp_components::component_manager
-        resource_retriever::resource_retriever
-        rosx_introspection::rosx_introspection
-      )
-      rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
-      # TODO: Reenable once upstream fix is merged
-      # enable_strict_compiler_warnings(foxglove_bridge_component)
+      set(ros2_foxglove_bridge_src_dir ros2_foxglove_bridge_sdk)
     else()
-      add_library(foxglove_bridge_component SHARED
-        ros2_foxglove_bridge/src/message_definition_cache.cpp
-        ros2_foxglove_bridge/src/param_utils.cpp
-        ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp
-        ros2_foxglove_bridge/src/parameter_interface.cpp
-        ros2_foxglove_bridge/src/generic_client.cpp
-      )
-
-      target_compile_definitions(foxglove_bridge_component
-        PRIVATE
-          RESOURCE_RETRIEVER_VERSION_MAJOR=${resource_retriever_VERSION_MAJOR}
-          RESOURCE_RETRIEVER_VERSION_MINOR=${resource_retriever_VERSION_MINOR}
-          RESOURCE_RETRIEVER_VERSION_PATCH=${resource_retriever_VERSION_PATCH}
-      )
-
-      target_include_directories(foxglove_bridge_component
-        PUBLIC
-          $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
-          $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include>
-          $<INSTALL_INTERFACE:include>
-      )
-      target_link_libraries(foxglove_bridge_component
-        foxglove_bridge_base
-        ${rosgraph_msgs_TARGETS}
-        ament_index_cpp::ament_index_cpp
-        rclcpp::rclcpp
-        rclcpp_components::component
-        rclcpp_components::component_manager
-        resource_retriever::resource_retriever
-        rosx_introspection::rosx_introspection
-      )
-      rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
-      enable_strict_compiler_warnings(foxglove_bridge_component)
+      set(ros2_foxglove_bridge_src_dir ros2_foxglove_bridge)
     endif()
 
+    add_library(foxglove_bridge_component SHARED
+      ${ros2_foxglove_bridge_src_dir}/src/message_definition_cache.cpp
+      ${ros2_foxglove_bridge_src_dir}/src/param_utils.cpp
+      ${ros2_foxglove_bridge_src_dir}/src/ros2_foxglove_bridge.cpp
+      ${ros2_foxglove_bridge_src_dir}/src/parameter_interface.cpp
+      ${ros2_foxglove_bridge_src_dir}/src/generic_client.cpp
+    )
+
+    target_compile_definitions(foxglove_bridge_component
+      PRIVATE
+        RESOURCE_RETRIEVER_VERSION_MAJOR=${resource_retriever_VERSION_MAJOR}
+        RESOURCE_RETRIEVER_VERSION_MINOR=${resource_retriever_VERSION_MINOR}
+        RESOURCE_RETRIEVER_VERSION_PATCH=${resource_retriever_VERSION_PATCH}
+    )
+
+    target_include_directories(foxglove_bridge_component
+      PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/${ros2_foxglove_bridge_src_dir}/include>
+        $<INSTALL_INTERFACE:include>
+    )
+
+    target_link_libraries(foxglove_bridge_component
+      foxglove_bridge_base
+      ${rosgraph_msgs_TARGETS}
+      ament_index_cpp::ament_index_cpp
+      rclcpp::rclcpp
+      rclcpp_components::component
+      rclcpp_components::component_manager
+      resource_retriever::resource_retriever
+      rosx_introspection::rosx_introspection
+    )
+
+    if (USE_FOXGLOVE_SDK)
+      target_link_libraries(foxglove_bridge_component foxglove_sdk)
+    endif()
+
+    rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
+    enable_strict_compiler_warnings(foxglove_bridge_component)
+
     add_executable(foxglove_bridge
-      ros2_foxglove_bridge/src/ros2_foxglove_bridge_node.cpp
+      ${ros2_foxglove_bridge_src_dir}/src/ros2_foxglove_bridge_node.cpp
     )
     target_include_directories(foxglove_bridge SYSTEM PRIVATE ${rclcpp_INCLUDE_DIRS})
     target_link_libraries(foxglove_bridge
