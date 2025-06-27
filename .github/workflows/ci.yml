@@ -47,7 +47,7 @@ jobs:
       matrix:
         ros_distribution: [jazzy, kilted, rolling]
 
-    name: Test (ROS ${{ matrix.ros_distribution }}, (SDK Server)
+    name: Test (ROS ${{ matrix.ros_distribution }}, SDK Server)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
