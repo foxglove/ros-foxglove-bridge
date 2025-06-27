@@ -212,7 +212,6 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     )
 
     target_link_libraries(foxglove_bridge_component
-    PUBLIC
       foxglove_bridge_base
       ${rosgraph_msgs_TARGETS}
       ament_index_cpp::ament_index_cpp
@@ -224,7 +223,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     )
 
     if (USE_FOXGLOVE_SDK)
-      target_link_libraries(foxglove_bridge_component PRIVATE foxglove_sdk)
+      target_link_libraries(foxglove_bridge_component foxglove_sdk)
     endif()
 
     rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
