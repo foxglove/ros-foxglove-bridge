@@ -15,15 +15,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 macro(enable_strict_compiler_warnings target)
-  # Disable warnings if USE_FOXGLOVE_SDK is enabled until SDK with fixed warnings is released
-  if (NOT USE_FOXGLOVE_SDK)
-    if (MSVC)
-      target_compile_options(${target} PRIVATE /WX /W4)
-    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-      target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror -Wold-style-cast -Wfloat-equal -Wmost -Wunused-exception-parameter)
-    else()
-      target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror -Wold-style-cast -Wfloat-equal)
-    endif()
+  if (MSVC)
+    target_compile_options(${target} PRIVATE /WX /W4)
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror -Wold-style-cast -Wfloat-equal -Wmost -Wunused-exception-parameter)
+  else()
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror -Wold-style-cast -Wfloat-equal)
   endif()
 endmacro()
 
@@ -83,7 +80,7 @@ if(USE_FOXGLOVE_SDK)
     ${_foxglove_sdk_sources}
   )
   file(GLOB_RECURSE _foxglove_sdk_headers ${foxglove_sdk_SOURCE_DIR}/include/*.hpp)
-  target_include_directories(foxglove_sdk
+  target_include_directories(foxglove_sdk SYSTEM
     PUBLIC
       $<BUILD_INTERFACE:${foxglove_sdk_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:include>
@@ -91,15 +88,6 @@ if(USE_FOXGLOVE_SDK)
   target_link_libraries(foxglove_sdk
     PRIVATE
       ${foxglove_sdk_SOURCE_DIR}/lib/libfoxglove.a
-  )
-  install(FILES ${_foxglove_sdk_headers}
-    DESTINATION include/${PROJECT_NAME}
-  )
-  install(TARGETS foxglove_sdk
-    EXPORT foxglove_sdk
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin
   )
 endif()
 
