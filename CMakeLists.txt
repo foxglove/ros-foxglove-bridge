@@ -67,7 +67,6 @@ if(USE_FOXGLOVE_SDK)
 
   # Download Foxglove SDK shared lib
   include(FetchContent)
-  # Download the SDK
   FetchContent_Declare(
     foxglove_sdk
     URL ${url}
@@ -75,20 +74,15 @@ if(USE_FOXGLOVE_SDK)
   )
   FetchContent_MakeAvailable(foxglove_sdk)
 
-  file(GLOB_RECURSE _foxglove_sdk_sources ${foxglove_sdk_SOURCE_DIR}/src/*.cpp)
-  add_library(foxglove_sdk SHARED
-    ${_foxglove_sdk_sources}
-  )
-  file(GLOB_RECURSE _foxglove_sdk_headers ${foxglove_sdk_SOURCE_DIR}/include/*.hpp)
+  add_library(foxglove_sdk SHARED)
   target_include_directories(foxglove_sdk SYSTEM
     PUBLIC
       $<BUILD_INTERFACE:${foxglove_sdk_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:include>
   )
-  target_link_libraries(foxglove_sdk
-    PRIVATE
-      ${foxglove_sdk_SOURCE_DIR}/lib/libfoxglove.a
-  )
+  file(GLOB_RECURSE FOXGLOVE_SDK_SOURCES CONFIGURE_DEPENDS "${foxglove_sdk_SOURCE_DIR}/src/*.cpp")
+  target_sources(foxglove_sdk PRIVATE ${FOXGLOVE_SDK_SOURCES})
+  target_link_libraries(foxglove_sdk PRIVATE ${foxglove_sdk_SOURCE_DIR}/lib/libfoxglove.a)
 endif()
 
 # Get git commit hash and replace variables in version.cpp.in
@@ -218,6 +212,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     )
 
     target_link_libraries(foxglove_bridge_component
+    PUBLIC
       foxglove_bridge_base
       ${rosgraph_msgs_TARGETS}
       ament_index_cpp::ament_index_cpp
@@ -229,7 +224,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     )
 
     if (USE_FOXGLOVE_SDK)
-      target_link_libraries(foxglove_bridge_component foxglove_sdk)
+      target_link_libraries(foxglove_bridge_component PRIVATE foxglove_sdk)
     endif()
 
     rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
