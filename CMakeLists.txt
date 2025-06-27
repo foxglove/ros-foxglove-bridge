@@ -34,6 +34,8 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
+option(USE_FOXGLOVE_SDK "Build with Foxglove SDK" OFF)
+
 # Determine wheter to use standalone or boost asio
 option(USE_ASIO_STANDALONE "Build with standalone ASIO" ON)
 if(USE_ASIO_STANDALONE)
@@ -49,6 +51,38 @@ include(TestBigEndian)
 TEST_BIG_ENDIAN(ENDIAN)
 if (ENDIAN)
   add_compile_definitions(ARCH_IS_BIG_ENDIAN=1)
+endif()
+
+if(USE_FOXGLOVE_SDK)
+  if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+    set(FOXGLOVE_SDK_RELEASES "https://github.com/foxglove/foxglove-sdk/releases/download/sdk%2Fv0.9.0/foxglove-v0.9.0-cpp-aarch64-unknown-linux-gnu.zip" "a554f82b3d1c3096457887bccee7088646b729494ec18909846ac7fcdd06ee1d")
+  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+    set(FOXGLOVE_SDK_RELEASES "https://github.com/foxglove/foxglove-sdk/releases/download/sdk%2Fv0.9.0/foxglove-v0.9.0-cpp-x86_64-unknown-linux-gnu.zip" "48ea17c348583154d7c1934c9f7e82f57067e2afa76b586e1f7ac14cc6b6c1d0")
+  else()
+    message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_SYSTEM_NAME}")
+  endif()
+
+  list(GET FOXGLOVE_SDK_RELEASES 0 url)
+  list(GET FOXGLOVE_SDK_RELEASES 1 hash)
+
+  # Download Foxglove SDK shared lib
+  include(FetchContent)
+  FetchContent_Declare(
+    foxglove_sdk
+    URL ${url}
+    URL_HASH SHA256=${hash}
+  )
+  FetchContent_MakeAvailable(foxglove_sdk)
+
+  add_library(foxglove_sdk SHARED)
+  target_include_directories(foxglove_sdk SYSTEM
+    PUBLIC
+      $<BUILD_INTERFACE:${foxglove_sdk_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:include>
+  )
+  file(GLOB_RECURSE FOXGLOVE_SDK_SOURCES CONFIGURE_DEPENDS "${foxglove_sdk_SOURCE_DIR}/src/*.cpp")
+  target_sources(foxglove_sdk PRIVATE ${FOXGLOVE_SDK_SOURCES})
+  target_link_libraries(foxglove_sdk PRIVATE ${foxglove_sdk_SOURCE_DIR}/lib/libfoxglove.a)
 endif()
 
 # Get git commit hash and replace variables in version.cpp.in
@@ -141,6 +175,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     message(STATUS "Building with ament_cmake")
     set(ROS_BUILD_TYPE "ament_cmake")
 
+
     find_package(ament_cmake REQUIRED)
     find_package(rosgraph_msgs REQUIRED)
     find_package(rclcpp REQUIRED)
@@ -148,12 +183,18 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     find_package(resource_retriever REQUIRED)
     find_package(rosx_introspection REQUIRED)
 
+    if(USE_FOXGLOVE_SDK)
+      set(ros2_foxglove_bridge_src_dir ros2_foxglove_bridge_sdk)
+    else()
+      set(ros2_foxglove_bridge_src_dir ros2_foxglove_bridge)
+    endif()
+
     add_library(foxglove_bridge_component SHARED
-      ros2_foxglove_bridge/src/message_definition_cache.cpp
-      ros2_foxglove_bridge/src/param_utils.cpp
-      ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp
-      ros2_foxglove_bridge/src/parameter_interface.cpp
-      ros2_foxglove_bridge/src/generic_client.cpp
+      ${ros2_foxglove_bridge_src_dir}/src/message_definition_cache.cpp
+      ${ros2_foxglove_bridge_src_dir}/src/param_utils.cpp
+      ${ros2_foxglove_bridge_src_dir}/src/ros2_foxglove_bridge.cpp
+      ${ros2_foxglove_bridge_src_dir}/src/parameter_interface.cpp
+      ${ros2_foxglove_bridge_src_dir}/src/generic_client.cpp
     )
 
     target_compile_definitions(foxglove_bridge_component
@@ -166,9 +207,10 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     target_include_directories(foxglove_bridge_component
       PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/${ros2_foxglove_bridge_src_dir}/include>
         $<INSTALL_INTERFACE:include>
     )
+
     target_link_libraries(foxglove_bridge_component
       foxglove_bridge_base
       ${rosgraph_msgs_TARGETS}
@@ -179,10 +221,16 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
       resource_retriever::resource_retriever
       rosx_introspection::rosx_introspection
     )
+
+    if (USE_FOXGLOVE_SDK)
+      target_link_libraries(foxglove_bridge_component foxglove_sdk)
+    endif()
+
     rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
     enable_strict_compiler_warnings(foxglove_bridge_component)
+
     add_executable(foxglove_bridge
-      ros2_foxglove_bridge/src/ros2_foxglove_bridge_node.cpp
+      ${ros2_foxglove_bridge_src_dir}/src/ros2_foxglove_bridge_node.cpp
     )
     target_include_directories(foxglove_bridge SYSTEM PRIVATE ${rclcpp_INCLUDE_DIRS})
     target_link_libraries(foxglove_bridge

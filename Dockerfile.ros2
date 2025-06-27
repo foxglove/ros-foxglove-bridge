@@ -45,12 +45,14 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
 COPY CMakeLists.txt src/ros-foxglove-bridge/CMakeLists.txt
 COPY foxglove_bridge_base src/ros-foxglove-bridge/foxglove_bridge_base
 COPY ros2_foxglove_bridge src/ros-foxglove-bridge/ros2_foxglove_bridge
+COPY ros2_foxglove_bridge_sdk src/ros-foxglove-bridge/ros2_foxglove_bridge_sdk
 
 ARG USE_ASIO_STANDALONE=ON
+ARG USE_FOXGLOVE_SDK=OFF
 
 # Build the ROS 2 workspace
 RUN . /opt/ros/$ROS_DISTRO/setup.sh \
-  && colcon build --event-handlers console_direct+ --cmake-args -DUSE_ASIO_STANDALONE=$USE_ASIO_STANDALONE
+  && colcon build --event-handlers console_direct+ --cmake-args -DUSE_ASIO_STANDALONE=$USE_ASIO_STANDALONE -DUSE_FOXGLOVE_SDK=$USE_FOXGLOVE_SDK
 
 # source workspace from entrypoint
 RUN sed --in-place \

@@ -40,3 +40,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: make ${{ matrix.ros_distribution }}-test-boost-asio
+
+  test-sdk:
+    strategy:
+      fail-fast: false
+      matrix:
+        ros_distribution: [jazzy, kilted, rolling]
+
+    name: Test (ROS ${{ matrix.ros_distribution }}, SDK Server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make USE_FOXGLOVE_SDK=ON ${{ matrix.ros_distribution }}-test
