@@ -293,11 +293,8 @@ void FoxgloveBridge::updateAdvertisedTopics(
 
     try {
       auto [format, msgDefinition] = _messageDefinitionCache.get_full_text(schemaName);
-
-      // Copy message definition to Schema
-      schema->data = new std::byte[msgDefinition.size()];
       schema->data_len = msgDefinition.size();
-      std::memcpy((void*)schema->data, msgDefinition.data(), msgDefinition.size());
+      schema->data = reinterpret_cast<const std::byte*>(msgDefinition.data());
 
       switch (format) {
         case foxglove::MessageDefinitionFormat::MSG:
