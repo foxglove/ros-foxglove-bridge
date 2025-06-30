@@ -60,7 +60,7 @@ public:
    * Throws DefinitionNotFoundError if one or more definition files are missing for the given
    * package resource name.
    */
-  std::pair<MessageDefinitionFormat, std::string> get_full_text(
+  std::pair<MessageDefinitionFormat, const std::string&> get_full_text(
     const std::string& package_resource_name);
 
 private:
@@ -79,6 +79,7 @@ private:
 
   std::unordered_map<DefinitionIdentifier, MessageSpec, DefinitionIdentifierHash>
     msg_specs_by_definition_identifier_;
+  std::unordered_map<std::string, std::string> full_text_cache_;
 };
 
 std::set<std::string> parse_dependencies(MessageDefinitionFormat format, const std::string& text,
