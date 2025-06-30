@@ -1,5 +1,6 @@
 ROS1_DISTRIBUTIONS := melodic noetic
 ROS2_DISTRIBUTIONS := humble iron jazzy kilted rolling
+USE_FOXGLOVE_SDK := OFF
 
 define generate_ros1_targets
 .PHONY: $(1)
@@ -22,7 +23,7 @@ endef
 define generate_ros2_targets
 .PHONY: $(1)
 $(1):
-	docker build -t foxglove_bridge_$(1) --pull -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=$(1) .
+	docker build -t foxglove_bridge_$(1) --pull -f Dockerfile.ros2 --build-arg ROS_DISTRIBUTION=$(1) --build-arg USE_FOXGLOVE_SDK=$(USE_FOXGLOVE_SDK) .
 
 .PHONY: $(1)-test
 $(1)-test: $(1)
