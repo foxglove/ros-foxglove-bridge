@@ -75,8 +75,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   const auto assetUriAllowlist = this->get_parameter(PARAM_ASSET_URI_ALLOWLIST).as_string_array();
   _assetUriAllowlistPatterns = parseRegexStrings(this, assetUriAllowlist);
   _disableLoanMessage = this->get_parameter(PARAM_DISABLE_LOAN_MESSAGE).as_bool();
-  const auto ignoreUnresponsiveParamNodes =
-    this->get_parameter(PARAM_IGN_UNRESPONSIVE_PARAM_NODES).as_bool();
+  // const auto ignoreUnresponsiveParamNodes =
+  //   this->get_parameter(PARAM_IGN_UNRESPONSIVE_PARAM_NODES).as_bool();
 
   const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
   // Fetching of assets may be blocking, hence we fetch them in a separate thread.
@@ -114,8 +114,17 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   // Setup callbacks
   sdkServerOptions.callbacks.onConnectionGraphSubscribe =
     std::bind(&FoxgloveBridge::subscribeConnectionGraph, this, true);
-  sdkServerOptions.callbacks.onSubscribe = std::bind(&FoxgloveBridge::subscribe, this, _1);
-  sdkServerOptions.callbacks.onUnsubscribe = std::bind(&FoxgloveBridge::unsubscribe, this, _1);
+  sdkServerOptions.callbacks.onSubscribe = std::bind(&FoxgloveBridge::subscribe, this, _1, _2);
+  sdkServerOptions.callbacks.onUnsubscribe = std::bind(&FoxgloveBridge::unsubscribe, this, _1, _2);
+
+  if (hasCapability(foxglove_ws::CAPABILITY_CLIENT_PUBLISH)) {
+    sdkServerOptions.callbacks.onClientAdvertise =
+      std::bind(&FoxgloveBridge::clientAdvertise, this, _1, _2);
+    sdkServerOptions.callbacks.onClientUnadvertise =
+      std::bind(&FoxgloveBridge::clientUnadvertise, this, _1, _2);
+    sdkServerOptions.callbacks.onMessageData =
+      std::bind(&FoxgloveBridge::clientMessage, this, _1, _2, _3, _4);
+  }
 
   // TODO: The SDK server currently doesn't implement any of the TLS functionality. Once that
   // exists, add it here.
@@ -573,64 +582,54 @@ void FoxgloveBridge::unsubscribe(uint64_t channelId) {
   }
 }
 
-void FoxgloveBridge::clientAdvertise(const foxglove_ws::ClientAdvertisement& advertisement,
-                                     ConnectionHandle hdl) {
+void FoxgloveBridge::clientAdvertise(uint32_t clientId, const foxglove::ClientChannel& channel) {
   std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
 
-  // Get client publications or insert an empty map.
-  auto [clientPublicationsIt, isFirstPublication] =
-    _clientAdvertisedTopics.emplace(hdl, ClientPublications());
+  std::pair<uint32_t, uint32_t> key = {clientId, channel.id};
+  const std::string topicName(channel.topic);
+  const std::string topicType(channel.schema_name);
+  const std::string encoding(channel.encoding);
 
-  auto& clientPublications = clientPublicationsIt->second;
-
-  if (!isFirstPublication &&
-      clientPublications.find(advertisement.channelId) != clientPublications.end()) {
+  if (_clientAdvertisedTopics.find(key) != _clientAdvertisedTopics.end()) {
     throw foxglove_ws::ClientChannelError(
-      advertisement.channelId,
-      "Received client advertisement from " + _server->remoteEndpointString(hdl) + " for channel " +
-        std::to_string(advertisement.channelId) + " it had already advertised");
+      channel.id, "Received client advertisement from client ID " + std::to_string(clientId) +
+                    " for channel " + std::to_string(channel.id) + " it had already advertised");
   }
 
-  if (advertisement.schemaName.empty()) {
+  if (channel.schema_name.empty()) {
     throw foxglove_ws::ClientChannelError(
-      advertisement.channelId,
-      "Received client advertisement from " + _server->remoteEndpointString(hdl) + " for channel " +
-        std::to_string(advertisement.channelId) + " with empty schema name");
+      channel.id, "Received client advertisement from client ID " + std::to_string(clientId) +
+                    " for channel " + std::to_string(channel.id) + " with empty schema name");
   }
 
-  if (advertisement.encoding == "json") {
+  if (encoding == "json") {
     // register the JSON parser for this schemaName
-    auto parserIt = _jsonParsers.find(advertisement.schemaName);
+    std::string schemaName(channel.schema_name);
+    auto parserIt = _jsonParsers.find(schemaName);
     if (parserIt == _jsonParsers.end()) {
-      const auto& schemaName = advertisement.schemaName;
       std::string schema = "";
-
-      if (!advertisement.schema.empty()) {
+      if (channel.schema_len > 0) {
         // Schema is given by the advertisement
-        schema = std::string(reinterpret_cast<const char*>(advertisement.schema.data()),
-                             advertisement.schema.size());
+        schema = std::string(reinterpret_cast<const char*>(channel.schema), channel.schema_len);
       } else {
         // Schema not given, look it up.
         auto [format, msgDefinition] = _messageDefinitionCache.get_full_text(schemaName);
         if (format != foxglove::MessageDefinitionFormat::MSG) {
           throw foxglove_ws::ClientChannelError(
-            advertisement.channelId,
-            "Message definition (.msg) for schema " + schemaName + " not found.");
+            channel.id, "Message definition (.msg) for schema " + schemaName + " not found.");
         }
 
         schema = msgDefinition;
       }
 
       auto parser = std::make_shared<RosMsgParser::Parser>(
-        advertisement.topic, RosMsgParser::ROSType(schemaName), schema);
+        topicName, RosMsgParser::ROSType(schemaName), schema);
       _jsonParsers.insert({schemaName, parser});
     }
   }
 
   try {
     // Create a new topic advertisement
-    const auto& topicName = advertisement.topic;
-    const auto& topicType = advertisement.schemaName;
 
     // Lookup if there are publishers from other nodes for that topic. If that's the case, we
     // use a matching QoS profile.
@@ -656,48 +655,37 @@ void FoxgloveBridge::clientAdvertise(const foxglove_ws::ClientAdvertisement& adv
     auto publisher = this->create_generic_publisher(topicName, topicType, qos, publisherOptions);
 
     RCLCPP_INFO(this->get_logger(),
-                "Client %s is advertising \"%s\" (%s) on channel %d with encoding \"%s\"",
-                _server->remoteEndpointString(hdl).c_str(), topicName.c_str(), topicType.c_str(),
-                advertisement.channelId, advertisement.encoding.c_str());
+                "Client ID %d is advertising \"%s\" (%s) on channel %d with encoding \"%s\"",
+                clientId, topicName.c_str(), topicType.c_str(), channel.id, encoding.c_str());
 
     // Store the new topic advertisement
-    clientPublications.emplace(advertisement.channelId, std::move(publisher));
+    ClientAdvertisement clientAdvertisement{std::move(publisher), topicName, topicType, encoding};
+    _clientAdvertisedTopics.emplace(key, std::move(clientAdvertisement));
   } catch (const std::exception& ex) {
-    throw foxglove_ws::ClientChannelError(advertisement.channelId,
+    throw foxglove_ws::ClientChannelError(channel.id,
                                           std::string("Failed to create publisher: ") + ex.what());
   }
 }
 
-void FoxgloveBridge::clientUnadvertise(foxglove_ws::ChannelId channelId, ConnectionHandle hdl) {
+void FoxgloveBridge::clientUnadvertise(uint32_t clientId, uint32_t clientChannelId) {
   std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
 
-  auto it = _clientAdvertisedTopics.find(hdl);
+  std::pair<uint32_t, uint32_t> key = {clientId, clientChannelId};
+
+  auto it = _clientAdvertisedTopics.find(key);
   if (it == _clientAdvertisedTopics.end()) {
-    throw foxglove_ws::ClientChannelError(
-      channelId, "Ignoring client unadvertisement from " + _server->remoteEndpointString(hdl) +
-                   " for unknown channel " + std::to_string(channelId) +
-                   ", client has no advertised topics");
+    throw foxglove_ws::ClientChannelError(clientChannelId,
+                                          "Ignoring client unadvertisement from client ID " +
+                                            std::to_string(clientId) + " for unknown channel " +
+                                            std::to_string(clientChannelId));
   }
 
-  auto& clientPublications = it->second;
-  auto it2 = clientPublications.find(channelId);
-  if (it2 == clientPublications.end()) {
-    throw foxglove_ws::ClientChannelError(
-      channelId, "Ignoring client unadvertisement from " + _server->remoteEndpointString(hdl) +
-                   " for unknown channel " + std::to_string(channelId) + ", client has " +
-                   std::to_string(clientPublications.size()) + " advertised topic(s)");
-  }
-
-  const auto& publisher = it2->second;
+  const auto& publisher = it->second.publisher;
   RCLCPP_INFO(this->get_logger(),
-              "Client %s is no longer advertising %s (%zu subscribers) on channel %d",
-              _server->remoteEndpointString(hdl).c_str(), publisher->get_topic_name(),
-              publisher->get_subscription_count(), channelId);
+              "Client ID %u is no longer advertising %s (%zu subscribers) on channel %u", clientId,
+              publisher->get_topic_name(), publisher->get_subscription_count(), clientChannelId);
 
-  clientPublications.erase(it2);
-  if (clientPublications.empty()) {
     _clientAdvertisedTopics.erase(it);
-  }
 
   // Create a timer that immedeately goes out of scope (so it never fires) which will trigger
   // the previously destroyed publisher to be cleaned up. This is a workaround for
@@ -705,31 +693,27 @@ void FoxgloveBridge::clientUnadvertise(foxglove_ws::ChannelId channelId, Connect
   this->create_wall_timer(1s, []() {});
 }
 
-void FoxgloveBridge::clientMessage(const foxglove_ws::ClientMessage& message,
-                                   ConnectionHandle hdl) {
+void FoxgloveBridge::clientMessage(uint32_t clientId, uint32_t clientChannelId,
+                                   const std::byte* data, size_t dataLen) {
   // Get the publisher
   rclcpp::GenericPublisher::SharedPtr publisher;
+  std::string encoding;
+  std::string schemaName;
   {
-    const auto channelId = message.advertisement.channelId;
+    const std::pair<uint32_t, uint32_t> key = {clientId, clientChannelId};
     std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
 
-    auto it = _clientAdvertisedTopics.find(hdl);
+    auto it = _clientAdvertisedTopics.find(key);
     if (it == _clientAdvertisedTopics.end()) {
       throw foxglove_ws::ClientChannelError(
-        channelId, "Dropping client message from " + _server->remoteEndpointString(hdl) +
-                     " for unknown channel " + std::to_string(channelId) +
+        clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
+                           " for unknown channel " + std::to_string(clientChannelId) +
                      ", client has no advertised topics");
     }
 
-    auto& clientPublications = it->second;
-    auto it2 = clientPublications.find(channelId);
-    if (it2 == clientPublications.end()) {
-      throw foxglove_ws::ClientChannelError(
-        channelId, "Dropping client message from " + _server->remoteEndpointString(hdl) +
-                     " for unknown channel " + std::to_string(channelId) + ", client has " +
-                     std::to_string(clientPublications.size()) + " advertised topic(s)");
-    }
-    publisher = it2->second;
+    publisher = it->second.publisher;
+    encoding = it->second.encoding;
+    schemaName = it->second.topicType;
   }
 
   auto publishMessage = [publisher, this](const void* data, size_t size) {
@@ -746,43 +730,39 @@ void FoxgloveBridge::clientMessage(const foxglove_ws::ClientMessage& message,
     }
   };
 
-  if (message.advertisement.encoding == "cdr") {
-    publishMessage(message.getData(), message.getLength());
-  } else if (message.advertisement.encoding == "json") {
+  if (encoding == "cdr") {
+    publishMessage(data, dataLen);
+  } else if (encoding == "json") {
     // get the specific parser for this schemaName
     std::shared_ptr<RosMsgParser::Parser> parser;
     {
       std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
-      auto parserIt = _jsonParsers.find(message.advertisement.schemaName);
+      auto parserIt = _jsonParsers.find(schemaName);
       if (parserIt != _jsonParsers.end()) {
         parser = parserIt->second;
       }
     }
     if (!parser) {
-      throw foxglove_ws::ClientChannelError(message.advertisement.channelId,
-                                            "Dropping client message from " +
-                                              _server->remoteEndpointString(hdl) +
+      throw foxglove_ws::ClientChannelError(
+        clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
                                               " with encoding \"json\": no parser found");
     } else {
       thread_local RosMsgParser::ROS2_Serializer serializer;
       serializer.reset();
-      const std::string jsonMessage(reinterpret_cast<const char*>(message.getData()),
-                                    message.getLength());
+      const std::string jsonMessage(reinterpret_cast<const char*>(data), dataLen);
       try {
         parser->serializeFromJson(jsonMessage, &serializer);
         publishMessage(serializer.getBufferData(), serializer.getBufferSize());
       } catch (const std::exception& ex) {
-        throw foxglove_ws::ClientChannelError(message.advertisement.channelId,
-                                              "Dropping client message from " +
-                                                _server->remoteEndpointString(hdl) +
+        throw foxglove_ws::ClientChannelError(
+          clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
                                                 " with encoding \"json\": " + ex.what());
       }
     }
   } else {
     throw foxglove_ws::ClientChannelError(
-      message.advertisement.channelId,
-      "Dropping client message from " + _server->remoteEndpointString(hdl) +
-        " with unknown encoding \"" + message.advertisement.encoding + "\"");
+      clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
+                         " with unknown encoding \"" + encoding + "\"");
   }
 }
 

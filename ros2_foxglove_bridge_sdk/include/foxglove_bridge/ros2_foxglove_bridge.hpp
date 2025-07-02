@@ -36,6 +36,14 @@ using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std:
 using SubscriptionCount = std::pair<Subscription, size_t>;
 using MapOfSets = std::unordered_map<std::string, std::unordered_set<std::string>>;
 
+using ChannelAndSubscriberId = std::pair<uint64_t, uint32_t>;
+struct ClientAdvertisement {
+  Publication publisher;
+  std::string topicName;
+  std::string topicType;
+  std::string encoding;
+};
+
 class FoxgloveBridge : public rclcpp::Node {
 public:
   using TopicAndDatatype = std::pair<std::string, std::string>;
@@ -78,7 +86,8 @@ private:
   std::unordered_map<foxglove_ws::ChannelId, foxglove_ws::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove_ws::ServiceId, foxglove_ws::ServiceWithoutId> _advertisedServices;
   std::unordered_map<foxglove_ws::ChannelId, SubscriptionsByClient> _subscriptions;
-  PublicationsByClient _clientAdvertisedTopics;
+  std::unordered_map<std::pair<uint32_t, uint32_t>, ClientAdvertisement, PairHash>
+    _clientAdvertisedTopics;
   std::unordered_map<foxglove_ws::ServiceId, GenericClient::SharedPtr> _serviceClients;
   rclcpp::CallbackGroup::SharedPtr _subscriptionCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _clientPublishCallbackGroup;
@@ -105,11 +114,12 @@ private:
 
   void unsubscribe(uint64_t channelId);
 
-  void clientAdvertise(const foxglove_ws::ClientAdvertisement& advertisement, ConnectionHandle hdl);
+  void clientAdvertise(uint32_t clientId, const foxglove::ClientChannel& channel);
 
-  void clientUnadvertise(foxglove_ws::ChannelId channelId, ConnectionHandle hdl);
+  void clientUnadvertise(uint32_t clientId, uint32_t clientChannelId);
 
-  void clientMessage(const foxglove_ws::ClientMessage& message, ConnectionHandle hdl);
+  void clientMessage(uint32_t clientId, uint32_t clientChannelId, const std::byte* data,
+                     size_t dataLen);
 
   void setParameters(const std::vector<foxglove_ws::Parameter>& parameters,
                      const std::optional<std::string>& requestId, ConnectionHandle hdl);
