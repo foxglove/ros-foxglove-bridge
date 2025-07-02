@@ -42,7 +42,8 @@ private:
   std::thread _executorThread;
 };
 
-class ParameterTest : public TestWithExecutor {
+// TODO: FG-12232: Enable when Parameter functionality is implemented
+class DISABLED_ParameterTest : public TestWithExecutor {
 public:
   using PARAM_1_TYPE = std::string;
   inline static const std::string NODE_1_NAME = "node_1";
@@ -101,7 +102,8 @@ protected:
   std::shared_ptr<foxglove_ws::Client<websocketpp::config::asio_client>> _wsClient;
 };
 
-class ServiceTest : public TestWithExecutor {
+// TODO: FG-12234: Enable when Service functionality is implemented
+class DISABLED_ServiceTest : public TestWithExecutor {
 public:
   inline static const std::string SERVICE_NAME = "/foo_service";
 
@@ -212,7 +214,8 @@ TEST(SmokeTest, testSubscription) {
   }
 }
 
-TEST(SmokeTest, testSubscriptionParallel) {
+// TODO: Latched subscriptions are not yet supported in the SDK
+TEST(SmokeTest, DISABLED_testSubscriptionParallel) {
   // Publish a string message on a latched ros topic
   const std::string topic_name = "/pub_topic";
   std_msgs::msg::String rosMsg;
@@ -361,7 +364,7 @@ INSTANTIATE_TEST_SUITE_P(
   testing::Values(std::make_pair("json", std::vector<uint8_t>(HELLO_WORLD_JSON,
                                                               std::end(HELLO_WORLD_JSON)))));
 
-TEST_F(ParameterTest, testGetAllParams) {
+TEST_F(DISABLED_ParameterTest, testGetAllParams) {
   const std::string requestId = "req-testGetAllParams";
   auto future = foxglove_ws::waitForParameters(_wsClient, requestId);
   _wsClient->getParameters({}, requestId);
@@ -371,7 +374,7 @@ TEST_F(ParameterTest, testGetAllParams) {
   EXPECT_GE(params.size(), 2UL);
 }
 
-TEST_F(ParameterTest, testGetNonExistingParameters) {
+TEST_F(DISABLED_ParameterTest, testGetNonExistingParameters) {
   const std::string requestId = "req-testGetNonExistingParameters";
   auto future = foxglove_ws::waitForParameters(_wsClient, requestId);
   _wsClient->getParameters(
@@ -382,7 +385,7 @@ TEST_F(ParameterTest, testGetNonExistingParameters) {
   EXPECT_TRUE(params.empty());
 }
 
-TEST_F(ParameterTest, testGetParameters) {
+TEST_F(DISABLED_ParameterTest, testGetParameters) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
   const auto p2 = NODE_2_NAME + "." + PARAM_2_NAME;
 
@@ -411,7 +414,7 @@ TEST_F(ParameterTest, testGetParameters) {
   EXPECT_EQ(int_array_val, PARAM_2_DEFAULT_VALUE);
 }
 
-TEST_F(ParameterTest, testSetParameters) {
+TEST_F(DISABLED_ParameterTest, testSetParameters) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
   const auto p2 = NODE_2_NAME + "." + PARAM_2_NAME;
   const PARAM_1_TYPE newP1value = "world";
@@ -449,7 +452,7 @@ TEST_F(ParameterTest, testSetParameters) {
   EXPECT_EQ(int_array_val, expected_value);
 }
 
-TEST_F(ParameterTest, testSetParametersWithReqId) {
+TEST_F(DISABLED_ParameterTest, testSetParametersWithReqId) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
   const PARAM_1_TYPE newP1value = "world";
   const std::vector<foxglove_ws::Parameter> parameters = {
@@ -465,7 +468,7 @@ TEST_F(ParameterTest, testSetParametersWithReqId) {
   EXPECT_EQ(1UL, params.size());
 }
 
-TEST_F(ParameterTest, testSetFloatParametersWithIntegers) {
+TEST_F(DISABLED_ParameterTest, testSetFloatParametersWithIntegers) {
   const auto floatParamName = NODE_2_NAME + "." + PARAM_3_NAME;
   const auto floatArrayParamName = NODE_2_NAME + "." + PARAM_4_NAME;
   const int64_t floatParamVal = 10;
@@ -506,7 +509,7 @@ TEST_F(ParameterTest, testSetFloatParametersWithIntegers) {
   }
 }
 
-TEST_F(ParameterTest, testUnsetParameter) {
+TEST_F(DISABLED_ParameterTest, testUnsetParameter) {
   const auto p1 = NODE_1_NAME + "." + DELETABLE_PARAM_NAME;
   const std::vector<foxglove_ws::Parameter> parameters = {
     foxglove_ws::Parameter(p1),
@@ -521,7 +524,7 @@ TEST_F(ParameterTest, testUnsetParameter) {
   EXPECT_EQ(0UL, params.size());
 }
 
-TEST_F(ParameterTest, testParameterSubscription) {
+TEST_F(DISABLED_ParameterTest, testParameterSubscription) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
 
   _wsClient->subscribeParameterUpdates({p1});
@@ -540,7 +543,7 @@ TEST_F(ParameterTest, testParameterSubscription) {
   ASSERT_EQ(std::future_status::timeout, future.wait_for(ONE_SECOND));
 }
 
-TEST_F(ParameterTest, testGetParametersParallel) {
+TEST_F(DISABLED_ParameterTest, testGetParametersParallel) {
   // Connect a few clients (in parallel) and make sure that they all receive parameters
   auto clients = {
     std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>(),
@@ -573,7 +576,7 @@ TEST_F(ParameterTest, testGetParametersParallel) {
   }
 }
 
-TEST_F(ServiceTest, testAdvertiseService) {
+TEST_F(DISABLED_ServiceTest, testAdvertiseService) {
   auto client = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
   auto serviceFuture = foxglove_ws::waitForService(client, SERVICE_NAME);
   ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
@@ -588,7 +591,7 @@ TEST_F(ServiceTest, testAdvertiseService) {
             "informational, e.g. for error messages");
 }
 
-TEST_F(ServiceTest, testCallServiceParallel) {
+TEST_F(DISABLED_ServiceTest, testCallServiceParallel) {
   // Connect a few clients (in parallel) and make sure that they can all call the service
   auto clients = {
     std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>(),
@@ -640,7 +643,7 @@ TEST_F(ServiceTest, testCallServiceParallel) {
   }
 }
 
-TEST_F(ServiceTest, testCallNonexistentService) {
+TEST_F(DISABLED_ServiceTest, testCallNonexistentService) {
   auto client = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
   ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(std::chrono::seconds(5)));
 
@@ -717,7 +720,8 @@ TEST(SmokeTest, receiveMessagesOfMultipleTransientLocalPublishers) {
   spinnerThread.join();
 }
 
-TEST(FetchAssetTest, fetchExistingAsset) {
+// TODO: FG-12235: Enable when Asset capability is implemented
+TEST(FetchAssetTest, DISABLED_fetchExistingAsset) {
   auto wsClient = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
   EXPECT_EQ(std::future_status::ready, wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
 
@@ -746,7 +750,8 @@ TEST(FetchAssetTest, fetchExistingAsset) {
   std::remove(tmpFilePath.c_str());
 }
 
-TEST(FetchAssetTest, fetchNonExistingAsset) {
+// TODO: FG-12235: Enable when Asset capability is implemented
+TEST(FetchAssetTest, DISABLED_fetchNonExistingAsset) {
   auto wsClient = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
   EXPECT_EQ(std::future_status::ready, wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
 
