@@ -73,7 +73,7 @@ private:
   // BEGIN New SDK Components
   std::unique_ptr<foxglove::WebSocketServer> _sdkServer;
   std::unordered_map<uint64_t, foxglove::RawChannel> _sdkChannels;
-  std::unordered_map<uint64_t, SubscriptionCount> _sdkSubscriptions;
+  std::unordered_map<ChannelAndSubscriberId, Subscription, PairHash> _sdkSubscriptions;
   // END New SDK Components
 
   std::unique_ptr<foxglove_ws::ServerInterface<ConnectionHandle>> _server;
@@ -110,9 +110,9 @@ private:
 
   void subscribeConnectionGraph(bool subscribe);
 
-  void subscribe(uint64_t channelId);
+  void subscribe(uint64_t channelId, uint32_t clientId);
 
-  void unsubscribe(uint64_t channelId);
+  void unsubscribe(uint64_t channelId, uint32_t clientId);
 
   void clientAdvertise(uint32_t clientId, const foxglove::ClientChannel& channel);
 

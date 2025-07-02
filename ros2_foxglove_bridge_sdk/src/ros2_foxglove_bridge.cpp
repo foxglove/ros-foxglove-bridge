@@ -503,21 +503,16 @@ void FoxgloveBridge::subscribeConnectionGraph(bool subscribe) {
   };
 }
 
-void FoxgloveBridge::subscribe(uint64_t channelId) {
+void FoxgloveBridge::subscribe(uint64_t channelId, uint32_t clientId) {
   RCLCPP_INFO(this->get_logger(), "[SDK] received subscribe request for channel: %lu", channelId);
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
+  // REVIEW: Is this necessary if the SDK server is checking that the channel exists before calling
+  // this callback?
   auto it = _sdkChannels.find(channelId);
   if (it == _sdkChannels.end()) {
     RCLCPP_ERROR(this->get_logger(), "[SDK] received subscribe request for unknown channel: %lu",
                  channelId);
-    // REVIEW: Should an exception be thrown here?
-    return;
-  }
-
-  // ROS subscription already exists, increment the count of subscribers
-  if (_sdkSubscriptions.find(channelId) != _sdkSubscriptions.end()) {
-    _sdkSubscriptions.at(channelId).second++;
     return;
   }
 
@@ -544,13 +539,13 @@ void FoxgloveBridge::subscribe(uint64_t channelId) {
     },
     subscriptionOptions);
 
-  _sdkSubscriptions.insert({channelId, {subscription, 1}});
+  _sdkSubscriptions.insert({{channelId, clientId}, subscription});
   RCLCPP_INFO(this->get_logger(),
               "[SDK] created ROS subscription on %s (%s) successfully for channel %lu",
               topic.c_str(), datatype.c_str(), channelId);
 }
 
-void FoxgloveBridge::unsubscribe(uint64_t channelId) {
+void FoxgloveBridge::unsubscribe(uint64_t channelId, uint32_t clientId) {
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
   RCLCPP_INFO(this->get_logger(), "[SDK] received unsubscribe request for channel %lu", channelId);
@@ -562,24 +557,20 @@ void FoxgloveBridge::unsubscribe(uint64_t channelId) {
     return;
   }
 
-  auto subscriptionIt = _sdkSubscriptions.find(channelId);
+  auto subscriptionIt = _sdkSubscriptions.find({channelId, clientId});
   if (subscriptionIt == _sdkSubscriptions.end()) {
     RCLCPP_ERROR(this->get_logger(),
-                 "[SDK] tried unsubscribing from channel %lu but a corresponding ROS "
+                 "[SDK] Client %u tried unsubscribing from channel %lu but a corresponding ROS "
                  "subscription doesn't exist",
-                 channelId);
+                 clientId, channelId);
     return;
   }
 
-  auto& [subscription, count] = subscriptionIt->second;
-  count--;
-
-  if (count == 0) {
-    RCLCPP_INFO(this->get_logger(),
-                "[SDK] cleaning up subscription for topic \"%s\" on channel %lu",
-                subscription->get_topic_name(), channelId);
-    _sdkSubscriptions.erase(subscriptionIt);
-  }
+  const std::string& topic = subscriptionIt->second->get_topic_name();
+  RCLCPP_INFO(this->get_logger(),
+              "[SDK] Cleaned up subscription to topic %s for client %u on channel %lu",
+              topic.c_str(), clientId, channelId);
+  _sdkSubscriptions.erase(subscriptionIt);
 }
 
 void FoxgloveBridge::clientAdvertise(uint32_t clientId, const foxglove::ClientChannel& channel) {
@@ -685,7 +676,7 @@ void FoxgloveBridge::clientUnadvertise(uint32_t clientId, uint32_t clientChannel
               "Client ID %u is no longer advertising %s (%zu subscribers) on channel %u", clientId,
               publisher->get_topic_name(), publisher->get_subscription_count(), clientChannelId);
 
-    _clientAdvertisedTopics.erase(it);
+  _clientAdvertisedTopics.erase(it);
 
   // Create a timer that immedeately goes out of scope (so it never fires) which will trigger
   // the previously destroyed publisher to be cleaned up. This is a workaround for
@@ -708,7 +699,7 @@ void FoxgloveBridge::clientMessage(uint32_t clientId, uint32_t clientChannelId,
       throw foxglove_ws::ClientChannelError(
         clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
                            " for unknown channel " + std::to_string(clientChannelId) +
-                     ", client has no advertised topics");
+                           ", client has no advertised topics");
     }
 
     publisher = it->second.publisher;
@@ -745,7 +736,7 @@ void FoxgloveBridge::clientMessage(uint32_t clientId, uint32_t clientChannelId,
     if (!parser) {
       throw foxglove_ws::ClientChannelError(
         clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
-                                              " with encoding \"json\": no parser found");
+                           " with encoding \"json\": no parser found");
     } else {
       thread_local RosMsgParser::ROS2_Serializer serializer;
       serializer.reset();
@@ -756,7 +747,7 @@ void FoxgloveBridge::clientMessage(uint32_t clientId, uint32_t clientChannelId,
       } catch (const std::exception& ex) {
         throw foxglove_ws::ClientChannelError(
           clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
-                                                " with encoding \"json\": " + ex.what());
+                             " with encoding \"json\": " + ex.what());
       }
     }
   } else {
