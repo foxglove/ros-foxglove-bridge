@@ -214,8 +214,7 @@ TEST(SmokeTest, testSubscription) {
   }
 }
 
-// TODO: Latched subscriptions are not yet supported in the SDK
-TEST(SmokeTest, DISABLED_testSubscriptionParallel) {
+TEST(SmokeTest, testSubscriptionParallel) {
   // Publish a string message on a latched ros topic
   const std::string topic_name = "/pub_topic";
   std_msgs::msg::String rosMsg;
