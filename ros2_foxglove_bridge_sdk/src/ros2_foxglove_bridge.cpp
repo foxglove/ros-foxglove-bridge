@@ -503,7 +503,7 @@ void FoxgloveBridge::subscribeConnectionGraph(bool subscribe) {
   };
 }
 
-void FoxgloveBridge::subscribe(uint64_t channelId, uint32_t clientId) {
+void FoxgloveBridge::subscribe(uint64_t channelId, const foxglove::ClientMetadata& client) {
   RCLCPP_INFO(this->get_logger(), "[SDK] received subscribe request for channel: %lu", channelId);
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
@@ -534,18 +534,27 @@ void FoxgloveBridge::subscribe(uint64_t channelId, uint32_t clientId) {
 
   auto subscription = this->create_generic_subscription(
     topic, datatype, qos,
-    [this, channelId](std::shared_ptr<const rclcpp::SerializedMessage> msg) {
-      this->rosMessageHandler(channelId, msg);
+    [this, channelId, client](std::shared_ptr<const rclcpp::SerializedMessage> msg) {
+      this->rosMessageHandler(channelId, client.id, msg);
     },
     subscriptionOptions);
 
-  _sdkSubscriptions.insert({{channelId, clientId}, subscription});
+  if (!client.sink_id.has_value()) {
+    RCLCPP_ERROR(this->get_logger(),
+                 "[SDK] received subscribe request for channel %lu but client "
+                 "has no sink ID",
+                 channelId);
+    return;
+  }
+
+  _clientIdToSinkId.insert({client.id, client.sink_id.value()});
+  _sdkSubscriptions.insert({{channelId, client.id}, subscription});
   RCLCPP_INFO(this->get_logger(),
               "[SDK] created ROS subscription on %s (%s) successfully for channel %lu",
               topic.c_str(), datatype.c_str(), channelId);
 }
 
-void FoxgloveBridge::unsubscribe(uint64_t channelId, uint32_t clientId) {
+void FoxgloveBridge::unsubscribe(uint64_t channelId, const foxglove::ClientMetadata& client) {
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
   RCLCPP_INFO(this->get_logger(), "[SDK] received unsubscribe request for channel %lu", channelId);
@@ -557,20 +566,21 @@ void FoxgloveBridge::unsubscribe(uint64_t channelId, uint32_t clientId) {
     return;
   }
 
-  auto subscriptionIt = _sdkSubscriptions.find({channelId, clientId});
+  auto subscriptionIt = _sdkSubscriptions.find({channelId, client.id});
   if (subscriptionIt == _sdkSubscriptions.end()) {
     RCLCPP_ERROR(this->get_logger(),
                  "[SDK] Client %u tried unsubscribing from channel %lu but a corresponding ROS "
                  "subscription doesn't exist",
-                 clientId, channelId);
+                 client.id, channelId);
     return;
   }
 
   const std::string& topic = subscriptionIt->second->get_topic_name();
   RCLCPP_INFO(this->get_logger(),
               "[SDK] Cleaned up subscription to topic %s for client %u on channel %lu",
-              topic.c_str(), clientId, channelId);
+              topic.c_str(), client.id, channelId);
   _sdkSubscriptions.erase(subscriptionIt);
+  _clientIdToSinkId.erase(client.id);
 }
 
 void FoxgloveBridge::clientAdvertise(uint32_t clientId, const foxglove::ClientChannel& channel) {
@@ -813,7 +823,7 @@ void FoxgloveBridge::logHandler(LogLevel level, char const* msg) {
   }
 }
 
-void FoxgloveBridge::rosMessageHandler(uint64_t channelId,
+void FoxgloveBridge::rosMessageHandler(ChannelId channelId, ClientId clientId,
                                        std::shared_ptr<const rclcpp::SerializedMessage> msg) {
   // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
   // to `/rosout` will cause a feedback loop
@@ -825,9 +835,18 @@ void FoxgloveBridge::rosMessageHandler(uint64_t channelId,
     return;
   }
 
+  auto sinkIdIt = _clientIdToSinkId.find(clientId);
+  if (sinkIdIt == _clientIdToSinkId.end()) {
+    RCLCPP_ERROR(this->get_logger(),
+                 "[SDK] received message for channel %lu but client %u has no "
+                 "sink ID",
+                 channelId, clientId);
+    return;
+  }
+
   auto& channel = _sdkChannels.at(channelId);
   channel.log(reinterpret_cast<const std::byte*>(rclSerializedMsg.buffer),
-              rclSerializedMsg.buffer_length, timestamp);
+              rclSerializedMsg.buffer_length, timestamp, sinkIdIt->second);
 }
 
 void FoxgloveBridge::serviceRequest(const foxglove_ws::ServiceRequest& request,

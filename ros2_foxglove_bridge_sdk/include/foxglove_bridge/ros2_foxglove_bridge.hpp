@@ -36,7 +36,11 @@ using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std:
 using SubscriptionCount = std::pair<Subscription, size_t>;
 using MapOfSets = std::unordered_map<std::string, std::unordered_set<std::string>>;
 
-using ChannelAndSubscriberId = std::pair<uint64_t, uint32_t>;
+// TODO: Make an actual struct
+using ClientId = uint32_t;
+using SinkId = uint64_t;
+using ChannelId = uint64_t;
+using ChannelAndClientId = std::pair<ChannelId, ClientId>;
 struct ClientAdvertisement {
   Publication publisher;
   std::string topicName;
@@ -73,7 +77,8 @@ private:
   // BEGIN New SDK Components
   std::unique_ptr<foxglove::WebSocketServer> _sdkServer;
   std::unordered_map<uint64_t, foxglove::RawChannel> _sdkChannels;
-  std::unordered_map<ChannelAndSubscriberId, Subscription, PairHash> _sdkSubscriptions;
+  std::unordered_map<ChannelAndClientId, Subscription, PairHash> _sdkSubscriptions;
+  std::unordered_map<ClientId, SinkId> _clientIdToSinkId;
   // END New SDK Components
 
   std::unique_ptr<foxglove_ws::ServerInterface<ConnectionHandle>> _server;
@@ -110,9 +115,9 @@ private:
 
   void subscribeConnectionGraph(bool subscribe);
 
-  void subscribe(uint64_t channelId, uint32_t clientId);
+  void subscribe(uint64_t channelId, const foxglove::ClientMetadata& client);
 
-  void unsubscribe(uint64_t channelId, uint32_t clientId);
+  void unsubscribe(uint64_t channelId, const foxglove::ClientMetadata& client);
 
   void clientAdvertise(uint32_t clientId, const foxglove::ClientChannel& channel);
 
@@ -134,7 +139,7 @@ private:
 
   void logHandler(LogLevel level, char const* msg);
 
-  void rosMessageHandler(const uint64_t channelId,
+  void rosMessageHandler(const ChannelId channelId, const ClientId clientId,
                          std::shared_ptr<const rclcpp::SerializedMessage> msg);
 
   void serviceRequest(const foxglove_ws::ServiceRequest& request, ConnectionHandle clientHandle);
