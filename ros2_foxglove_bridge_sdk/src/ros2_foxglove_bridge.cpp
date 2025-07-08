@@ -504,7 +504,17 @@ void FoxgloveBridge::subscribeConnectionGraph(bool subscribe) {
 }
 
 void FoxgloveBridge::subscribe(uint64_t channelId, const foxglove::ClientMetadata& client) {
-  RCLCPP_INFO(this->get_logger(), "[SDK] received subscribe request for channel: %lu", channelId);
+  if (!client.sink_id.has_value()) {
+    RCLCPP_ERROR(this->get_logger(),
+                 "[SDK] received subscribe request from client %u for channel %lu but client "
+                 "has no sink ID",
+                 client.id, channelId);
+    return;
+  }
+
+  RCLCPP_INFO(this->get_logger(),
+              "[SDK] received subscribe request for channel %lu from client %u (sink %lu)",
+              channelId, client.id, client.sink_id.value());
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
   // REVIEW: Is this necessary if the SDK server is checking that the channel exists before calling
@@ -535,7 +545,7 @@ void FoxgloveBridge::subscribe(uint64_t channelId, const foxglove::ClientMetadat
   auto subscription = this->create_generic_subscription(
     topic, datatype, qos,
     [this, channelId, client](std::shared_ptr<const rclcpp::SerializedMessage> msg) {
-      this->rosMessageHandler(channelId, client.id, msg);
+      this->rosMessageHandler(channelId, client.sink_id.value(), msg);
     },
     subscriptionOptions);
 
@@ -547,11 +557,11 @@ void FoxgloveBridge::subscribe(uint64_t channelId, const foxglove::ClientMetadat
     return;
   }
 
-  _clientIdToSinkId.insert({client.id, client.sink_id.value()});
   _sdkSubscriptions.insert({{channelId, client.id}, subscription});
-  RCLCPP_INFO(this->get_logger(),
-              "[SDK] created ROS subscription on %s (%s) successfully for channel %lu",
-              topic.c_str(), datatype.c_str(), channelId);
+  RCLCPP_INFO(
+    this->get_logger(),
+    "[SDK] created ROS subscription on %s (%s) successfully for channel %lu (client %u, sink %lu)",
+    topic.c_str(), datatype.c_str(), channelId, client.id, client.sink_id.value());
 }
 
 void FoxgloveBridge::unsubscribe(uint64_t channelId, const foxglove::ClientMetadata& client) {
@@ -823,7 +833,7 @@ void FoxgloveBridge::logHandler(LogLevel level, char const* msg) {
   }
 }
 
-void FoxgloveBridge::rosMessageHandler(ChannelId channelId, ClientId clientId,
+void FoxgloveBridge::rosMessageHandler(ChannelId channelId, SinkId sinkId,
                                        std::shared_ptr<const rclcpp::SerializedMessage> msg) {
   // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
   // to `/rosout` will cause a feedback loop
@@ -831,22 +841,14 @@ void FoxgloveBridge::rosMessageHandler(ChannelId channelId, ClientId clientId,
   assert(timestamp >= 0 && "Timestamp is negative");
   const auto rclSerializedMsg = msg->get_rcl_serialized_message();
 
+  std::lock_guard<std::mutex> lock(_subscriptionsMutex);
   if (_sdkChannels.find(channelId) == _sdkChannels.end()) {
-    return;
-  }
-
-  auto sinkIdIt = _clientIdToSinkId.find(clientId);
-  if (sinkIdIt == _clientIdToSinkId.end()) {
-    RCLCPP_ERROR(this->get_logger(),
-                 "[SDK] received message for channel %lu but client %u has no "
-                 "sink ID",
-                 channelId, clientId);
     return;
   }
 
   auto& channel = _sdkChannels.at(channelId);
   channel.log(reinterpret_cast<const std::byte*>(rclSerializedMsg.buffer),
-              rclSerializedMsg.buffer_length, timestamp, sinkIdIt->second);
+              rclSerializedMsg.buffer_length, timestamp, sinkId);
 }
 
 void FoxgloveBridge::serviceRequest(const foxglove_ws::ServiceRequest& request,
