@@ -87,12 +87,12 @@ if(USE_FOXGLOVE_SDK)
   add_library(foxglove_sdk SHARED)
   target_include_directories(foxglove_sdk SYSTEM
     PUBLIC
-      $<BUILD_INTERFACE:${foxglove_sdk_SOURCE_DIR}/foxglove/include>
+      $<BUILD_INTERFACE:${foxglove_sdk_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:include>
   )
-  file(GLOB_RECURSE FOXGLOVE_SDK_SOURCES CONFIGURE_DEPENDS "${foxglove_sdk_SOURCE_DIR}/foxglove/src/*.cpp")
+  file(GLOB_RECURSE FOXGLOVE_SDK_SOURCES CONFIGURE_DEPENDS "${foxglove_sdk_SOURCE_DIR}/src/*.cpp")
   target_sources(foxglove_sdk PRIVATE ${FOXGLOVE_SDK_SOURCES})
-  target_link_libraries(foxglove_sdk PRIVATE ${foxglove_sdk_SOURCE_DIR}/foxglove/lib/libfoxglove.a)
+  target_link_libraries(foxglove_sdk PRIVATE ${foxglove_sdk_SOURCE_DIR}/lib/libfoxglove.a)
 endif()
 
 # Get git commit hash and replace variables in version.cpp.in
