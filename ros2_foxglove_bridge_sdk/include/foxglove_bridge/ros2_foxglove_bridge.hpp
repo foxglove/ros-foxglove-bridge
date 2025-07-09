@@ -78,7 +78,6 @@ private:
   std::unique_ptr<foxglove::WebSocketServer> _sdkServer;
   std::unordered_map<uint64_t, foxglove::RawChannel> _sdkChannels;
   std::unordered_map<ChannelAndClientId, Subscription, PairHash> _sdkSubscriptions;
-  std::unordered_map<ClientId, SinkId> _clientIdToSinkId;
   // END New SDK Components
 
   std::unique_ptr<foxglove_ws::ServerInterface<ConnectionHandle>> _server;

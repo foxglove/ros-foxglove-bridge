@@ -590,7 +590,6 @@ void FoxgloveBridge::unsubscribe(uint64_t channelId, const foxglove::ClientMetad
               "[SDK] Cleaned up subscription to topic %s for client %u on channel %lu",
               topic.c_str(), client.id, channelId);
   _sdkSubscriptions.erase(subscriptionIt);
-  _clientIdToSinkId.erase(client.id);
 }
 
 void FoxgloveBridge::clientAdvertise(uint32_t clientId, const foxglove::ClientChannel& channel) {
