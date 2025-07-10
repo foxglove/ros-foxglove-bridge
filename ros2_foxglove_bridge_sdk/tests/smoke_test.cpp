@@ -719,8 +719,7 @@ TEST(SmokeTest, receiveMessagesOfMultipleTransientLocalPublishers) {
   spinnerThread.join();
 }
 
-// TODO: FG-12235: Enable when Asset capability is implemented
-TEST(FetchAssetTest, DISABLED_fetchExistingAsset) {
+TEST(FetchAssetTest, fetchExistingAsset) {
   auto wsClient = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
   EXPECT_EQ(std::future_status::ready, wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
 
@@ -749,8 +748,7 @@ TEST(FetchAssetTest, DISABLED_fetchExistingAsset) {
   std::remove(tmpFilePath.c_str());
 }
 
-// TODO: FG-12235: Enable when Asset capability is implemented
-TEST(FetchAssetTest, DISABLED_fetchNonExistingAsset) {
+TEST(FetchAssetTest, fetchNonExistingAsset) {
   auto wsClient = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
   EXPECT_EQ(std::future_status::ready, wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
 
