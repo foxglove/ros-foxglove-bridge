@@ -36,7 +36,6 @@ using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std:
 using SubscriptionCount = std::pair<Subscription, size_t>;
 using MapOfSets = std::unordered_map<std::string, std::unordered_set<std::string>>;
 
-// TODO: Make an actual struct
 using ClientId = uint32_t;
 using SinkId = uint64_t;
 using ChannelId = uint64_t;
