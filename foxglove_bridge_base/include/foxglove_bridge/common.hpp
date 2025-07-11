@@ -9,7 +9,12 @@
 
 namespace foxglove_ws {
 
+#ifdef USE_FOXGLOVE_SDK
 constexpr char SUPPORTED_SUBPROTOCOL[] = "foxglove.sdk.v1";
+#else
+constexpr char SUPPORTED_SUBPROTOCOL[] = "foxglove.websocket.v1";
+#endif
+
 constexpr char CAPABILITY_CLIENT_PUBLISH[] = "clientPublish";
 constexpr char CAPABILITY_TIME[] = "time";
 constexpr char CAPABILITY_PARAMETERS[] = "parameters";
