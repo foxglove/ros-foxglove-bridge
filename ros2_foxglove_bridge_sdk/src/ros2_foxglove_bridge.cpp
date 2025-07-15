@@ -338,7 +338,7 @@ void FoxgloveBridge::updateAdvertisedTopics(
       continue;
     }
 
-    const uint64_t channelId = channelResult.value().id();
+    const ChannelId channelId = channelResult.value().id();
     RCLCPP_INFO(this->get_logger(), "Advertising new channel %lu for topic \"%s\"", channelId,
                 topic.c_str());
     _sdkChannels.insert({channelId, std::move(channelResult.value())});
@@ -503,7 +503,7 @@ void FoxgloveBridge::subscribeConnectionGraph(bool subscribe) {
   };
 }
 
-void FoxgloveBridge::subscribe(uint64_t channelId, const foxglove::ClientMetadata& client) {
+void FoxgloveBridge::subscribe(ChannelId channelId, const foxglove::ClientMetadata& client) {
   if (!client.sink_id.has_value()) {
     RCLCPP_ERROR(this->get_logger(),
                  "[SDK] received subscribe request from client %u for channel %lu but client "
@@ -564,7 +564,7 @@ void FoxgloveBridge::subscribe(uint64_t channelId, const foxglove::ClientMetadat
     topic.c_str(), datatype.c_str(), channelId, client.id, client.sink_id.value());
 }
 
-void FoxgloveBridge::unsubscribe(uint64_t channelId, const foxglove::ClientMetadata& client) {
+void FoxgloveBridge::unsubscribe(ChannelId channelId, const foxglove::ClientMetadata& client) {
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
   RCLCPP_INFO(this->get_logger(), "[SDK] received unsubscribe request for channel %lu", channelId);
@@ -592,10 +592,10 @@ void FoxgloveBridge::unsubscribe(uint64_t channelId, const foxglove::ClientMetad
   _sdkSubscriptions.erase(subscriptionIt);
 }
 
-void FoxgloveBridge::clientAdvertise(uint32_t clientId, const foxglove::ClientChannel& channel) {
+void FoxgloveBridge::clientAdvertise(ClientId clientId, const foxglove::ClientChannel& channel) {
   std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
 
-  std::pair<uint32_t, uint32_t> key = {clientId, channel.id};
+  ChannelAndClientId key = {channel.id, clientId};
   const std::string topicName(channel.topic);
   const std::string topicType(channel.schema_name);
   const std::string encoding(channel.encoding);
@@ -677,10 +677,10 @@ void FoxgloveBridge::clientAdvertise(uint32_t clientId, const foxglove::ClientCh
   }
 }
 
-void FoxgloveBridge::clientUnadvertise(uint32_t clientId, uint32_t clientChannelId) {
+void FoxgloveBridge::clientUnadvertise(ClientId clientId, ChannelId clientChannelId) {
   std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
 
-  std::pair<uint32_t, uint32_t> key = {clientId, clientChannelId};
+  ChannelAndClientId key = {clientChannelId, clientId};
 
   auto it = _clientAdvertisedTopics.find(key);
   if (it == _clientAdvertisedTopics.end()) {
@@ -692,7 +692,7 @@ void FoxgloveBridge::clientUnadvertise(uint32_t clientId, uint32_t clientChannel
 
   const auto& publisher = it->second.publisher;
   RCLCPP_INFO(this->get_logger(),
-              "Client ID %u is no longer advertising %s (%zu subscribers) on channel %u", clientId,
+              "Client ID %u is no longer advertising %s (%zu subscribers) on channel %lu", clientId,
               publisher->get_topic_name(), publisher->get_subscription_count(), clientChannelId);
 
   _clientAdvertisedTopics.erase(it);
@@ -703,14 +703,14 @@ void FoxgloveBridge::clientUnadvertise(uint32_t clientId, uint32_t clientChannel
   this->create_wall_timer(1s, []() {});
 }
 
-void FoxgloveBridge::clientMessage(uint32_t clientId, uint32_t clientChannelId,
+void FoxgloveBridge::clientMessage(ClientId clientId, ChannelId clientChannelId,
                                    const std::byte* data, size_t dataLen) {
   // Get the publisher
   rclcpp::GenericPublisher::SharedPtr publisher;
   std::string encoding;
   std::string schemaName;
   {
-    const std::pair<uint32_t, uint32_t> key = {clientId, clientChannelId};
+    const ChannelAndClientId key = {clientChannelId, clientId};
     std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
 
     auto it = _clientAdvertisedTopics.find(key);

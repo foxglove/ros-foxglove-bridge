@@ -75,8 +75,9 @@ private:
 
   // BEGIN New SDK Components
   std::unique_ptr<foxglove::WebSocketServer> _sdkServer;
-  std::unordered_map<uint64_t, foxglove::RawChannel> _sdkChannels;
+  std::unordered_map<ChannelId, foxglove::RawChannel> _sdkChannels;
   std::unordered_map<ChannelAndClientId, Subscription, PairHash> _sdkSubscriptions;
+  std::unordered_map<ChannelAndClientId, ClientAdvertisement, PairHash> _clientAdvertisedTopics;
   // END New SDK Components
 
   std::unique_ptr<foxglove_ws::ServerInterface<ConnectionHandle>> _server;
@@ -89,8 +90,6 @@ private:
   std::unordered_map<foxglove_ws::ChannelId, foxglove_ws::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove_ws::ServiceId, foxglove_ws::ServiceWithoutId> _advertisedServices;
   std::unordered_map<foxglove_ws::ChannelId, SubscriptionsByClient> _subscriptions;
-  std::unordered_map<std::pair<uint32_t, uint32_t>, ClientAdvertisement, PairHash>
-    _clientAdvertisedTopics;
   std::unordered_map<foxglove_ws::ServiceId, GenericClient::SharedPtr> _serviceClients;
   rclcpp::CallbackGroup::SharedPtr _subscriptionCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _clientPublishCallbackGroup;
@@ -113,15 +112,15 @@ private:
 
   void subscribeConnectionGraph(bool subscribe);
 
-  void subscribe(uint64_t channelId, const foxglove::ClientMetadata& client);
+  void subscribe(ChannelId channelId, const foxglove::ClientMetadata& client);
 
-  void unsubscribe(uint64_t channelId, const foxglove::ClientMetadata& client);
+  void unsubscribe(ChannelId channelId, const foxglove::ClientMetadata& client);
 
-  void clientAdvertise(uint32_t clientId, const foxglove::ClientChannel& channel);
+  void clientAdvertise(ClientId clientId, const foxglove::ClientChannel& channel);
 
-  void clientUnadvertise(uint32_t clientId, uint32_t clientChannelId);
+  void clientUnadvertise(ClientId clientId, ChannelId clientChannelId);
 
-  void clientMessage(uint32_t clientId, uint32_t clientChannelId, const std::byte* data,
+  void clientMessage(ClientId clientId, ChannelId clientChannelId, const std::byte* data,
                      size_t dataLen);
 
   void setParameters(const std::vector<foxglove_ws::Parameter>& parameters,
