@@ -11,6 +11,8 @@
 #include <rosx_introspection/ros_parser.hpp>
 #include <websocketpp/common/connection_hdl.hpp>
 
+#include <foxglove/foxglove.hpp>
+#include <foxglove/server.hpp>
 #include <foxglove_bridge/callback_queue.hpp>
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/generic_client.hpp>
@@ -30,6 +32,20 @@ using SubscriptionsByClient = std::map<ConnectionHandle, Subscription, std::owne
 using Publication = rclcpp::GenericPublisher::SharedPtr;
 using ClientPublications = std::unordered_map<foxglove_ws::ClientChannelId, Publication>;
 using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std::owner_less<>>;
+
+using SubscriptionCount = std::pair<Subscription, size_t>;
+using MapOfSets = std::unordered_map<std::string, std::unordered_set<std::string>>;
+
+using ClientId = uint32_t;
+using SinkId = uint64_t;
+using ChannelId = uint64_t;
+using ChannelAndClientId = std::pair<ChannelId, ClientId>;
+struct ClientAdvertisement {
+  Publication publisher;
+  std::string topicName;
+  std::string topicType;
+  std::string encoding;
+};
 
 class FoxgloveBridge : public rclcpp::Node {
 public:
@@ -57,6 +73,13 @@ private:
     }
   };
 
+  // BEGIN New SDK Components
+  std::unique_ptr<foxglove::WebSocketServer> _sdkServer;
+  std::unordered_map<ChannelId, foxglove::RawChannel> _sdkChannels;
+  std::unordered_map<ChannelAndClientId, Subscription, PairHash> _sdkSubscriptions;
+  std::unordered_map<ChannelAndClientId, ClientAdvertisement, PairHash> _clientAdvertisedTopics;
+  // END New SDK Components
+
   std::unique_ptr<foxglove_ws::ServerInterface<ConnectionHandle>> _server;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::vector<std::regex> _topicWhitelistPatterns;
@@ -67,7 +90,6 @@ private:
   std::unordered_map<foxglove_ws::ChannelId, foxglove_ws::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove_ws::ServiceId, foxglove_ws::ServiceWithoutId> _advertisedServices;
   std::unordered_map<foxglove_ws::ChannelId, SubscriptionsByClient> _subscriptions;
-  PublicationsByClient _clientAdvertisedTopics;
   std::unordered_map<foxglove_ws::ServiceId, GenericClient::SharedPtr> _serviceClients;
   rclcpp::CallbackGroup::SharedPtr _subscriptionCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _clientPublishCallbackGroup;
@@ -90,15 +112,16 @@ private:
 
   void subscribeConnectionGraph(bool subscribe);
 
-  void subscribe(foxglove_ws::ChannelId channelId, ConnectionHandle clientHandle);
+  void subscribe(ChannelId channelId, const foxglove::ClientMetadata& client);
 
-  void unsubscribe(foxglove_ws::ChannelId channelId, ConnectionHandle clientHandle);
+  void unsubscribe(ChannelId channelId, const foxglove::ClientMetadata& client);
 
-  void clientAdvertise(const foxglove_ws::ClientAdvertisement& advertisement, ConnectionHandle hdl);
+  void clientAdvertise(ClientId clientId, const foxglove::ClientChannel& channel);
 
-  void clientUnadvertise(foxglove_ws::ChannelId channelId, ConnectionHandle hdl);
+  void clientUnadvertise(ClientId clientId, ChannelId clientChannelId);
 
-  void clientMessage(const foxglove_ws::ClientMessage& message, ConnectionHandle hdl);
+  void clientMessage(ClientId clientId, ChannelId clientChannelId, const std::byte* data,
+                     size_t dataLen);
 
   void setParameters(const std::vector<foxglove_ws::Parameter>& parameters,
                      const std::optional<std::string>& requestId, ConnectionHandle hdl);
@@ -113,7 +136,7 @@ private:
 
   void logHandler(LogLevel level, char const* msg);
 
-  void rosMessageHandler(const foxglove_ws::ChannelId& channelId, ConnectionHandle clientHandle,
+  void rosMessageHandler(ChannelId channelId, SinkId sinkId,
                          std::shared_ptr<const rclcpp::SerializedMessage> msg);
 
   void serviceRequest(const foxglove_ws::ServiceRequest& request, ConnectionHandle clientHandle);
@@ -121,6 +144,8 @@ private:
   void fetchAsset(const std::string& assetId, uint32_t requestId, ConnectionHandle clientHandle);
 
   bool hasCapability(const std::string& capability);
+
+  rclcpp::QoS determineQoS(const std::string& topic);
 };
 
 }  // namespace foxglove_bridge

@@ -12,6 +12,26 @@ inline bool isHiddenTopicOrService(const std::string& name) {
   }
   return name.front() == '_' || name.find("/_") != std::string::npos;
 }
+
+inline foxglove::WebSocketServerCapabilities processCapabilities(
+  const std::vector<std::string>& capabilities) {
+  const std::unordered_map<std::string, foxglove::WebSocketServerCapabilities>
+    STRING_TO_CAPABILITY = {
+      {"clientPublish", foxglove::WebSocketServerCapabilities::ClientPublish},
+      {"parameters", foxglove::WebSocketServerCapabilities::Parameters},
+      {"parametersSubscribe", foxglove::WebSocketServerCapabilities::Parameters},
+      {"services", foxglove::WebSocketServerCapabilities::Services},
+      {"connectionGraph", foxglove::WebSocketServerCapabilities::ConnectionGraph},
+      {"assets", foxglove::WebSocketServerCapabilities::Assets},
+    };
+  foxglove::WebSocketServerCapabilities out = foxglove::WebSocketServerCapabilities(0);
+  for (const auto& capability : capabilities) {
+    if (STRING_TO_CAPABILITY.find(capability) != STRING_TO_CAPABILITY.end()) {
+      out = out | STRING_TO_CAPABILITY.at(capability);
+    }
+  }
+  return out;
+}
 }  // namespace
 
 using namespace std::chrono_literals;
@@ -55,8 +75,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   const auto assetUriAllowlist = this->get_parameter(PARAM_ASSET_URI_ALLOWLIST).as_string_array();
   _assetUriAllowlistPatterns = parseRegexStrings(this, assetUriAllowlist);
   _disableLoanMessage = this->get_parameter(PARAM_DISABLE_LOAN_MESSAGE).as_bool();
-  const auto ignoreUnresponsiveParamNodes =
-    this->get_parameter(PARAM_IGN_UNRESPONSIVE_PARAM_NODES).as_bool();
+  // const auto ignoreUnresponsiveParamNodes =
+  //   this->get_parameter(PARAM_IGN_UNRESPONSIVE_PARAM_NODES).as_bool();
 
   const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
   // Fetching of assets may be blocking, hence we fetch them in a separate thread.
@@ -80,7 +100,45 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   _server = foxglove_ws::ServerFactory::createServer<ConnectionHandle>("foxglove_bridge",
                                                                        logHandler, serverOptions);
 
+  foxglove::setLogLevel(foxglove::LogLevel::Debug);
+  foxglove::WebSocketServerOptions sdkServerOptions;
+  sdkServerOptions.host = address;
+  sdkServerOptions.port = port;
+  sdkServerOptions.supported_encodings = {"cdr", "json"};
+  sdkServerOptions.capabilities = processCapabilities(_capabilities);
+  if (_useSimTime) {
+    sdkServerOptions.capabilities =
+      sdkServerOptions.capabilities | foxglove::WebSocketServerCapabilities::Time;
+  }
+
+  // Setup callbacks
+  sdkServerOptions.callbacks.onConnectionGraphSubscribe =
+    std::bind(&FoxgloveBridge::subscribeConnectionGraph, this, true);
+  sdkServerOptions.callbacks.onSubscribe = std::bind(&FoxgloveBridge::subscribe, this, _1, _2);
+  sdkServerOptions.callbacks.onUnsubscribe = std::bind(&FoxgloveBridge::unsubscribe, this, _1, _2);
+
+  if (hasCapability(foxglove_ws::CAPABILITY_CLIENT_PUBLISH)) {
+    sdkServerOptions.callbacks.onClientAdvertise =
+      std::bind(&FoxgloveBridge::clientAdvertise, this, _1, _2);
+    sdkServerOptions.callbacks.onClientUnadvertise =
+      std::bind(&FoxgloveBridge::clientUnadvertise, this, _1, _2);
+    sdkServerOptions.callbacks.onMessageData =
+      std::bind(&FoxgloveBridge::clientMessage, this, _1, _2, _3, _4);
+  }
+
+  // TODO: The SDK server currently doesn't implement any of the TLS functionality. Once that
+  // exists, add it here.
+
+  auto maybeSdkServer = foxglove::WebSocketServer::create(std::move(sdkServerOptions));
+  assert(maybeSdkServer.has_value());
+
+  // Constructing an SDK server also starts it listening automatically
+  _sdkServer = std::make_unique<foxglove::WebSocketServer>(std::move(maybeSdkServer.value()));
+  this->set_parameter(rclcpp::Parameter{PARAM_PORT, _sdkServer->port()});
+  RCLCPP_INFO(this->get_logger(), "[SDK] server listening on port %d", _sdkServer->port());
+
   foxglove_ws::ServerHandlers<ConnectionHandle> hdlrs;
+  /*
   hdlrs.subscribeHandler = std::bind(&FoxgloveBridge::subscribe, this, _1, _2);
   hdlrs.unsubscribeHandler = std::bind(&FoxgloveBridge::unsubscribe, this, _1, _2);
   hdlrs.clientAdvertiseHandler = std::bind(&FoxgloveBridge::clientAdvertise, this, _1, _2);
@@ -111,17 +169,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
         std::bind(&FoxgloveBridge::fetchAsset, this, uri, requestId, hdl));
     };
   }
-
   _server->setHandlers(std::move(hdlrs));
-  _server->start(address, port);
-
-  // Get the actual port we bound to
-  uint16_t listeningPort = _server->getPort();
-  if (port != listeningPort) {
-    RCLCPP_DEBUG(this->get_logger(), "Reassigning \"port\" parameter from %d to %d", port,
-                 listeningPort);
-    this->set_parameter(rclcpp::Parameter{PARAM_PORT, listeningPort});
-  }
+  */
 
   // Start the thread polling for rosgraph changes
   _rosgraphPollThread =
@@ -138,7 +187,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
       [&](std::shared_ptr<const rosgraph_msgs::msg::Clock> msg) {
         const auto timestamp = rclcpp::Time{msg->clock}.nanoseconds();
         assert(timestamp >= 0 && "Timestamp is negative");
-        _server->broadcastTime(static_cast<uint64_t>(timestamp));
+        _sdkServer->broadcastTime(static_cast<uint64_t>(timestamp));
       });
   }
 }
@@ -150,6 +199,7 @@ FoxgloveBridge::~FoxgloveBridge() {
     _rosgraphPollThread->join();
   }
   _server->stop();
+  _sdkServer->stop();
   RCLCPP_INFO(this->get_logger(), "Shutdown complete");
 }
 
@@ -216,74 +266,82 @@ void FoxgloveBridge::updateAdvertisedTopics(
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
   // Remove channels for which the topic does not exist anymore
-  std::vector<foxglove_ws::ChannelId> channelIdsToRemove;
-  for (auto channelIt = _advertisedTopics.begin(); channelIt != _advertisedTopics.end();) {
-    const TopicAndDatatype topicAndDatatype = {channelIt->second.topic,
-                                               channelIt->second.schemaName};
-    if (latestTopics.find(topicAndDatatype) == latestTopics.end()) {
-      const auto channelId = channelIt->first;
-      channelIdsToRemove.push_back(channelId);
-      _subscriptions.erase(channelId);
-      RCLCPP_INFO(this->get_logger(), "Removed channel %d for topic \"%s\" (%s)", channelId,
-                  topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str());
-      channelIt = _advertisedTopics.erase(channelIt);
+  for (auto channelIt = _sdkChannels.begin(); channelIt != _sdkChannels.end();) {
+    auto& channel = channelIt->second;
+    std::string schemaName = channel.schema().value().name;
+    std::string topic(channel.topic());
+    const TopicAndDatatype topicAndSchemaName = {topic, schemaName};
+    if (latestTopics.find(topicAndSchemaName) == latestTopics.end()) {
+      RCLCPP_INFO(this->get_logger(), "Removing channel %lu for topic \"%s\" (%s)", channel.id(),
+                  topic.c_str(), schemaName.c_str());
+      channel.close();
+      channelIt = _sdkChannels.erase(channelIt);
     } else {
       channelIt++;
     }
   }
-  _server->removeChannels(channelIdsToRemove);
 
-  // Add new channels for new topics
-  std::vector<foxglove_ws::ChannelWithoutId> channelsToAdd;
+  // Advertise new topics
   for (const auto& topicAndDatatype : latestTopics) {
-    if (std::find_if(_advertisedTopics.begin(), _advertisedTopics.end(),
-                     [topicAndDatatype](const auto& channelIdAndChannel) {
-                       const auto& channel = channelIdAndChannel.second;
-                       return channel.topic == topicAndDatatype.first &&
-                              channel.schemaName == topicAndDatatype.second;
-                     }) != _advertisedTopics.end()) {
-      continue;  // Topic already advertised
-    }
+    const auto& topic = topicAndDatatype.first;
+    const auto& schemaName = topicAndDatatype.second;
 
-    foxglove_ws::ChannelWithoutId newChannel{};
-    newChannel.topic = topicAndDatatype.first;
-    newChannel.schemaName = topicAndDatatype.second;
-
-    try {
-      auto [format, schema] = _messageDefinitionCache.get_full_text(topicAndDatatype.second);
-      switch (format) {
-        case foxglove::MessageDefinitionFormat::MSG:
-          newChannel.encoding = "cdr";
-          newChannel.schema = schema;
-          newChannel.schemaEncoding = "ros2msg";
-          break;
-        case foxglove::MessageDefinitionFormat::IDL:
-          newChannel.encoding = "cdr";
-          newChannel.schema = schema;
-          newChannel.schemaEncoding = "ros2idl";
-          break;
-      }
-
-    } catch (const foxglove::DefinitionNotFoundError& err) {
-      RCLCPP_WARN(this->get_logger(), "Could not find definition for type %s: %s",
-                  topicAndDatatype.second.c_str(), err.what());
-      // We still advertise the channel, but with an emtpy schema
-      newChannel.schema = "";
-    } catch (const std::exception& err) {
-      RCLCPP_WARN(this->get_logger(), "Failed to add channel for topic \"%s\" (%s): %s",
-                  topicAndDatatype.first.c_str(), topicAndDatatype.second.c_str(), err.what());
+    if (std::find_if(
+          _sdkChannels.begin(), _sdkChannels.end(), [&topic, &schemaName](const auto& kvp) {
+            const auto& [channelId, channel] = kvp;
+            return channel.topic() == topic && channel.schema().value().name == schemaName;
+          }) != _sdkChannels.end()) {
       continue;
     }
-    channelsToAdd.push_back(newChannel);
-  }
 
-  const auto channelIds = _server->addChannels(channelsToAdd);
-  for (size_t i = 0; i < channelsToAdd.size(); ++i) {
-    const auto channelId = channelIds[i];
-    const auto& channel = channelsToAdd[i];
-    _advertisedTopics.emplace(channelId, channel);
-    RCLCPP_DEBUG(this->get_logger(), "Advertising channel %d for topic \"%s\" (%s)", channelId,
-                 channel.topic.c_str(), channel.schemaName.c_str());
+    // Load actual schema and encoding from disk
+    // TODO: (FG-10638): Add support for reading schemas from the wire if available
+    std::optional<foxglove::Schema> schema = foxglove::Schema();
+    schema->name = schemaName;
+    std::string messageEncoding;
+
+    try {
+      auto [format, msgDefinition] = _messageDefinitionCache.get_full_text(schemaName);
+      schema->data_len = msgDefinition.size();
+      schema->data = reinterpret_cast<const std::byte*>(msgDefinition.data());
+
+      switch (format) {
+        case foxglove::MessageDefinitionFormat::MSG:
+          messageEncoding = "cdr";
+          schema->encoding = "ros2msg";
+          break;
+        case foxglove::MessageDefinitionFormat::IDL:
+          messageEncoding = "cdr";
+          schema->encoding = "ros2idl";
+          break;
+        default:
+          RCLCPP_WARN(this->get_logger(), "Unsupported message definition format for type %s",
+                      schemaName.c_str());
+          continue;
+      }
+    } catch (const foxglove::DefinitionNotFoundError& err) {
+      // If the definition isn't found, advertise the channel with an empty schema as a fallback
+      RCLCPP_WARN(this->get_logger(), "Could not find definition for type %s: %s",
+                  schemaName.c_str(), err.what());
+      schema = std::nullopt;
+    } catch (const std::exception& err) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to load schemaDefinition for topic \"%s\" (%s): %s",
+                   topic.c_str(), schemaName.c_str(), err.what());
+      continue;
+    }
+
+    // Create the new SDK channel
+    auto channelResult = foxglove::RawChannel::create(topic, messageEncoding, schema);
+    if (!channelResult.has_value()) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to create channel for topic \"%s\" (%s)",
+                   topic.c_str(), foxglove::strerror(channelResult.error()));
+      continue;
+    }
+
+    const ChannelId channelId = channelResult.value().id();
+    RCLCPP_INFO(this->get_logger(), "Advertising new channel %lu for topic \"%s\"", channelId,
+                topic.c_str());
+    _sdkChannels.insert({channelId, std::move(channelResult.value())});
   }
 }
 
@@ -385,7 +443,8 @@ void FoxgloveBridge::updateAdvertisedServices() {
 
 void FoxgloveBridge::updateConnectionGraph(
   const std::map<std::string, std::vector<std::string>>& topicNamesAndTypes) {
-  foxglove_ws::MapOfSets publishers, subscribers;
+  MapOfSets publishers, subscribers;
+  foxglove::ConnectionGraph connectionGraph;
 
   for (const auto& topicNameAndType : topicNamesAndTypes) {
     const auto& topicName = topicNameAndType.first;
@@ -408,9 +467,14 @@ void FoxgloveBridge::updateConnectionGraph(
     }
     publishers.emplace(topicName, publisherIds);
     subscribers.emplace(topicName, subscriberIds);
+
+    std::vector<std::string> publisherIdsVec(publisherIds.begin(), publisherIds.end());
+    std::vector<std::string> subscriberIdsVec(subscriberIds.begin(), subscriberIds.end());
+    connectionGraph.setPublishedTopic(topicName, publisherIdsVec);
+    connectionGraph.setSubscribedTopic(topicName, subscriberIdsVec);
   }
 
-  foxglove_ws::MapOfSets services;
+  MapOfSets services;
   for (const auto& fqnNodeName : get_node_names()) {
     const auto [nodeNs, nodeName] = getNodeAndNodeNamespace(fqnNodeName);
     const auto serviceNamesAndTypes = get_service_names_and_types_by_node(nodeName, nodeNs);
@@ -422,38 +486,51 @@ void FoxgloveBridge::updateConnectionGraph(
       }
     }
   }
+  for (const auto& [serviceName, providerIds] : services) {
+    connectionGraph.setAdvertisedService(serviceName,
+                                         std::vector(providerIds.begin(), providerIds.end()));
+  }
 
-  _server->updateConnectionGraph(publishers, subscribers, services);
+  RCLCPP_INFO(this->get_logger(), "[SDK] publishing connection graph");
+  _sdkServer->publishConnectionGraph(connectionGraph);
 }
 
 void FoxgloveBridge::subscribeConnectionGraph(bool subscribe) {
+  RCLCPP_INFO(this->get_logger(), "[SDK] received connection graph subscribe request");
   if ((_subscribeGraphUpdates = subscribe)) {
-    updateConnectionGraph(get_topic_names_and_types());
+    // TODO: This causes a deadlock in the SDK implementation
+    // updateConnectionGraph(get_topic_names_and_types());
   };
 }
 
-void FoxgloveBridge::subscribe(foxglove_ws::ChannelId channelId, ConnectionHandle clientHandle) {
+void FoxgloveBridge::subscribe(ChannelId channelId, const foxglove::ClientMetadata& client) {
+  if (!client.sink_id.has_value()) {
+    RCLCPP_ERROR(this->get_logger(),
+                 "[SDK] received subscribe request from client %u for channel %lu but client "
+                 "has no sink ID",
+                 client.id, channelId);
+    return;
+  }
+
+  RCLCPP_INFO(this->get_logger(),
+              "[SDK] received subscribe request for channel %lu from client %u (sink %lu)",
+              channelId, client.id, client.sink_id.value());
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
-  auto it = _advertisedTopics.find(channelId);
-  if (it == _advertisedTopics.end()) {
-    throw foxglove_ws::ChannelError(
-      channelId, "Received subscribe request for unknown channel " + std::to_string(channelId));
+
+  // REVIEW: Is this necessary if the SDK server is checking that the channel exists before calling
+  // this callback?
+  auto it = _sdkChannels.find(channelId);
+  if (it == _sdkChannels.end()) {
+    RCLCPP_ERROR(this->get_logger(), "[SDK] received subscribe request for unknown channel: %lu",
+                 channelId);
+    return;
   }
 
-  const auto& channel = it->second;
-  const auto& topic = channel.topic;
-  const auto& datatype = channel.schemaName;
+  auto& channel = it->second;
+  const std::string topic(channel.topic());
+  const std::string datatype = channel.schema().value().name;
 
-  // Get client subscriptions for this channel or insert an empty map.
-  auto [subscriptionsIt, firstSubscription] =
-    _subscriptions.emplace(channelId, SubscriptionsByClient());
-  auto& subscriptionsByClient = subscriptionsIt->second;
-
-  if (!firstSubscription &&
-      subscriptionsByClient.find(clientHandle) != subscriptionsByClient.end()) {
-    throw foxglove_ws::ChannelError(
-      channelId, "Client is already subscribed to channel " + std::to_string(channelId));
-  }
+  const rclcpp::QoS qos = determineQoS(topic);
 
   rclcpp::SubscriptionEventCallbacks eventCallbacks;
   eventCallbacks.incompatible_qos_callback = [&](const rclcpp::QOSRequestedIncompatibleQoSInfo&) {
@@ -465,198 +542,107 @@ void FoxgloveBridge::subscribe(foxglove_ws::ChannelId channelId, ConnectionHandl
   subscriptionOptions.event_callbacks = eventCallbacks;
   subscriptionOptions.callback_group = _subscriptionCallbackGroup;
 
-  // Select an appropriate subscription QOS profile. This is similar to how ros2 topic echo
-  // does it:
-  // https://github.com/ros2/ros2cli/blob/619b3d1c9/ros2topic/ros2topic/verb/echo.py#L137-L194
-  size_t depth = 0;
-  size_t reliabilityReliableEndpointsCount = 0;
-  size_t durabilityTransientLocalEndpointsCount = 0;
+  auto subscription = this->create_generic_subscription(
+    topic, datatype, qos,
+    [this, channelId, client](std::shared_ptr<const rclcpp::SerializedMessage> msg) {
+      this->rosMessageHandler(channelId, client.sink_id.value(), msg);
+    },
+    subscriptionOptions);
 
-  const auto publisherInfo = this->get_publishers_info_by_topic(topic);
-  for (const auto& publisher : publisherInfo) {
-    const auto& qos = publisher.qos_profile();
-    if (qos.reliability() == rclcpp::ReliabilityPolicy::Reliable) {
-      ++reliabilityReliableEndpointsCount;
-    }
-    if (qos.durability() == rclcpp::DurabilityPolicy::TransientLocal) {
-      ++durabilityTransientLocalEndpointsCount;
-    }
-    // Some RMWs do not retrieve history information of the publisher endpoint in which case the
-    // history depth is 0. We use a lower limit of 1 here, so that the history depth is at least
-    // equal to the number of publishers. This covers the case where there are multiple
-    // transient_local publishers with a depth of 1 (e.g. multiple tf_static transform
-    // broadcasters). See also
-    // https://github.com/foxglove/ros-foxglove-bridge/issues/238 and
-    // https://github.com/foxglove/ros-foxglove-bridge/issues/208
-    const size_t publisherHistoryDepth = std::max(static_cast<size_t>(1), qos.depth());
-    depth = depth + publisherHistoryDepth;
+  if (!client.sink_id.has_value()) {
+    RCLCPP_ERROR(this->get_logger(),
+                 "[SDK] received subscribe request for channel %lu but client "
+                 "has no sink ID",
+                 channelId);
+    return;
   }
 
-  depth = std::max(depth, _minQosDepth);
-  if (depth > _maxQosDepth) {
-    RCLCPP_WARN(this->get_logger(),
-                "Limiting history depth for topic '%s' to %zu (was %zu). You may want to increase "
-                "the max_qos_depth parameter value.",
-                topic.c_str(), _maxQosDepth, depth);
-    depth = _maxQosDepth;
-  }
-
-  rclcpp::QoS qos{rclcpp::KeepLast(depth)};
-
-  // Force the QoS to be "best_effort" if in the whitelist
-  if (isWhitelisted(topic, _bestEffortQosTopicWhiteListPatterns)) {
-    qos.best_effort();
-  } else if (!publisherInfo.empty() && reliabilityReliableEndpointsCount == publisherInfo.size()) {
-    // If all endpoints are reliable, ask for reliable
-    qos.reliable();
-  } else {
-    if (reliabilityReliableEndpointsCount > 0) {
-      RCLCPP_WARN(
-        this->get_logger(),
-        "Some, but not all, publishers on topic '%s' are offering QoSReliabilityPolicy.RELIABLE. "
-        "Falling back to QoSReliabilityPolicy.BEST_EFFORT as it will connect to all publishers",
-        topic.c_str());
-    }
-    qos.best_effort();
-  }
-
-  // If all endpoints are transient_local, ask for transient_local
-  if (!publisherInfo.empty() && durabilityTransientLocalEndpointsCount == publisherInfo.size()) {
-    qos.transient_local();
-  } else {
-    if (durabilityTransientLocalEndpointsCount > 0) {
-      RCLCPP_WARN(this->get_logger(),
-                  "Some, but not all, publishers on topic '%s' are offering "
-                  "QoSDurabilityPolicy.TRANSIENT_LOCAL. Falling back to "
-                  "QoSDurabilityPolicy.VOLATILE as it will connect to all publishers",
-                  topic.c_str());
-    }
-    qos.durability_volatile();
-  }
-
-  if (firstSubscription) {
-    RCLCPP_INFO(
-      this->get_logger(), "Subscribing to topic \"%s\" (%s) on channel %d with reliablity \"%s\"",
-      topic.c_str(), datatype.c_str(), channelId,
-      qos.reliability() == rclcpp::ReliabilityPolicy::Reliable ? "reliable" : "best_effort");
-
-  } else {
-    RCLCPP_INFO(this->get_logger(), "Adding subscriber #%zu to topic \"%s\" (%s) on channel %d",
-                subscriptionsByClient.size(), topic.c_str(), datatype.c_str(), channelId);
-  }
-
-  try {
-    auto subscriber = this->create_generic_subscription(
-      topic, datatype, qos,
-      [this, channelId, clientHandle](std::shared_ptr<const rclcpp::SerializedMessage> msg) {
-        this->rosMessageHandler(channelId, clientHandle, msg);
-      },
-      subscriptionOptions);
-    subscriptionsByClient.emplace(clientHandle, std::move(subscriber));
-  } catch (const std::exception& ex) {
-    throw foxglove_ws::ChannelError(
-      channelId, "Failed to subscribe to topic " + topic + " (" + datatype + "): " + ex.what());
-  }
+  _sdkSubscriptions.insert({{channelId, client.id}, subscription});
+  RCLCPP_INFO(
+    this->get_logger(),
+    "[SDK] created ROS subscription on %s (%s) successfully for channel %lu (client %u, sink %lu)",
+    topic.c_str(), datatype.c_str(), channelId, client.id, client.sink_id.value());
 }
 
-void FoxgloveBridge::unsubscribe(foxglove_ws::ChannelId channelId, ConnectionHandle clientHandle) {
+void FoxgloveBridge::unsubscribe(ChannelId channelId, const foxglove::ClientMetadata& client) {
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
-  const auto channelIt = _advertisedTopics.find(channelId);
-  if (channelIt == _advertisedTopics.end()) {
-    throw foxglove_ws::ChannelError(
-      channelId, "Received unsubscribe request for unknown channel " + std::to_string(channelId));
-  }
-  const auto& channel = channelIt->second;
+  RCLCPP_INFO(this->get_logger(), "[SDK] received unsubscribe request for channel %lu", channelId);
 
-  auto subscriptionsIt = _subscriptions.find(channelId);
-  if (subscriptionsIt == _subscriptions.end()) {
-    throw foxglove_ws::ChannelError(channelId, "Received unsubscribe request for channel " +
-                                                 std::to_string(channelId) +
-                                                 " that was not subscribed to");
+  auto it = _sdkChannels.find(channelId);
+  if (it == _sdkChannels.end()) {
+    RCLCPP_ERROR(this->get_logger(), "[SDK] received unsubscribe request for unknown channel %lu",
+                 channelId);
+    return;
   }
 
-  auto& subscriptionsByClient = subscriptionsIt->second;
-  const auto clientSubscription = subscriptionsByClient.find(clientHandle);
-  if (clientSubscription == subscriptionsByClient.end()) {
-    throw foxglove_ws::ChannelError(
-      channelId, "Received unsubscribe request for channel " + std::to_string(channelId) +
-                   "from a client that was not subscribed to this channel");
+  auto subscriptionIt = _sdkSubscriptions.find({channelId, client.id});
+  if (subscriptionIt == _sdkSubscriptions.end()) {
+    RCLCPP_ERROR(this->get_logger(),
+                 "[SDK] Client %u tried unsubscribing from channel %lu but a corresponding ROS "
+                 "subscription doesn't exist",
+                 client.id, channelId);
+    return;
   }
 
-  subscriptionsByClient.erase(clientSubscription);
-  if (subscriptionsByClient.empty()) {
-    RCLCPP_INFO(this->get_logger(), "Unsubscribing from topic \"%s\" (%s) on channel %d",
-                channel.topic.c_str(), channel.schemaName.c_str(), channelId);
-    _subscriptions.erase(subscriptionsIt);
-  } else {
-    RCLCPP_INFO(this->get_logger(),
-                "Removed one subscription from channel %d (%zu subscription(s) left)", channelId,
-                subscriptionsByClient.size());
-  }
+  const std::string& topic = subscriptionIt->second->get_topic_name();
+  RCLCPP_INFO(this->get_logger(),
+              "[SDK] Cleaned up subscription to topic %s for client %u on channel %lu",
+              topic.c_str(), client.id, channelId);
+  _sdkSubscriptions.erase(subscriptionIt);
 }
 
-void FoxgloveBridge::clientAdvertise(const foxglove_ws::ClientAdvertisement& advertisement,
-                                     ConnectionHandle hdl) {
+void FoxgloveBridge::clientAdvertise(ClientId clientId, const foxglove::ClientChannel& channel) {
   std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
 
-  // Get client publications or insert an empty map.
-  auto [clientPublicationsIt, isFirstPublication] =
-    _clientAdvertisedTopics.emplace(hdl, ClientPublications());
+  ChannelAndClientId key = {channel.id, clientId};
+  const std::string topicName(channel.topic);
+  const std::string topicType(channel.schema_name);
+  const std::string encoding(channel.encoding);
 
-  auto& clientPublications = clientPublicationsIt->second;
-
-  if (!isFirstPublication &&
-      clientPublications.find(advertisement.channelId) != clientPublications.end()) {
+  if (_clientAdvertisedTopics.find(key) != _clientAdvertisedTopics.end()) {
     throw foxglove_ws::ClientChannelError(
-      advertisement.channelId,
-      "Received client advertisement from " + _server->remoteEndpointString(hdl) + " for channel " +
-        std::to_string(advertisement.channelId) + " it had already advertised");
+      channel.id, "Received client advertisement from client ID " + std::to_string(clientId) +
+                    " for channel " + std::to_string(channel.id) + " it had already advertised");
   }
 
-  if (advertisement.schemaName.empty()) {
+  if (channel.schema_name.empty()) {
     throw foxglove_ws::ClientChannelError(
-      advertisement.channelId,
-      "Received client advertisement from " + _server->remoteEndpointString(hdl) + " for channel " +
-        std::to_string(advertisement.channelId) + " with empty schema name");
+      channel.id, "Received client advertisement from client ID " + std::to_string(clientId) +
+                    " for channel " + std::to_string(channel.id) + " with empty schema name");
   }
 
-  if (advertisement.encoding == "json") {
+  if (encoding == "json") {
     // register the JSON parser for this schemaName
-    auto parserIt = _jsonParsers.find(advertisement.schemaName);
+    std::string schemaName(channel.schema_name);
+    auto parserIt = _jsonParsers.find(schemaName);
     if (parserIt == _jsonParsers.end()) {
-      const auto& schemaName = advertisement.schemaName;
       std::string schema = "";
-
-      if (!advertisement.schema.empty()) {
+      if (channel.schema_len > 0) {
         // Schema is given by the advertisement
-        schema = std::string(reinterpret_cast<const char*>(advertisement.schema.data()),
-                             advertisement.schema.size());
+        schema = std::string(reinterpret_cast<const char*>(channel.schema), channel.schema_len);
       } else {
         // Schema not given, look it up.
         auto [format, msgDefinition] = _messageDefinitionCache.get_full_text(schemaName);
         if (format != foxglove::MessageDefinitionFormat::MSG) {
           throw foxglove_ws::ClientChannelError(
-            advertisement.channelId,
-            "Message definition (.msg) for schema " + schemaName + " not found.");
+            channel.id, "Message definition (.msg) for schema " + schemaName + " not found.");
         }
 
         schema = msgDefinition;
       }
 
       auto parser = std::make_shared<RosMsgParser::Parser>(
-        advertisement.topic, RosMsgParser::ROSType(schemaName), schema);
+        topicName, RosMsgParser::ROSType(schemaName), schema);
       _jsonParsers.insert({schemaName, parser});
     }
   }
 
   try {
     // Create a new topic advertisement
-    const auto& topicName = advertisement.topic;
-    const auto& topicType = advertisement.schemaName;
 
-    // Lookup if there are publishers from other nodes for that topic. If that's the case, we use
-    // a matching QoS profile.
+    // Lookup if there are publishers from other nodes for that topic. If that's the case, we
+    // use a matching QoS profile.
     const auto otherPublishers = get_publishers_info_by_topic(topicName);
     const auto otherPublisherIt =
       std::find_if(otherPublishers.begin(), otherPublishers.end(),
@@ -668,8 +654,9 @@ void FoxgloveBridge::clientAdvertise(const foxglove_ws::ClientAdvertisement& adv
                                                                 : otherPublisherIt->qos_profile();
 
     // When the QoS profile is copied from another existing publisher, it can happen that the
-    // history policy is Unknown, leading to an error when subsequently trying to create a publisher
-    // with that QoS profile. As a fix, we explicitly set the history policy to the system default.
+    // history policy is Unknown, leading to an error when subsequently trying to create a
+    // publisher with that QoS profile. As a fix, we explicitly set the history policy to the
+    // system default.
     if (qos.history() == rclcpp::HistoryPolicy::Unknown) {
       qos.history(rclcpp::HistoryPolicy::SystemDefault);
     }
@@ -678,48 +665,37 @@ void FoxgloveBridge::clientAdvertise(const foxglove_ws::ClientAdvertisement& adv
     auto publisher = this->create_generic_publisher(topicName, topicType, qos, publisherOptions);
 
     RCLCPP_INFO(this->get_logger(),
-                "Client %s is advertising \"%s\" (%s) on channel %d with encoding \"%s\"",
-                _server->remoteEndpointString(hdl).c_str(), topicName.c_str(), topicType.c_str(),
-                advertisement.channelId, advertisement.encoding.c_str());
+                "Client ID %d is advertising \"%s\" (%s) on channel %d with encoding \"%s\"",
+                clientId, topicName.c_str(), topicType.c_str(), channel.id, encoding.c_str());
 
     // Store the new topic advertisement
-    clientPublications.emplace(advertisement.channelId, std::move(publisher));
+    ClientAdvertisement clientAdvertisement{std::move(publisher), topicName, topicType, encoding};
+    _clientAdvertisedTopics.emplace(key, std::move(clientAdvertisement));
   } catch (const std::exception& ex) {
-    throw foxglove_ws::ClientChannelError(advertisement.channelId,
+    throw foxglove_ws::ClientChannelError(channel.id,
                                           std::string("Failed to create publisher: ") + ex.what());
   }
 }
 
-void FoxgloveBridge::clientUnadvertise(foxglove_ws::ChannelId channelId, ConnectionHandle hdl) {
+void FoxgloveBridge::clientUnadvertise(ClientId clientId, ChannelId clientChannelId) {
   std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
 
-  auto it = _clientAdvertisedTopics.find(hdl);
+  ChannelAndClientId key = {clientChannelId, clientId};
+
+  auto it = _clientAdvertisedTopics.find(key);
   if (it == _clientAdvertisedTopics.end()) {
-    throw foxglove_ws::ClientChannelError(
-      channelId, "Ignoring client unadvertisement from " + _server->remoteEndpointString(hdl) +
-                   " for unknown channel " + std::to_string(channelId) +
-                   ", client has no advertised topics");
+    throw foxglove_ws::ClientChannelError(clientChannelId,
+                                          "Ignoring client unadvertisement from client ID " +
+                                            std::to_string(clientId) + " for unknown channel " +
+                                            std::to_string(clientChannelId));
   }
 
-  auto& clientPublications = it->second;
-  auto it2 = clientPublications.find(channelId);
-  if (it2 == clientPublications.end()) {
-    throw foxglove_ws::ClientChannelError(
-      channelId, "Ignoring client unadvertisement from " + _server->remoteEndpointString(hdl) +
-                   " for unknown channel " + std::to_string(channelId) + ", client has " +
-                   std::to_string(clientPublications.size()) + " advertised topic(s)");
-  }
-
-  const auto& publisher = it2->second;
+  const auto& publisher = it->second.publisher;
   RCLCPP_INFO(this->get_logger(),
-              "Client %s is no longer advertising %s (%zu subscribers) on channel %d",
-              _server->remoteEndpointString(hdl).c_str(), publisher->get_topic_name(),
-              publisher->get_subscription_count(), channelId);
+              "Client ID %u is no longer advertising %s (%zu subscribers) on channel %lu", clientId,
+              publisher->get_topic_name(), publisher->get_subscription_count(), clientChannelId);
 
-  clientPublications.erase(it2);
-  if (clientPublications.empty()) {
-    _clientAdvertisedTopics.erase(it);
-  }
+  _clientAdvertisedTopics.erase(it);
 
   // Create a timer that immedeately goes out of scope (so it never fires) which will trigger
   // the previously destroyed publisher to be cleaned up. This is a workaround for
@@ -727,31 +703,27 @@ void FoxgloveBridge::clientUnadvertise(foxglove_ws::ChannelId channelId, Connect
   this->create_wall_timer(1s, []() {});
 }
 
-void FoxgloveBridge::clientMessage(const foxglove_ws::ClientMessage& message,
-                                   ConnectionHandle hdl) {
+void FoxgloveBridge::clientMessage(ClientId clientId, ChannelId clientChannelId,
+                                   const std::byte* data, size_t dataLen) {
   // Get the publisher
   rclcpp::GenericPublisher::SharedPtr publisher;
+  std::string encoding;
+  std::string schemaName;
   {
-    const auto channelId = message.advertisement.channelId;
+    const ChannelAndClientId key = {clientChannelId, clientId};
     std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
 
-    auto it = _clientAdvertisedTopics.find(hdl);
+    auto it = _clientAdvertisedTopics.find(key);
     if (it == _clientAdvertisedTopics.end()) {
       throw foxglove_ws::ClientChannelError(
-        channelId, "Dropping client message from " + _server->remoteEndpointString(hdl) +
-                     " for unknown channel " + std::to_string(channelId) +
-                     ", client has no advertised topics");
+        clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
+                           " for unknown channel " + std::to_string(clientChannelId) +
+                           ", client has no advertised topics");
     }
 
-    auto& clientPublications = it->second;
-    auto it2 = clientPublications.find(channelId);
-    if (it2 == clientPublications.end()) {
-      throw foxglove_ws::ClientChannelError(
-        channelId, "Dropping client message from " + _server->remoteEndpointString(hdl) +
-                     " for unknown channel " + std::to_string(channelId) + ", client has " +
-                     std::to_string(clientPublications.size()) + " advertised topic(s)");
-    }
-    publisher = it2->second;
+    publisher = it->second.publisher;
+    encoding = it->second.encoding;
+    schemaName = it->second.topicType;
   }
 
   auto publishMessage = [publisher, this](const void* data, size_t size) {
@@ -768,43 +740,39 @@ void FoxgloveBridge::clientMessage(const foxglove_ws::ClientMessage& message,
     }
   };
 
-  if (message.advertisement.encoding == "cdr") {
-    publishMessage(message.getData(), message.getLength());
-  } else if (message.advertisement.encoding == "json") {
+  if (encoding == "cdr") {
+    publishMessage(data, dataLen);
+  } else if (encoding == "json") {
     // get the specific parser for this schemaName
     std::shared_ptr<RosMsgParser::Parser> parser;
     {
       std::lock_guard<std::mutex> lock(_clientAdvertisementsMutex);
-      auto parserIt = _jsonParsers.find(message.advertisement.schemaName);
+      auto parserIt = _jsonParsers.find(schemaName);
       if (parserIt != _jsonParsers.end()) {
         parser = parserIt->second;
       }
     }
     if (!parser) {
-      throw foxglove_ws::ClientChannelError(message.advertisement.channelId,
-                                            "Dropping client message from " +
-                                              _server->remoteEndpointString(hdl) +
-                                              " with encoding \"json\": no parser found");
+      throw foxglove_ws::ClientChannelError(
+        clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
+                           " with encoding \"json\": no parser found");
     } else {
       thread_local RosMsgParser::ROS2_Serializer serializer;
       serializer.reset();
-      const std::string jsonMessage(reinterpret_cast<const char*>(message.getData()),
-                                    message.getLength());
+      const std::string jsonMessage(reinterpret_cast<const char*>(data), dataLen);
       try {
         parser->serializeFromJson(jsonMessage, &serializer);
         publishMessage(serializer.getBufferData(), serializer.getBufferSize());
       } catch (const std::exception& ex) {
-        throw foxglove_ws::ClientChannelError(message.advertisement.channelId,
-                                              "Dropping client message from " +
-                                                _server->remoteEndpointString(hdl) +
-                                                " with encoding \"json\": " + ex.what());
+        throw foxglove_ws::ClientChannelError(
+          clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
+                             " with encoding \"json\": " + ex.what());
       }
     }
   } else {
     throw foxglove_ws::ClientChannelError(
-      message.advertisement.channelId,
-      "Dropping client message from " + _server->remoteEndpointString(hdl) +
-        " with unknown encoding \"" + message.advertisement.encoding + "\"");
+      clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
+                         " with unknown encoding \"" + encoding + "\"");
   }
 }
 
@@ -864,16 +832,22 @@ void FoxgloveBridge::logHandler(LogLevel level, char const* msg) {
   }
 }
 
-void FoxgloveBridge::rosMessageHandler(const foxglove_ws::ChannelId& channelId,
-                                       ConnectionHandle clientHandle,
+void FoxgloveBridge::rosMessageHandler(ChannelId channelId, SinkId sinkId,
                                        std::shared_ptr<const rclcpp::SerializedMessage> msg) {
   // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
   // to `/rosout` will cause a feedback loop
   const auto timestamp = this->now().nanoseconds();
   assert(timestamp >= 0 && "Timestamp is negative");
   const auto rclSerializedMsg = msg->get_rcl_serialized_message();
-  _server->sendMessage(clientHandle, channelId, static_cast<uint64_t>(timestamp),
-                       rclSerializedMsg.buffer, rclSerializedMsg.buffer_length);
+
+  std::lock_guard<std::mutex> lock(_subscriptionsMutex);
+  if (_sdkChannels.find(channelId) == _sdkChannels.end()) {
+    return;
+  }
+
+  auto& channel = _sdkChannels.at(channelId);
+  channel.log(reinterpret_cast<const std::byte*>(rclSerializedMsg.buffer),
+              rclSerializedMsg.buffer_length, timestamp, sinkId);
 }
 
 void FoxgloveBridge::serviceRequest(const foxglove_ws::ServiceRequest& request,
@@ -933,11 +907,11 @@ void FoxgloveBridge::fetchAsset(const std::string& uri, uint32_t requestId,
   response.requestId = requestId;
 
   try {
-    // We reject URIs that are not on the allowlist or that contain two consecutive dots. The latter
-    // can be utilized to construct URIs for retrieving confidential files that should not be
-    // accessible over the WebSocket connection. Example:
-    // `package://<pkg_name>/../../../secret.txt`. This is an extra security measure and should not
-    // be necessary if the allowlist is strict enough.
+    // We reject URIs that are not on the allowlist or that contain two consecutive dots. The
+    // latter can be utilized to construct URIs for retrieving confidential files that should
+    // not be accessible over the WebSocket connection. Example:
+    // `package://<pkg_name>/../../../secret.txt`. This is an extra security measure and should
+    // not be necessary if the allowlist is strict enough.
     if (uri.find("..") != std::string::npos || !isWhitelisted(uri, _assetUriAllowlistPatterns)) {
       throw std::runtime_error("Asset URI not allowed: " + uri);
     }
@@ -972,6 +946,80 @@ void FoxgloveBridge::fetchAsset(const std::string& uri, uint32_t requestId,
 
 bool FoxgloveBridge::hasCapability(const std::string& capability) {
   return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
+}
+
+rclcpp::QoS FoxgloveBridge::determineQoS(const std::string& topic) {
+  // Select an appropriate subscription QOS profile. This is similar to how ros2 topic echo
+  // does it:
+  // https://github.com/ros2/ros2cli/blob/619b3d1c9/ros2topic/ros2topic/verb/echo.py#L137-L194
+  size_t depth = 0;
+  size_t reliabilityReliableEndpointsCount = 0;
+  size_t durabilityTransientLocalEndpointsCount = 0;
+
+  const auto publisherInfo = this->get_publishers_info_by_topic(topic);
+  for (const auto& publisher : publisherInfo) {
+    const auto& qos = publisher.qos_profile();
+    if (qos.reliability() == rclcpp::ReliabilityPolicy::Reliable) {
+      ++reliabilityReliableEndpointsCount;
+    }
+    if (qos.durability() == rclcpp::DurabilityPolicy::TransientLocal) {
+      ++durabilityTransientLocalEndpointsCount;
+    }
+    // Some RMWs do not retrieve history information of the publisher endpoint in which case the
+    // history depth is 0. We use a lower limit of 1 here, so that the history depth is at least
+    // equal to the number of publishers. This covers the case where there are multiple
+    // transient_local publishers with a depth of 1 (e.g. multiple tf_static transform
+    // broadcasters). See also
+    // https://github.com/foxglove/ros-foxglove-bridge/issues/238 and
+    // https://github.com/foxglove/ros-foxglove-bridge/issues/208
+    const size_t publisherHistoryDepth = std::max(static_cast<size_t>(1), qos.depth());
+    depth = depth + publisherHistoryDepth;
+  }
+
+  depth = std::max(depth, _minQosDepth);
+  if (depth > _maxQosDepth) {
+    RCLCPP_WARN(this->get_logger(),
+                "Limiting history depth for topic '%s' to %zu (was %zu). You may want to increase "
+                "the max_qos_depth parameter value.",
+                topic.c_str(), _maxQosDepth, depth);
+    depth = _maxQosDepth;
+  }
+
+  rclcpp::QoS qos{rclcpp::KeepLast(depth)};
+
+  // Force the QoS to be "best_effort" if in the whitelist
+  if (isWhitelisted(topic, _bestEffortQosTopicWhiteListPatterns)) {
+    qos.best_effort();
+  } else if (!publisherInfo.empty() && reliabilityReliableEndpointsCount == publisherInfo.size()) {
+    // If all endpoints are reliable, ask for reliable
+    qos.reliable();
+  } else {
+    if (reliabilityReliableEndpointsCount > 0) {
+      RCLCPP_WARN(
+        this->get_logger(),
+        "Some, but not all, publishers on topic '%s' are offering "
+        "QoSReliabilityPolicy.RELIABLE. "
+        "Falling back to QoSReliabilityPolicy.BEST_EFFORT as it will connect to all publishers",
+        topic.c_str());
+    }
+    qos.best_effort();
+  }
+
+  // If all endpoints are transient_local, ask for transient_local
+  if (!publisherInfo.empty() && durabilityTransientLocalEndpointsCount == publisherInfo.size()) {
+    qos.transient_local();
+  } else {
+    if (durabilityTransientLocalEndpointsCount > 0) {
+      RCLCPP_WARN(this->get_logger(),
+                  "Some, but not all, publishers on topic '%s' are offering "
+                  "QoSDurabilityPolicy.TRANSIENT_LOCAL. Falling back to "
+                  "QoSDurabilityPolicy.VOLATILE as it will connect to all publishers",
+                  topic.c_str());
+    }
+    qos.durability_volatile();
+  }
+
+  return qos;
 }
 
 }  // namespace foxglove_bridge

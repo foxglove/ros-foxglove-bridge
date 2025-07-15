@@ -51,4 +51,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - run: make USE_FOXGLOVE_SDK=ON ${{ matrix.ros_distribution }}-test
