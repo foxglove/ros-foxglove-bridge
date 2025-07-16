@@ -126,6 +126,10 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
       std::bind(&FoxgloveBridge::clientMessage, this, _1, _2, _3, _4);
   }
 
+  if (hasCapability(foxglove_ws::CAPABILITY_ASSETS)) {
+    sdkServerOptions.fetch_asset = std::bind(&FoxgloveBridge::fetchAsset, this, _1, _2);
+  }
+
   // TODO: The SDK server currently doesn't implement any of the TLS functionality. Once that
   // exists, add it here.
 
@@ -901,11 +905,9 @@ void FoxgloveBridge::serviceRequest(const foxglove_ws::ServiceRequest& request,
   client->async_send_request(reqMessage, responseReceivedCallback);
 }
 
-void FoxgloveBridge::fetchAsset(const std::string& uri, uint32_t requestId,
-                                ConnectionHandle clientHandle) {
-  foxglove_ws::FetchAssetResponse response;
-  response.requestId = requestId;
-
+void FoxgloveBridge::fetchAsset(const std::string_view uriView,
+                                foxglove::FetchAssetResponder&& responder) {
+  std::string uri(uriView);
   try {
     // We reject URIs that are not on the allowlist or that contain two consecutive dots. The
     // latter can be utilized to construct URIs for retrieving confidential files that should
@@ -922,25 +924,18 @@ void FoxgloveBridge::fetchAsset(const std::string& uri, uint32_t requestId,
 #if RESOURCE_RETRIEVER_VERSION_MAJOR > 3 || \
   (RESOURCE_RETRIEVER_VERSION_MAJOR == 3 && RESOURCE_RETRIEVER_VERSION_MINOR > 6)
     const auto memoryResource = resource_retriever.get_shared(uri);
-    response.status = foxglove_ws::FetchAssetStatus::Success;
-    response.errorMessage = "";
-    response.data.resize(memoryResource->data.size());
-    std::memcpy(response.data.data(), memoryResource->data.data(), memoryResource->data.size());
+    std::vector<std::byte> data(memoryResource->data.size());
+    std::memcpy(data.data(), memoryResource->data.data(), memoryResource->data.size());
+    std::move(responder).respondOk(data);
 #else
     const resource_retriever::MemoryResource memoryResource = resource_retriever.get(uri);
-    response.status = foxglove_ws::FetchAssetStatus::Success;
-    response.errorMessage = "";
-    response.data.resize(memoryResource.size);
-    std::memcpy(response.data.data(), memoryResource.data.get(), memoryResource.size);
+    std::vector<std::byte> data(memoryResource.size);
+    std::memcpy(data.data(), memoryResource.data.get(), memoryResource.size);
+    std::move(responder).respondOk(data);
 #endif
   } catch (const std::exception& ex) {
     RCLCPP_WARN(this->get_logger(), "Failed to retrieve asset '%s': %s", uri.c_str(), ex.what());
-    response.status = foxglove_ws::FetchAssetStatus::Error;
-    response.errorMessage = "Failed to retrieve asset " + uri;
-  }
-
-  if (_server) {
-    _server->sendFetchAssetResponse(clientHandle, response);
+    std::move(responder).respondError("Failed to retrieve asset " + uri);
   }
 }
 

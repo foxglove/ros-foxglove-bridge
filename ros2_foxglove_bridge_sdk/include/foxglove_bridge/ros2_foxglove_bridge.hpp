@@ -13,6 +13,7 @@
 
 #include <foxglove/foxglove.hpp>
 #include <foxglove/server.hpp>
+#include <foxglove/server/fetch_asset.hpp>
 #include <foxglove_bridge/callback_queue.hpp>
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/generic_client.hpp>
@@ -141,7 +142,7 @@ private:
 
   void serviceRequest(const foxglove_ws::ServiceRequest& request, ConnectionHandle clientHandle);
 
-  void fetchAsset(const std::string& assetId, uint32_t requestId, ConnectionHandle clientHandle);
+  void fetchAsset(const std::string_view uri, foxglove::FetchAssetResponder&& responder);
 
   bool hasCapability(const std::string& capability);
 
