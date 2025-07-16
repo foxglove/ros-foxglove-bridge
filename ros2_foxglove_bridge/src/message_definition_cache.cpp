@@ -234,7 +234,7 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
   }
 
   // Read the file
-  const std::string full_path = share_dir + std::filesystem::path::preferred_separator + *it;
+  const std::string full_path = (std::filesystem::path(share_dir) / *it).string();
   std::ifstream file{full_path};
   if (!file.good()) {
     throw DefinitionNotFoundError(definition_identifier.package_resource_name);
