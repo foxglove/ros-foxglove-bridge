@@ -915,7 +915,7 @@ void FoxgloveBridge::fetchAsset(const std::string_view uriView,
     // `package://<pkg_name>/../../../secret.txt`. This is an extra security measure and should
     // not be necessary if the allowlist is strict enough.
     if (uri.find("..") != std::string::npos || !isWhitelisted(uri, _assetUriAllowlistPatterns)) {
-      throw std::runtime_error("Asset URI not allowed: " + std::string(uri));
+      throw std::runtime_error("Asset URI not allowed: " + uri);
     }
 
     resource_retriever::Retriever resource_retriever;
