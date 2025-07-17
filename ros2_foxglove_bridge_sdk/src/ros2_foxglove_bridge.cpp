@@ -75,8 +75,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   const auto assetUriAllowlist = this->get_parameter(PARAM_ASSET_URI_ALLOWLIST).as_string_array();
   _assetUriAllowlistPatterns = parseRegexStrings(this, assetUriAllowlist);
   _disableLoanMessage = this->get_parameter(PARAM_DISABLE_LOAN_MESSAGE).as_bool();
-  // const auto ignoreUnresponsiveParamNodes =
-  //   this->get_parameter(PARAM_IGN_UNRESPONSIVE_PARAM_NODES).as_bool();
+  const auto ignoreUnresponsiveParamNodes =
+    this->get_parameter(PARAM_IGN_UNRESPONSIVE_PARAM_NODES).as_bool();
 
   const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
   // Fetching of assets may be blocking, hence we fetch them in a separate thread.
@@ -105,6 +105,10 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   sdkServerOptions.host = address;
   sdkServerOptions.port = port;
   sdkServerOptions.supported_encodings = {"cdr", "json"};
+
+  // TODO: The SDK server currently doesn't implement any of the TLS functionality. Once that
+  // exists, add it here.
+
   sdkServerOptions.capabilities = processCapabilities(_capabilities);
   if (_useSimTime) {
     sdkServerOptions.capabilities =
@@ -112,6 +116,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   }
 
   // Setup callbacks
+  // TODO: Start going through the capabilities and binding callbacks as needed
   sdkServerOptions.callbacks.onConnectionGraphSubscribe =
     std::bind(&FoxgloveBridge::subscribeConnectionGraph, this, true);
   sdkServerOptions.callbacks.onSubscribe = std::bind(&FoxgloveBridge::subscribe, this, _1, _2);
@@ -130,8 +135,23 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
     sdkServerOptions.fetch_asset = std::bind(&FoxgloveBridge::fetchAsset, this, _1, _2);
   }
 
-  // TODO: The SDK server currently doesn't implement any of the TLS functionality. Once that
-  // exists, add it here.
+  if (hasCapability(sdkServerOptions.capabilities,
+                    foxglove::WebSocketServerCapabilities::Parameters)) {
+    sdkServerOptions.callbacks.onParametersSubscribe =
+      std::bind(&FoxgloveBridge::subscribeParameters, this, _1);
+    sdkServerOptions.callbacks.onParametersUnsubscribe =
+      std::bind(&FoxgloveBridge::unsubscribeParameters, this, _1);
+    sdkServerOptions.callbacks.onGetParameters =
+      std::bind(&FoxgloveBridge::getParameters, this, _1, _2, _3);
+    sdkServerOptions.callbacks.onSetParameters =
+      std::bind(&FoxgloveBridge::setParameters, this, _1, _2, _3);
+
+    _paramInterface = std::make_shared<ParameterInterface>(this, paramWhitelistPatterns,
+                                                           ignoreUnresponsiveParamNodes
+                                                             ? UnresponsiveNodePolicy::Ignore
+                                                             : UnresponsiveNodePolicy::Retry);
+    _paramInterface->setParamUpdateCallback(std::bind(&FoxgloveBridge::parameterUpdates, this, _1));
+  }
 
   auto maybeSdkServer = foxglove::WebSocketServer::create(std::move(sdkServerOptions));
   assert(maybeSdkServer.has_value());
@@ -780,40 +800,59 @@ void FoxgloveBridge::clientMessage(ClientId clientId, ChannelId clientChannelId,
   }
 }
 
-void FoxgloveBridge::setParameters(const std::vector<foxglove_ws::Parameter>& parameters,
-                                   const std::optional<std::string>& requestId,
-                                   ConnectionHandle hdl) {
+std::vector<foxglove::Parameter> FoxgloveBridge::setParameters(
+  const uint32_t clientId [[maybe_unused]], const std::optional<std::string_view>& requestId,
+  const std::vector<foxglove::ParameterView>& parameterViews) {
+  // Copy parameters to a vector
+  std::vector<foxglove::Parameter> parameters;
+  std::transform(parameterViews.cbegin(), parameterViews.cend(), std::back_inserter(parameters),
+                 [](const foxglove::ParameterView& pv) {
+                   return pv.clone();
+                 });
+
   _paramInterface->setParams(parameters, std::chrono::seconds(5));
 
-  // If a request Id was given, send potentially updated parameters back to client
-  if (requestId) {
-    std::vector<std::string> parameterNames(parameters.size());
-    for (size_t i = 0; i < parameters.size(); ++i) {
-      parameterNames[i] = parameters[i].getName();
+  // REVIEW: The previous implementation would publish updated parameters to the client only if a
+  // request ID was passed. Since the SDK server publishes any parameters returned from this
+  // function, to maintain the same behavior, we only return a non-empty vector if a request ID was
+  // passed. If feels like too much of a kludge, we can remove this check but will need to either:
+  //
+  // (1) Update tests/client implementations to be robust to multiple parameter updates being
+  // received if they are subscribed to parameter updates AND set a parameter, or (2) Update the SDK
+  // server to avoid double-publishing parameters to a client that's setting a param and is
+  // subscribed to parameter updates.
+  if (requestId.has_value()) {
+    // Get parameters again and publish them to the SDK server
+    std::vector<std::string_view> parameterNames;
+    parameterNames.reserve(parameters.size());
+    for (const auto& param : parameters) {
+      parameterNames.push_back(param.name());
     }
-    getParameters(parameterNames, requestId, hdl);
+
+    auto updatedParameters = _paramInterface->getParams(parameterNames, std::chrono::seconds(5));
+    return updatedParameters;
   }
+
+  return {};
 }
 
-void FoxgloveBridge::getParameters(const std::vector<std::string>& parameters,
-                                   const std::optional<std::string>& requestId,
-                                   ConnectionHandle hdl) {
-  const auto params = _paramInterface->getParams(parameters, std::chrono::seconds(5));
-  _server->publishParameterValues(hdl, params, requestId);
+std::vector<foxglove::Parameter> FoxgloveBridge::getParameters(
+  const uint32_t clientId [[maybe_unused]],
+  const std::optional<std::string_view>& requestId [[maybe_unused]],
+  const std::vector<std::string_view>& parameterNames) {
+  return _paramInterface->getParams(parameterNames, std::chrono::seconds(5));
 }
 
-void FoxgloveBridge::subscribeParameters(const std::vector<std::string>& parameters,
-                                         foxglove_ws::ParameterSubscriptionOperation op,
-                                         ConnectionHandle) {
-  if (op == foxglove_ws::ParameterSubscriptionOperation::SUBSCRIBE) {
-    _paramInterface->subscribeParams(parameters);
-  } else {
-    _paramInterface->unsubscribeParams(parameters);
-  }
+void FoxgloveBridge::subscribeParameters(const std::vector<std::string_view>& parameterNames) {
+  _paramInterface->subscribeParams(parameterNames);
 }
 
-void FoxgloveBridge::parameterUpdates(const std::vector<foxglove_ws::Parameter>& parameters) {
-  _server->updateParameterValues(parameters);
+void FoxgloveBridge::unsubscribeParameters(const std::vector<std::string_view>& parameterNames) {
+  _paramInterface->unsubscribeParams(parameterNames);
+}
+
+void FoxgloveBridge::parameterUpdates(const std::vector<foxglove::Parameter>& parameters) {
+  _sdkServer->publishParameterValues(ParameterInterface::cloneParameterList(parameters));
 }
 
 void FoxgloveBridge::logHandler(LogLevel level, char const* msg) {
@@ -850,8 +889,9 @@ void FoxgloveBridge::rosMessageHandler(ChannelId channelId, SinkId sinkId,
   }
 
   auto& channel = _sdkChannels.at(channelId);
-  channel.log(reinterpret_cast<const std::byte*>(rclSerializedMsg.buffer),
-              rclSerializedMsg.buffer_length, timestamp, sinkId);
+  // TODO: Change to log() when the released SDK is updated to make this a public overload
+  channel.log_(reinterpret_cast<const std::byte*>(rclSerializedMsg.buffer),
+               rclSerializedMsg.buffer_length, timestamp, sinkId);
 }
 
 void FoxgloveBridge::serviceRequest(const foxglove_ws::ServiceRequest& request,
@@ -941,6 +981,11 @@ void FoxgloveBridge::fetchAsset(const std::string_view uriView,
 
 bool FoxgloveBridge::hasCapability(const std::string& capability) {
   return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
+}
+
+bool FoxgloveBridge::hasCapability(const foxglove::WebSocketServerCapabilities capabilities,
+                                   const foxglove::WebSocketServerCapabilities query) {
+  return (capabilities & query) == query;
 }
 
 rclcpp::QoS FoxgloveBridge::determineQoS(const std::string& topic) {
