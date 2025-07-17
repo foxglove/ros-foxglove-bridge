@@ -73,8 +73,11 @@ void from_json(const nlohmann::json& j, ParameterValue& p) {
 }
 
 void to_json(nlohmann::json& j, const Parameter& p) {
-  to_json(j["value"], p.getValue());
   j["name"] = p.getName();
+  if (p.getType() == ParameterType::PARAMETER_NOT_SET) {
+    return;
+  }
+  to_json(j["value"], p.getValue());
   if (p.getType() == ParameterType::PARAMETER_BYTE_ARRAY) {
     j["type"] = "byte_array";
   } else if (p.getType() == ParameterType::PARAMETER_DOUBLE) {
