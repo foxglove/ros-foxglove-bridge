@@ -124,16 +124,19 @@ private:
   void clientMessage(ClientId clientId, ChannelId clientChannelId, const std::byte* data,
                      size_t dataLen);
 
-  void setParameters(const std::vector<foxglove_ws::Parameter>& parameters,
-                     const std::optional<std::string>& requestId, ConnectionHandle hdl);
+  std::vector<foxglove::Parameter> setParameters(
+    const uint32_t clientId, const std::optional<std::string_view>& requestId,
+    const std::vector<foxglove::ParameterView>& parameterViews);
 
-  void getParameters(const std::vector<std::string>& parameters,
-                     const std::optional<std::string>& requestId, ConnectionHandle hdl);
+  std::vector<foxglove::Parameter> getParameters(
+    const uint32_t clientId, const std::optional<std::string_view>& requestId,
+    const std::vector<std::string_view>& parameterNames);
 
-  void subscribeParameters(const std::vector<std::string>& parameters,
-                           foxglove_ws::ParameterSubscriptionOperation op, ConnectionHandle);
+  void subscribeParameters(const std::vector<std::string_view>& parameterNames);
 
-  void parameterUpdates(const std::vector<foxglove_ws::Parameter>& parameters);
+  void unsubscribeParameters(const std::vector<std::string_view>& parameterNames);
+
+  void parameterUpdates(const std::vector<foxglove::Parameter>& parameters);
 
   void logHandler(LogLevel level, char const* msg);
 
@@ -145,6 +148,8 @@ private:
   void fetchAsset(const std::string_view uri, foxglove::FetchAssetResponder&& responder);
 
   bool hasCapability(const std::string& capability);
+  bool hasCapability(const foxglove::WebSocketServerCapabilities capabilities,
+                     const foxglove::WebSocketServerCapabilities query);
 
   rclcpp::QoS determineQoS(const std::string& topic);
 };
