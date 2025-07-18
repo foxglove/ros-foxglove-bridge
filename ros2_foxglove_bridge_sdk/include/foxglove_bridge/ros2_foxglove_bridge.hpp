@@ -79,6 +79,8 @@ private:
   std::unordered_map<ChannelId, foxglove::RawChannel> _sdkChannels;
   std::unordered_map<ChannelAndClientId, Subscription, PairHash> _sdkSubscriptions;
   std::unordered_map<ChannelAndClientId, ClientAdvertisement, PairHash> _clientAdvertisedTopics;
+  foxglove::WebSocketServerCapabilities _capabilities;
+  std::unordered_set<std::string> _advertisedServiceNames;
   // END New SDK Components
 
   std::unique_ptr<foxglove_ws::ServerInterface<ConnectionHandle>> _server;
@@ -89,7 +91,6 @@ private:
   std::vector<std::regex> _bestEffortQosTopicWhiteListPatterns;
   std::shared_ptr<ParameterInterface> _paramInterface;
   std::unordered_map<foxglove_ws::ChannelId, foxglove_ws::ChannelWithoutId> _advertisedTopics;
-  std::unordered_map<foxglove_ws::ServiceId, foxglove_ws::ServiceWithoutId> _advertisedServices;
   std::unordered_map<foxglove_ws::ChannelId, SubscriptionsByClient> _subscriptions;
   std::unordered_map<foxglove_ws::ServiceId, GenericClient::SharedPtr> _serviceClients;
   rclcpp::CallbackGroup::SharedPtr _subscriptionCallbackGroup;
@@ -103,7 +104,6 @@ private:
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
   bool _useSimTime = false;
-  std::vector<std::string> _capabilities;
   std::atomic<bool> _subscribeGraphUpdates = false;
   bool _includeHidden = false;
   bool _disableLoanMessage = true;
@@ -146,10 +146,6 @@ private:
   void serviceRequest(const foxglove_ws::ServiceRequest& request, ConnectionHandle clientHandle);
 
   void fetchAsset(const std::string_view uri, foxglove::FetchAssetResponder&& responder);
-
-  bool hasCapability(const std::string& capability);
-  bool hasCapability(const foxglove::WebSocketServerCapabilities capabilities,
-                     const foxglove::WebSocketServerCapabilities query);
 
   rclcpp::QoS determineQoS(const std::string& topic);
 };

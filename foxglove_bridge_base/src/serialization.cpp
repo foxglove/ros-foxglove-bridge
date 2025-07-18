@@ -139,8 +139,22 @@ void from_json(const nlohmann::json& j, Service& p) {
   p.id = j["id"].get<ServiceId>();
   p.name = j["name"].get<std::string>();
   p.type = j["type"].get<std::string>();
-  p.requestSchema = j["requestSchema"].get<std::string>();
-  p.responseSchema = j["responseSchema"].get<std::string>();
+
+  if (j.find("request") != j.end() && j["request"].find("schema") != j["request"].end()) {
+    p.requestSchema = j["request"]["schema"].get<std::string>();
+  } else if (j.find("requestSchema") != j.end()) {
+    p.requestSchema = j["requestSchema"].get<std::string>();
+  } else {
+    throw std::runtime_error("Service '" + p.name + "' has no request schema");
+  }
+
+  if (j.find("response") != j.end() && j["response"].find("schema") != j["response"].end()) {
+    p.responseSchema = j["response"]["schema"].get<std::string>();
+  } else if (j.find("responseSchema") != j.end()) {
+    p.responseSchema = j["responseSchema"].get<std::string>();
+  } else {
+    throw std::runtime_error("Service '" + p.name + "' has no response schema");
+  }
 }
 
 void ServiceResponse::read(const uint8_t* data, size_t dataLength) {
