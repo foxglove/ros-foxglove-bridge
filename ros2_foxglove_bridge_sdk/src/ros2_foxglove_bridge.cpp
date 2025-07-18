@@ -801,7 +801,7 @@ void FoxgloveBridge::clientMessage(ClientId clientId, ChannelId clientChannelId,
 }
 
 std::vector<foxglove::Parameter> FoxgloveBridge::setParameters(
-  const uint32_t clientId [[maybe_unused]], const std::optional<std::string_view>& requestId,
+  const ClientId clientId [[maybe_unused]], const std::optional<std::string_view>& requestId,
   const std::vector<foxglove::ParameterView>& parameterViews) {
   // Copy parameters to a vector
   std::vector<foxglove::Parameter> parameters;
@@ -837,7 +837,7 @@ std::vector<foxglove::Parameter> FoxgloveBridge::setParameters(
 }
 
 std::vector<foxglove::Parameter> FoxgloveBridge::getParameters(
-  const uint32_t clientId [[maybe_unused]],
+  const ClientId clientId [[maybe_unused]],
   const std::optional<std::string_view>& requestId [[maybe_unused]],
   const std::vector<std::string_view>& parameterNames) {
   return _paramInterface->getParams(parameterNames, std::chrono::seconds(5));
