@@ -42,8 +42,7 @@ private:
   std::thread _executorThread;
 };
 
-// TODO: FG-12232: Enable when Parameter functionality is implemented
-class DISABLED_ParameterTest : public TestWithExecutor {
+class ParameterTest : public TestWithExecutor {
 public:
   using PARAM_1_TYPE = std::string;
   inline static const std::string NODE_1_NAME = "node_1";
@@ -63,6 +62,10 @@ public:
   using PARAM_4_TYPE = std::vector<double>;
   inline static const std::string PARAM_4_NAME = "float_array_param";
   inline static const PARAM_4_TYPE PARAM_4_DEFAULT_VALUE = {1.1, 2.2, 3.3};
+
+  using PARAM_5_TYPE = int64_t;
+  inline static const std::string PARAM_5_NAME = "int_param";
+  inline static const PARAM_5_TYPE PARAM_5_DEFAULT_VALUE = 123;
 
 protected:
   void SetUp() override {
@@ -84,6 +87,7 @@ protected:
     _paramNode2->declare_parameter(p2Param.name, PARAM_2_DEFAULT_VALUE, p2Param);
     _paramNode2->declare_parameter(PARAM_3_NAME, PARAM_3_DEFAULT_VALUE);
     _paramNode2->declare_parameter(PARAM_4_NAME, PARAM_4_DEFAULT_VALUE);
+    _paramNode2->declare_parameter(PARAM_5_NAME, PARAM_5_DEFAULT_VALUE);
 
     executor.add_node(_paramNode1);
     executor.add_node(_paramNode2);
@@ -363,7 +367,7 @@ INSTANTIATE_TEST_SUITE_P(
   testing::Values(std::make_pair("json", std::vector<uint8_t>(HELLO_WORLD_JSON,
                                                               std::end(HELLO_WORLD_JSON)))));
 
-TEST_F(DISABLED_ParameterTest, testGetAllParams) {
+TEST_F(ParameterTest, testGetAllParams) {
   const std::string requestId = "req-testGetAllParams";
   auto future = foxglove_ws::waitForParameters(_wsClient, requestId);
   _wsClient->getParameters({}, requestId);
@@ -373,7 +377,7 @@ TEST_F(DISABLED_ParameterTest, testGetAllParams) {
   EXPECT_GE(params.size(), 2UL);
 }
 
-TEST_F(DISABLED_ParameterTest, testGetNonExistingParameters) {
+TEST_F(ParameterTest, testGetNonExistingParameters) {
   const std::string requestId = "req-testGetNonExistingParameters";
   auto future = foxglove_ws::waitForParameters(_wsClient, requestId);
   _wsClient->getParameters(
@@ -384,7 +388,18 @@ TEST_F(DISABLED_ParameterTest, testGetNonExistingParameters) {
   EXPECT_TRUE(params.empty());
 }
 
-TEST_F(DISABLED_ParameterTest, testGetParameters) {
+TEST_F(ParameterTest, testGetIntParameter) {
+  const std::string requestId = "req-testGetIntParameter";
+  auto future = foxglove_ws::waitForParameters(_wsClient, requestId);
+  _wsClient->getParameters({NODE_2_NAME + "." + PARAM_5_NAME}, requestId);
+  ASSERT_EQ(std::future_status::ready, future.wait_for(DEFAULT_TIMEOUT));
+  std::vector<foxglove_ws::Parameter> params = future.get();
+
+  EXPECT_EQ(1UL, params.size());
+  EXPECT_EQ(PARAM_5_DEFAULT_VALUE, params.front().getValue().getValue<PARAM_5_TYPE>());
+}
+
+TEST_F(ParameterTest, testGetParameters) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
   const auto p2 = NODE_2_NAME + "." + PARAM_2_NAME;
 
@@ -413,7 +428,7 @@ TEST_F(DISABLED_ParameterTest, testGetParameters) {
   EXPECT_EQ(int_array_val, PARAM_2_DEFAULT_VALUE);
 }
 
-TEST_F(DISABLED_ParameterTest, testSetParameters) {
+TEST_F(ParameterTest, testSetParameters) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
   const auto p2 = NODE_2_NAME + "." + PARAM_2_NAME;
   const PARAM_1_TYPE newP1value = "world";
@@ -451,7 +466,7 @@ TEST_F(DISABLED_ParameterTest, testSetParameters) {
   EXPECT_EQ(int_array_val, expected_value);
 }
 
-TEST_F(DISABLED_ParameterTest, testSetParametersWithReqId) {
+TEST_F(ParameterTest, testSetParametersWithReqId) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
   const PARAM_1_TYPE newP1value = "world";
   const std::vector<foxglove_ws::Parameter> parameters = {
@@ -467,7 +482,7 @@ TEST_F(DISABLED_ParameterTest, testSetParametersWithReqId) {
   EXPECT_EQ(1UL, params.size());
 }
 
-TEST_F(DISABLED_ParameterTest, testSetFloatParametersWithIntegers) {
+TEST_F(ParameterTest, testSetFloatParametersWithIntegers) {
   const auto floatParamName = NODE_2_NAME + "." + PARAM_3_NAME;
   const auto floatArrayParamName = NODE_2_NAME + "." + PARAM_4_NAME;
   const int64_t floatParamVal = 10;
@@ -508,7 +523,7 @@ TEST_F(DISABLED_ParameterTest, testSetFloatParametersWithIntegers) {
   }
 }
 
-TEST_F(DISABLED_ParameterTest, testUnsetParameter) {
+TEST_F(ParameterTest, testUnsetParameter) {
   const auto p1 = NODE_1_NAME + "." + DELETABLE_PARAM_NAME;
   const std::vector<foxglove_ws::Parameter> parameters = {
     foxglove_ws::Parameter(p1),
@@ -523,7 +538,7 @@ TEST_F(DISABLED_ParameterTest, testUnsetParameter) {
   EXPECT_EQ(0UL, params.size());
 }
 
-TEST_F(DISABLED_ParameterTest, testParameterSubscription) {
+TEST_F(ParameterTest, testParameterSubscription) {
   const auto p1 = NODE_1_NAME + "." + PARAM_1_NAME;
 
   _wsClient->subscribeParameterUpdates({p1});
@@ -542,7 +557,7 @@ TEST_F(DISABLED_ParameterTest, testParameterSubscription) {
   ASSERT_EQ(std::future_status::timeout, future.wait_for(ONE_SECOND));
 }
 
-TEST_F(DISABLED_ParameterTest, testGetParametersParallel) {
+TEST_F(ParameterTest, testGetParametersParallel) {
   // Connect a few clients (in parallel) and make sure that they all receive parameters
   auto clients = {
     std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>(),

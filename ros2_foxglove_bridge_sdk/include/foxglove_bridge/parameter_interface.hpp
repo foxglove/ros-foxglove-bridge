@@ -10,11 +10,11 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include <foxglove_bridge/parameter.hpp>
+#include <foxglove/server/parameter.hpp>
 
 namespace foxglove_bridge {
 
-using ParameterList = std::vector<foxglove_ws::Parameter>;
+using ParameterList = std::vector<foxglove::Parameter>;
 using ParamUpdateFunc = std::function<void(const ParameterList&)>;
 
 enum class UnresponsiveNodePolicy {
@@ -27,12 +27,14 @@ public:
   ParameterInterface(rclcpp::Node* node, std::vector<std::regex> paramWhitelistPatterns,
                      UnresponsiveNodePolicy unresponsiveNodePolicy);
 
-  ParameterList getParams(const std::vector<std::string>& paramNames,
+  ParameterList getParams(const std::vector<std::string_view>& paramNames,
                           const std::chrono::duration<double>& timeout);
   void setParams(const ParameterList& params, const std::chrono::duration<double>& timeout);
-  void subscribeParams(const std::vector<std::string>& paramNames);
-  void unsubscribeParams(const std::vector<std::string>& paramNames);
+  void subscribeParams(const std::vector<std::string_view>& paramNames);
+  void unsubscribeParams(const std::vector<std::string_view>& paramNames);
   void setParamUpdateCallback(ParamUpdateFunc paramUpdateFunc);
+
+  static ParameterList cloneParameterList(const ParameterList& other);
 
 private:
   rclcpp::Node* _node;
