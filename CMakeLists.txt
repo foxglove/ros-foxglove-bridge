@@ -55,33 +55,23 @@ if (ENDIAN)
 endif()
 
 if(USE_FOXGLOVE_SDK)
-  # if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-  #   set(FOXGLOVE_SDK_RELEASES "https://github.com/foxglove/foxglove-sdk/releases/download/sdk%2Fv0.9.0/foxglove-v0.9.0-cpp-aarch64-unknown-linux-gnu.zip" "a554f82b3d1c3096457887bccee7088646b729494ec18909846ac7fcdd06ee1d")
-  # elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  #   set(FOXGLOVE_SDK_RELEASES "https://github.com/foxglove/foxglove-sdk/releases/download/sdk%2Fv0.9.0/foxglove-v0.9.0-cpp-x86_64-unknown-linux-gnu.zip" "48ea17c348583154d7c1934c9f7e82f57067e2afa76b586e1f7ac14cc6b6c1d0")
-  # else()
-  #   message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_SYSTEM_NAME}")
-  # endif()
-
-  # list(GET FOXGLOVE_SDK_RELEASES 0 url)
-  # list(GET FOXGLOVE_SDK_RELEASES 1 hash)
-
   if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-    set(FOXGLOVE_SDK_ZIP_PATH ${CMAKE_CURRENT_SOURCE_DIR}/tmp/foxglove-aarch64.zip)
+    set(FOXGLOVE_SDK_RELEASES "https://github.com/foxglove/foxglove-sdk/releases/download/sdk%2Fv0.10.0/foxglove-v0.10.0-cpp-aarch64-unknown-linux-gnu.zip" "81e2379e3a08160c023779eab0fe5c5764ace3b30c8727b0030ac7dc8b415016")
   elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-    set(FOXGLOVE_SDK_ZIP_PATH ${CMAKE_CURRENT_SOURCE_DIR}/tmp/foxglove-x86_64.zip)
+    set(FOXGLOVE_SDK_RELEASES "https://github.com/foxglove/foxglove-sdk/releases/download/sdk%2Fv0.10.0/foxglove-v0.10.0-cpp-x86_64-unknown-linux-gnu.zip" "209d34a8703d44a129c559493e1a3fb215888b4d5973622750ac28b1c345946c")
   else()
     message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_SYSTEM_NAME}")
   endif()
 
+  list(GET FOXGLOVE_SDK_RELEASES 0 url)
+  list(GET FOXGLOVE_SDK_RELEASES 1 hash)
 
   # Download Foxglove SDK shared lib
   include(FetchContent)
   FetchContent_Declare(
     foxglove_sdk
-    # URL ${url}
-    # URL_HASH SHA256=${hash}
-    URL ${FOXGLOVE_SDK_ZIP_PATH}
+    URL ${url}
+    URL_HASH SHA256=${hash}
   )
   FetchContent_MakeAvailable(foxglove_sdk)
 

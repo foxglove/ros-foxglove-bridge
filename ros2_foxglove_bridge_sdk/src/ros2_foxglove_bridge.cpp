@@ -850,8 +850,8 @@ void FoxgloveBridge::rosMessageHandler(ChannelId channelId, SinkId sinkId,
   }
 
   auto& channel = _sdkChannels.at(channelId);
-  channel.log(reinterpret_cast<const std::byte*>(rclSerializedMsg.buffer),
-              rclSerializedMsg.buffer_length, timestamp, sinkId);
+  channel.log_(reinterpret_cast<const std::byte*>(rclSerializedMsg.buffer),
+               rclSerializedMsg.buffer_length, timestamp, sinkId);
 }
 
 void FoxgloveBridge::serviceRequest(const foxglove_ws::ServiceRequest& request,
