@@ -75,7 +75,7 @@ if(USE_FOXGLOVE_SDK)
   )
   FetchContent_MakeAvailable(foxglove_sdk)
 
-  add_library(foxglove_sdk SHARED)
+  add_library(foxglove_sdk STATIC)
   target_include_directories(foxglove_sdk SYSTEM
     PUBLIC
       $<BUILD_INTERFACE:${foxglove_sdk_SOURCE_DIR}/include>
@@ -83,6 +83,7 @@ if(USE_FOXGLOVE_SDK)
   )
   file(GLOB_RECURSE FOXGLOVE_SDK_SOURCES CONFIGURE_DEPENDS "${foxglove_sdk_SOURCE_DIR}/src/*.cpp")
   target_sources(foxglove_sdk PRIVATE ${FOXGLOVE_SDK_SOURCES})
+  set_target_properties(foxglove_sdk PROPERTIES POSITION_INDEPENDENT_CODE ON)
   target_link_libraries(foxglove_sdk PRIVATE ${foxglove_sdk_SOURCE_DIR}/lib/libfoxglove.a)
 endif()
 
