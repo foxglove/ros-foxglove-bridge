@@ -1,7 +1,5 @@
 #pragma once
 
-#include <future>
-
 #include <rclcpp/client.hpp>
 #include <rclcpp/serialized_message.hpp>
 #include <rcpputils/shared_library.hpp>
@@ -13,10 +11,6 @@ namespace foxglove_bridge {
 class GenericClient : public rclcpp::ClientBase {
 public:
   using SharedRequest = std::shared_ptr<rclcpp::SerializedMessage>;
-  using SharedResponse = std::shared_ptr<rclcpp::SerializedMessage>;
-  using Promise = std::promise<SharedResponse>;
-  using SharedPromise = std::shared_ptr<Promise>;
-  using SharedFuture = std::shared_future<SharedResponse>;
 
   RCLCPP_SMART_PTR_DEFINITIONS(GenericClient)
 
