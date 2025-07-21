@@ -179,24 +179,18 @@ void GenericClient::handle_response(std::shared_ptr<rmw_request_id_t> request_he
     RCUTILS_LOG_ERROR_NAMED("foxglove_bridge", "Received invalid sequence number. Ignoring...");
     return;
   }
-  auto tuple = this->pending_requests_[sequence_number];
-  auto call_promise = std::get<0>(tuple);
-  auto callback = std::get<1>(tuple);
-  auto future = std::get<2>(tuple);
+  auto responder = std::move(this->pending_requests_.at(sequence_number));
   this->pending_requests_.erase(sequence_number);
   // Unlock here to allow the service to be called recursively from one of its callbacks.
   lock.unlock();
 
-  call_promise->set_value(ser_response);
-  callback(future);
+  std::move(responder).respondOk(
+    reinterpret_cast<const std::byte*>(ser_response->get_rcl_serialized_message().buffer),
+    ser_response->get_rcl_serialized_message().buffer_length);
 }
 
-GenericClient::SharedFuture GenericClient::async_send_request(SharedRequest request) {
-  return async_send_request(request, [](SharedFuture) {});
-}
-
-GenericClient::SharedFuture GenericClient::async_send_request(SharedRequest request,
-                                                              CallbackType&& cb) {
+void GenericClient::async_send_request(SharedRequest request,
+                                       foxglove::ServiceResponder&& responder) {
   std::lock_guard<std::mutex> lock(pending_requests_mutex_);
   int64_t sequence_number;
 
@@ -212,11 +206,6 @@ GenericClient::SharedFuture GenericClient::async_send_request(SharedRequest requ
     rclcpp::exceptions::throw_from_rcl_error(ret, "failed to send request");
   }
 
-  SharedPromise call_promise = std::make_shared<Promise>();
-  SharedFuture f(call_promise->get_future());
-  pending_requests_[sequence_number] =
-    std::make_tuple(call_promise, std::forward<CallbackType>(cb), f);
-  return f;
+  pending_requests_.emplace(sequence_number, std::move(responder));
 }
-
 }  // namespace foxglove_bridge

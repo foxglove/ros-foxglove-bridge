@@ -36,6 +36,7 @@ using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std:
 
 using SubscriptionCount = std::pair<Subscription, size_t>;
 using MapOfSets = std::unordered_map<std::string, std::unordered_set<std::string>>;
+using ServicesByType = std::unordered_map<std::string, std::string>;
 
 using ClientId = uint32_t;
 using SinkId = uint64_t;
@@ -80,7 +81,8 @@ private:
   std::unordered_map<ChannelAndClientId, Subscription, PairHash> _sdkSubscriptions;
   std::unordered_map<ChannelAndClientId, ClientAdvertisement, PairHash> _clientAdvertisedTopics;
   foxglove::WebSocketServerCapabilities _capabilities;
-  std::unordered_set<std::string> _advertisedServiceNames;
+  ServicesByType _advertisedServices;
+  std::unordered_map<std::string, GenericClient::SharedPtr> _serviceClients;
   // END New SDK Components
 
   std::unique_ptr<foxglove_ws::ServerInterface<ConnectionHandle>> _server;
@@ -92,7 +94,6 @@ private:
   std::shared_ptr<ParameterInterface> _paramInterface;
   std::unordered_map<foxglove_ws::ChannelId, foxglove_ws::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove_ws::ChannelId, SubscriptionsByClient> _subscriptions;
-  std::unordered_map<foxglove_ws::ServiceId, GenericClient::SharedPtr> _serviceClients;
   rclcpp::CallbackGroup::SharedPtr _subscriptionCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _clientPublishCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _servicesCallbackGroup;
@@ -143,7 +144,8 @@ private:
   void rosMessageHandler(ChannelId channelId, SinkId sinkId,
                          std::shared_ptr<const rclcpp::SerializedMessage> msg);
 
-  void serviceRequest(const foxglove_ws::ServiceRequest& request, ConnectionHandle clientHandle);
+  void handleServiceRequest(const foxglove::ServiceRequest& request,
+                            foxglove::ServiceResponder&& responder);
 
   void fetchAsset(const std::string_view uri, foxglove::FetchAssetResponder&& responder);
 
