@@ -391,6 +391,7 @@ void FoxgloveBridge::updateAdvertisedServices() {
   }
   for (auto serviceName : servicesToRemove) {
     _advertisedServices.erase(serviceName);
+    _serviceClients.erase(serviceName);
     auto error = _sdkServer->removeService(serviceName);
     if (error != foxglove::FoxgloveError::Ok) {
       RCLCPP_ERROR(this->get_logger(), "Failed to remove service %s: %s", serviceName.c_str(),
