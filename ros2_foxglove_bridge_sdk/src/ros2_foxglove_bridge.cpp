@@ -383,7 +383,6 @@ void FoxgloveBridge::updateAdvertisedServices() {
   std::lock_guard<std::mutex> lock(_servicesMutex);
 
   // Remove advertisements for services that have been removed
-  // TODO: Update to use ServiceId and remove the dumb int thingy
   std::vector<std::string> servicesToRemove;
   for (const auto& [serviceName, _] : _advertisedServices) {
     if (serviceNamesAndTypes.find(serviceName) == serviceNamesAndTypes.end()) {
@@ -471,9 +470,25 @@ void FoxgloveBridge::updateAdvertisedServices() {
       RCLCPP_WARN(this->get_logger(), "Could not find definition for type %s: %s",
                   serviceType.c_str(), err.what());
       // We still advertise the service, but with an empty schema
+      serviceSchema.request = std::nullopt;
+      serviceSchema.response = std::nullopt;
     } catch (const std::exception& err) {
       RCLCPP_WARN(this->get_logger(), "Failed to add service \"%s\" (%s): %s", serviceName.c_str(),
                   serviceType.c_str(), err.what());
+      continue;
+    }
+
+    // Set up ROS service client
+    try {
+      auto clientOptions = rcl_client_get_default_options();
+      auto [it, _] = _serviceClients.insert(
+        {serviceName, std::make_shared<GenericClient>(this->get_node_base_interface().get(),
+                                                      this->get_node_graph_interface(), serviceName,
+                                                      serviceType, clientOptions)});
+      this->get_node_services_interface()->add_client(it->second, _servicesCallbackGroup);
+    } catch (const std::exception& ex) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to create service client for service %s: %s",
+                   serviceName.c_str(), ex.what());
       continue;
     }
 
@@ -945,25 +960,15 @@ void FoxgloveBridge::handleServiceRequest(const foxglove::ServiceRequest& reques
 
   const auto& [serviceName, serviceType] = *serviceIt;
 
-  auto clientIt = _serviceClients.find(serviceName);
-  if (clientIt == _serviceClients.end()) {
-    try {
-      auto clientOptions = rcl_client_get_default_options();
-      auto genClient = GenericClient::make_shared(this->get_node_base_interface().get(),
-                                                  this->get_node_graph_interface(), serviceName,
-                                                  serviceType, clientOptions);
-      clientIt = _serviceClients.emplace(serviceName, std::move(genClient)).first;
-      this->get_node_services_interface()->add_client(clientIt->second, _servicesCallbackGroup);
-    } catch (const std::exception& ex) {
-      std::string errorMessage =
-        "Failed to create service client for service " + serviceName + ": " + ex.what();
-      RCLCPP_ERROR(this->get_logger(), "%s", errorMessage.c_str());
-      std::move(responder).respondError(errorMessage);
-      return;
-    }
+  if (_serviceClients.find(serviceName) == _serviceClients.end()) {
+    std::string errorMessage =
+      "Service " + request.service_name + " is advertised but no client exists for it";
+    RCLCPP_ERROR(this->get_logger(), "%s", errorMessage.c_str());
+    std::move(responder).respondError(errorMessage);
+    return;
   }
 
-  auto client = clientIt->second;
+  auto client = _serviceClients.at(serviceName);
   if (!client->wait_for_service(1s)) {
     std::string errorMessage = "Service " + serviceName + " is not available";
     RCLCPP_ERROR(this->get_logger(), "%s", errorMessage.c_str());
