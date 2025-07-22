@@ -130,8 +130,8 @@ void to_json(nlohmann::json& j, const Service& service) {
     {"id", service.id},
     {"name", service.name},
     {"type", service.type},
-    {"requestSchema", service.requestSchema},
-    {"responseSchema", service.responseSchema},
+    {"request", {{"schema", service.requestSchema}}},
+    {"response", {{"schema", service.responseSchema}}},
   };
 }
 
