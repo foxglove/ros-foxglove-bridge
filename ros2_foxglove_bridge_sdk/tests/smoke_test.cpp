@@ -107,7 +107,7 @@ protected:
 };
 
 // TODO: FG-12234: Enable when Service functionality is implemented
-class DISABLED_ServiceTest : public TestWithExecutor {
+class ServiceTest : public TestWithExecutor {
 public:
   inline static const std::string SERVICE_NAME = "/foo_service";
 
@@ -590,7 +590,7 @@ TEST_F(ParameterTest, testGetParametersParallel) {
   }
 }
 
-TEST_F(DISABLED_ServiceTest, testAdvertiseService) {
+TEST_F(ServiceTest, testAdvertiseService) {
   auto client = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
   auto serviceFuture = foxglove_ws::waitForService(client, SERVICE_NAME);
   ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(ONE_SECOND));
@@ -605,7 +605,7 @@ TEST_F(DISABLED_ServiceTest, testAdvertiseService) {
             "informational, e.g. for error messages");
 }
 
-TEST_F(DISABLED_ServiceTest, testCallServiceParallel) {
+TEST_F(ServiceTest, testCallServiceParallel) {
   // Connect a few clients (in parallel) and make sure that they can all call the service
   auto clients = {
     std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>(),
@@ -657,7 +657,7 @@ TEST_F(DISABLED_ServiceTest, testCallServiceParallel) {
   }
 }
 
-TEST_F(DISABLED_ServiceTest, testCallNonexistentService) {
+TEST_F(ServiceTest, testCallNonexistentService) {
   auto client = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
   ASSERT_EQ(std::future_status::ready, client->connect(URI).wait_for(std::chrono::seconds(5)));
 

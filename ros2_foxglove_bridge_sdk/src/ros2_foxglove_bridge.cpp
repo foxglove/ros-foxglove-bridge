@@ -32,6 +32,11 @@ inline foxglove::WebSocketServerCapabilities processCapabilities(
   }
   return out;
 }
+
+inline bool hasCapability(const foxglove::WebSocketServerCapabilities& capabilities,
+                          foxglove::WebSocketServerCapabilities capability) {
+  return (capabilities & capability) == capability;
+}
 }  // namespace
 
 using namespace std::chrono_literals;
@@ -67,7 +72,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   const auto paramWhitelistPatterns = parseRegexStrings(this, paramWhiteList);
   const auto useCompression = this->get_parameter(PARAM_USE_COMPRESSION).as_bool();
   _useSimTime = this->get_parameter("use_sim_time").as_bool();
-  _capabilities = this->get_parameter(PARAM_CAPABILITIES).as_string_array();
+  const auto capabilities = this->get_parameter(PARAM_CAPABILITIES).as_string_array();
   const auto clientTopicWhiteList =
     this->get_parameter(PARAM_CLIENT_TOPIC_WHITELIST).as_string_array();
   const auto clientTopicWhiteListPatterns = parseRegexStrings(this, clientTopicWhiteList);
@@ -83,7 +88,6 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   _fetchAssetQueue = std::make_unique<foxglove_ws::CallbackQueue>(logHandler, 1 /* num_threads */);
 
   foxglove_ws::ServerOptions serverOptions;
-  serverOptions.capabilities = _capabilities;
   if (_useSimTime) {
     serverOptions.capabilities.push_back(foxglove_ws::CAPABILITY_TIME);
   }
@@ -102,14 +106,11 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
 
   foxglove::setLogLevel(foxglove::LogLevel::Debug);
   foxglove::WebSocketServerOptions sdkServerOptions;
+  _capabilities = processCapabilities(capabilities);
   sdkServerOptions.host = address;
   sdkServerOptions.port = port;
   sdkServerOptions.supported_encodings = {"cdr", "json"};
-
-  // TODO: The SDK server currently doesn't implement any of the TLS functionality. Once that
-  // exists, add it here.
-
-  sdkServerOptions.capabilities = processCapabilities(_capabilities);
+  sdkServerOptions.capabilities = _capabilities;
   if (_useSimTime) {
     sdkServerOptions.capabilities =
       sdkServerOptions.capabilities | foxglove::WebSocketServerCapabilities::Time;
@@ -122,7 +123,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   sdkServerOptions.callbacks.onSubscribe = std::bind(&FoxgloveBridge::subscribe, this, _1, _2);
   sdkServerOptions.callbacks.onUnsubscribe = std::bind(&FoxgloveBridge::unsubscribe, this, _1, _2);
 
-  if (hasCapability(foxglove_ws::CAPABILITY_CLIENT_PUBLISH)) {
+  if (hasCapability(_capabilities, foxglove::WebSocketServerCapabilities::ClientPublish)) {
     sdkServerOptions.callbacks.onClientAdvertise =
       std::bind(&FoxgloveBridge::clientAdvertise, this, _1, _2);
     sdkServerOptions.callbacks.onClientUnadvertise =
@@ -131,7 +132,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
       std::bind(&FoxgloveBridge::clientMessage, this, _1, _2, _3, _4);
   }
 
-  if (hasCapability(foxglove_ws::CAPABILITY_ASSETS)) {
+  if (hasCapability(_capabilities, foxglove::WebSocketServerCapabilities::Assets)) {
     sdkServerOptions.fetch_asset = std::bind(&FoxgloveBridge::fetchAsset, this, _1, _2);
   }
 
@@ -372,7 +373,7 @@ void FoxgloveBridge::updateAdvertisedTopics(
 void FoxgloveBridge::updateAdvertisedServices() {
   if (!rclcpp::ok()) {
     return;
-  } else if (!hasCapability(foxglove_ws::CAPABILITY_SERVICES)) {
+  } else if (!hasCapability(_capabilities, foxglove::WebSocketServerCapabilities::Services)) {
     return;
   }
 
@@ -382,32 +383,31 @@ void FoxgloveBridge::updateAdvertisedServices() {
   std::lock_guard<std::mutex> lock(_servicesMutex);
 
   // Remove advertisements for services that have been removed
-  std::vector<foxglove_ws::ServiceId> servicesToRemove;
-  for (const auto& service : _advertisedServices) {
-    const auto it = std::find_if(serviceNamesAndTypes.begin(), serviceNamesAndTypes.end(),
-                                 [service](const auto& serviceNameAndTypes) {
-                                   return serviceNameAndTypes.first == service.second.name;
-                                 });
-    if (it == serviceNamesAndTypes.end()) {
-      servicesToRemove.push_back(service.first);
+  std::vector<std::string> servicesToRemove;
+  for (const auto& [serviceName, _] : _advertisedServices) {
+    if (serviceNamesAndTypes.find(serviceName) == serviceNamesAndTypes.end()) {
+      servicesToRemove.push_back(serviceName);
     }
   }
-  for (auto serviceId : servicesToRemove) {
-    _advertisedServices.erase(serviceId);
+  for (const auto& serviceName : servicesToRemove) {
+    _advertisedServices.erase(serviceName);
+    _serviceClients.erase(serviceName);
+    _serviceHandlers.erase(serviceName);
+    auto error = _sdkServer->removeService(serviceName);
+    if (error != foxglove::FoxgloveError::Ok) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to remove service %s: %s", serviceName.c_str(),
+                   foxglove::strerror(error));
+    }
   }
-  _server->removeServices(servicesToRemove);
 
   // Advertise new services
-  std::vector<foxglove_ws::ServiceWithoutId> newServices;
   for (const auto& serviceNamesAndType : serviceNamesAndTypes) {
     const auto& serviceName = serviceNamesAndType.first;
     const auto& datatypes = serviceNamesAndType.second;
+    const auto& serviceType = datatypes.front();
 
     // Ignore the service if it's already advertised
-    if (std::find_if(_advertisedServices.begin(), _advertisedServices.end(),
-                     [serviceName](const auto& idWithService) {
-                       return idWithService.second.name == serviceName;
-                     }) != _advertisedServices.end()) {
+    if (_advertisedServices.find(serviceName) != _advertisedServices.end()) {
       continue;
     }
 
@@ -421,47 +421,102 @@ void FoxgloveBridge::updateAdvertisedServices() {
       continue;
     }
 
-    foxglove_ws::ServiceWithoutId service;
-    service.name = serviceName;
-    service.type = datatypes.front();
+    foxglove::ServiceSchema serviceSchema;
+    serviceSchema.name = serviceType;
 
+    // Read and initialize the service schema
     try {
-      const auto requestTypeName = service.type + foxglove::SERVICE_REQUEST_MESSAGE_SUFFIX;
-      const auto responseTypeName = service.type + foxglove::SERVICE_RESPONSE_MESSAGE_SUFFIX;
-      const auto [format, reqSchema] = _messageDefinitionCache.get_full_text(requestTypeName);
-      const auto resSchema = _messageDefinitionCache.get_full_text(responseTypeName).second;
+      const auto requestTypeName = serviceType + foxglove::SERVICE_REQUEST_MESSAGE_SUFFIX;
+      const auto responseTypeName = serviceType + foxglove::SERVICE_RESPONSE_MESSAGE_SUFFIX;
+      const auto& [format, reqSchema] = _messageDefinitionCache.get_full_text(requestTypeName);
+      const auto& resSchema = _messageDefinitionCache.get_full_text(responseTypeName).second;
+      std::string schemaEncoding = "";
+      std::string messageEncoding = "";
       switch (format) {
         case foxglove::MessageDefinitionFormat::MSG:
-          service.requestSchema = reqSchema;
-          service.responseSchema = resSchema;
+          schemaEncoding = "ros2msg";
+          messageEncoding = "cdr";
           break;
         case foxglove::MessageDefinitionFormat::IDL:
+          // REVIEW: Is this still true in the SDK?
           RCLCPP_WARN(this->get_logger(),
                       "IDL message definition format cannot be communicated over ws-protocol. "
                       "Service \"%s\" (%s) may not decode correctly in clients",
-                      service.name.c_str(), service.type.c_str());
-          service.requestSchema = reqSchema;
-          service.responseSchema = resSchema;
+                      serviceName.c_str(), serviceType.c_str());
+          schemaEncoding = "ros2idl";
+          messageEncoding = "cdr";
           break;
+        default:
+          RCLCPP_ERROR(this->get_logger(), "Unsupported message definition format for type %s",
+                       requestTypeName.c_str());
+          continue;
       }
+      serviceSchema.request = std::make_optional<foxglove::ServiceMessageSchema>();
+      serviceSchema.request->encoding = messageEncoding;
+      serviceSchema.request->schema = foxglove::Schema{
+        requestTypeName,
+        schemaEncoding,
+        reinterpret_cast<const std::byte*>(reqSchema.data()),
+        reqSchema.size(),
+      };
+
+      serviceSchema.response = std::make_optional<foxglove::ServiceMessageSchema>();
+      serviceSchema.response->encoding = messageEncoding;
+      serviceSchema.response->schema = foxglove::Schema{
+        responseTypeName,
+        schemaEncoding,
+        reinterpret_cast<const std::byte*>(resSchema.data()),
+        resSchema.size(),
+      };
     } catch (const foxglove::DefinitionNotFoundError& err) {
       RCLCPP_WARN(this->get_logger(), "Could not find definition for type %s: %s",
-                  service.type.c_str(), err.what());
-      // We still advertise the service, but with an emtpy schema
-      service.requestSchema = "";
-      service.responseSchema = "";
+                  serviceType.c_str(), err.what());
+      // We still advertise the service, but with an empty schema
+      serviceSchema.request = std::nullopt;
+      serviceSchema.response = std::nullopt;
     } catch (const std::exception& err) {
-      RCLCPP_WARN(this->get_logger(), "Failed to add service \"%s\" (%s): %s", service.name.c_str(),
-                  service.type.c_str(), err.what());
+      RCLCPP_WARN(this->get_logger(), "Failed to add service \"%s\" (%s): %s", serviceName.c_str(),
+                  serviceType.c_str(), err.what());
       continue;
     }
 
-    newServices.push_back(service);
-  }
+    // Set up ROS service client
+    try {
+      auto clientOptions = rcl_client_get_default_options();
+      auto [it, _] = _serviceClients.insert(
+        {serviceName, std::make_shared<GenericClient>(this->get_node_base_interface().get(),
+                                                      this->get_node_graph_interface(), serviceName,
+                                                      serviceType, clientOptions)});
+      this->get_node_services_interface()->add_client(it->second, _servicesCallbackGroup);
+    } catch (const std::exception& ex) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to create service client for service %s: %s",
+                   serviceName.c_str(), ex.what());
+      continue;
+    }
 
-  const auto serviceIds = _server->addServices(newServices);
-  for (size_t i = 0; i < serviceIds.size(); ++i) {
-    _advertisedServices.emplace(serviceIds[i], newServices[i]);
+    auto handler = std::make_unique<foxglove::ServiceHandler>(
+      [this](const foxglove::ServiceRequest& req, foxglove::ServiceResponder&& res) {
+        this->handleServiceRequest(req, std::move(res));
+      });
+
+    _serviceHandlers.insert({serviceName, std::move(handler)});
+
+    auto serviceResult =
+      foxglove::Service::create(serviceName, serviceSchema, *_serviceHandlers.at(serviceName));
+    if (!serviceResult.has_value()) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to create service %s: %s", serviceName.c_str(),
+                   foxglove::strerror(serviceResult.error()));
+      continue;
+    }
+
+    auto addServiceError = _sdkServer->addService(std::move(serviceResult.value()));
+    if (addServiceError != foxglove::FoxgloveError::Ok) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to add service %s to server: %s",
+                   serviceName.c_str(), foxglove::strerror(addServiceError));
+      continue;
+    }
+
+    _advertisedServices.insert({serviceName, serviceType});
   }
 }
 
@@ -541,8 +596,8 @@ void FoxgloveBridge::subscribe(ChannelId channelId, const foxglove::ClientMetada
               channelId, client.id, client.sink_id.value());
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
-  // REVIEW: Is this necessary if the SDK server is checking that the channel exists before calling
-  // this callback?
+  // REVIEW: Is this necessary if the SDK server is checking that the channel exists before
+  // calling this callback?
   auto it = _sdkChannels.find(channelId);
   if (it == _sdkChannels.end()) {
     RCLCPP_ERROR(this->get_logger(), "[SDK] received subscribe request for unknown channel: %lu",
@@ -582,10 +637,10 @@ void FoxgloveBridge::subscribe(ChannelId channelId, const foxglove::ClientMetada
   }
 
   _sdkSubscriptions.insert({{channelId, client.id}, subscription});
-  RCLCPP_INFO(
-    this->get_logger(),
-    "[SDK] created ROS subscription on %s (%s) successfully for channel %lu (client %u, sink %lu)",
-    topic.c_str(), datatype.c_str(), channelId, client.id, client.sink_id.value());
+  RCLCPP_INFO(this->get_logger(),
+              "[SDK] created ROS subscription on %s (%s) successfully for channel %lu (client "
+              "%u, sink %lu)",
+              topic.c_str(), datatype.c_str(), channelId, client.id, client.sink_id.value());
 }
 
 void FoxgloveBridge::unsubscribe(ChannelId channelId, const foxglove::ClientMetadata& client) {
@@ -894,55 +949,53 @@ void FoxgloveBridge::rosMessageHandler(ChannelId channelId, SinkId sinkId,
                rclSerializedMsg.buffer_length, timestamp, sinkId);
 }
 
-void FoxgloveBridge::serviceRequest(const foxglove_ws::ServiceRequest& request,
-                                    ConnectionHandle clientHandle) {
-  RCLCPP_DEBUG(this->get_logger(), "Received a request for service %d", request.serviceId);
+void FoxgloveBridge::handleServiceRequest(const foxglove::ServiceRequest& request,
+                                          foxglove::ServiceResponder&& responder) {
+  RCLCPP_DEBUG(this->get_logger(), "Received a request for service %s",
+               request.service_name.c_str());
 
   std::lock_guard<std::mutex> lock(_servicesMutex);
-  const auto serviceIt = _advertisedServices.find(request.serviceId);
+  auto serviceIt = _advertisedServices.find(request.service_name);
   if (serviceIt == _advertisedServices.end()) {
-    throw foxglove_ws::ServiceError(
-      request.serviceId,
-      "Service with id " + std::to_string(request.serviceId) + " does not exist");
+    std::string errorMessage = "Service " + request.service_name + " does not exist";
+    RCLCPP_ERROR(this->get_logger(), "%s", errorMessage.c_str());
+    std::move(responder).respondError(errorMessage);
+    return;
   }
 
-  auto clientIt = _serviceClients.find(request.serviceId);
-  if (clientIt == _serviceClients.end()) {
-    try {
-      auto clientOptions = rcl_client_get_default_options();
-      auto genClient = GenericClient::make_shared(
-        this->get_node_base_interface().get(), this->get_node_graph_interface(),
-        serviceIt->second.name, serviceIt->second.type, clientOptions);
-      clientIt = _serviceClients.emplace(request.serviceId, std::move(genClient)).first;
-      this->get_node_services_interface()->add_client(clientIt->second, _servicesCallbackGroup);
-    } catch (const std::exception& ex) {
-      throw foxglove_ws::ServiceError(
-        request.serviceId,
-        "Failed to create service client for service " + serviceIt->second.name + ": " + ex.what());
-    }
+  const auto& [serviceName, serviceType] = *serviceIt;
+
+  if (_serviceClients.find(serviceName) == _serviceClients.end()) {
+    std::string errorMessage =
+      "Service " + request.service_name + " is advertised but no client exists for it";
+    RCLCPP_ERROR(this->get_logger(), "%s", errorMessage.c_str());
+    std::move(responder).respondError(errorMessage);
+    return;
   }
 
-  auto client = clientIt->second;
+  auto client = _serviceClients.at(serviceName);
   if (!client->wait_for_service(1s)) {
-    throw foxglove_ws::ServiceError(request.serviceId,
-                                    "Service " + serviceIt->second.name + " is not available");
+    std::string errorMessage = "Service " + serviceName + " is not available";
+    RCLCPP_ERROR(this->get_logger(), "%s", errorMessage.c_str());
+    std::move(responder).respondError(errorMessage);
+    return;
   }
 
-  auto reqMessage = std::make_shared<rclcpp::SerializedMessage>(request.data.size());
-  auto& rclSerializedMsg = reqMessage->get_rcl_serialized_message();
-  std::memcpy(rclSerializedMsg.buffer, request.data.data(), request.data.size());
-  rclSerializedMsg.buffer_length = request.data.size();
+  if (request.encoding != "cdr") {
+    std::string errorMessage = "Service " + serviceName +
+                               " received a request with an unsupported encoding " +
+                               request.encoding;
+    RCLCPP_ERROR(this->get_logger(), "%s", errorMessage.c_str());
+    std::move(responder).respondError(errorMessage);
+    return;
+  }
 
-  auto responseReceivedCallback = [this, request,
-                                   clientHandle](GenericClient::SharedFuture future) {
-    const auto serializedResponseMsg = future.get()->get_rcl_serialized_message();
-    foxglove_ws::ServiceRequest response{request.serviceId, request.callId, request.encoding,
-                                         std::vector<uint8_t>(serializedResponseMsg.buffer_length)};
-    std::memcpy(response.data.data(), serializedResponseMsg.buffer,
-                serializedResponseMsg.buffer_length);
-    _server->sendServiceResponse(clientHandle, response);
-  };
-  client->async_send_request(reqMessage, responseReceivedCallback);
+  auto reqMessage = std::make_shared<rclcpp::SerializedMessage>(request.payload.size());
+  std::memcpy(reqMessage->get_rcl_serialized_message().buffer, request.payload.data(),
+              request.payload.size());
+  reqMessage->get_rcl_serialized_message().buffer_length = request.payload.size();
+
+  client->async_send_request(reqMessage, std::move(responder));
 }
 
 void FoxgloveBridge::fetchAsset(const std::string_view uriView,
@@ -977,15 +1030,6 @@ void FoxgloveBridge::fetchAsset(const std::string_view uriView,
     RCLCPP_WARN(this->get_logger(), "Failed to retrieve asset '%s': %s", uri.c_str(), ex.what());
     std::move(responder).respondError("Failed to retrieve asset " + uri);
   }
-}
-
-bool FoxgloveBridge::hasCapability(const std::string& capability) {
-  return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
-}
-
-bool FoxgloveBridge::hasCapability(const foxglove::WebSocketServerCapabilities capabilities,
-                                   const foxglove::WebSocketServerCapabilities query) {
-  return (capabilities & query) == query;
 }
 
 rclcpp::QoS FoxgloveBridge::determineQoS(const std::string& topic) {
