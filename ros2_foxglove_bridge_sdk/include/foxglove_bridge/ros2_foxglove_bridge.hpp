@@ -76,16 +76,14 @@ private:
     }
   };
 
-  // BEGIN New SDK Components
-  std::unique_ptr<foxglove::WebSocketServer> _sdkServer;
-  std::unordered_map<ChannelId, foxglove::RawChannel> _sdkChannels;
-  std::unordered_map<ChannelAndClientId, Subscription, PairHash> _sdkSubscriptions;
+  std::unique_ptr<foxglove::WebSocketServer> _server;
+  std::unordered_map<ChannelId, foxglove::RawChannel> _channels;
+  std::unordered_map<ChannelAndClientId, Subscription, PairHash> _subscriptions;
   std::unordered_map<ChannelAndClientId, ClientAdvertisement, PairHash> _clientAdvertisedTopics;
   foxglove::WebSocketServerCapabilities _capabilities;
   ServicesByType _advertisedServices;
   std::unordered_map<std::string, GenericClient::SharedPtr> _serviceClients;
   std::unordered_map<std::string, std::unique_ptr<foxglove::ServiceHandler>> _serviceHandlers;
-  // END New SDK Components
 
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::vector<std::regex> _topicWhitelistPatterns;

@@ -138,9 +138,9 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   }
 
   // Constructing an SDK server also starts it listening automatically
-  _sdkServer = std::make_unique<foxglove::WebSocketServer>(std::move(maybeSdkServer.value()));
-  this->set_parameter(rclcpp::Parameter{PARAM_PORT, _sdkServer->port()});
-  RCLCPP_INFO(this->get_logger(), "Server listening on port %d", _sdkServer->port());
+  _server = std::make_unique<foxglove::WebSocketServer>(std::move(maybeSdkServer.value()));
+  this->set_parameter(rclcpp::Parameter{PARAM_PORT, _server->port()});
+  RCLCPP_INFO(this->get_logger(), "Server listening on port %d", _server->port());
 
   // Start the thread polling for rosgraph changes
   _rosgraphPollThread =
@@ -157,7 +157,7 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
       [&](std::shared_ptr<const rosgraph_msgs::msg::Clock> msg) {
         const auto timestamp = rclcpp::Time{msg->clock}.nanoseconds();
         assert(timestamp >= 0 && "Timestamp is negative");
-        _sdkServer->broadcastTime(static_cast<uint64_t>(timestamp));
+        _server->broadcastTime(static_cast<uint64_t>(timestamp));
       });
   }
 }
@@ -168,7 +168,7 @@ FoxgloveBridge::~FoxgloveBridge() {
   if (_rosgraphPollThread) {
     _rosgraphPollThread->join();
   }
-  _sdkServer->stop();
+  _server->stop();
   RCLCPP_INFO(this->get_logger(), "Shutdown complete");
 }
 
@@ -235,7 +235,7 @@ void FoxgloveBridge::updateAdvertisedTopics(
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
   // Remove channels for which the topic does not exist anymore
-  for (auto channelIt = _sdkChannels.begin(); channelIt != _sdkChannels.end();) {
+  for (auto channelIt = _channels.begin(); channelIt != _channels.end();) {
     auto& channel = channelIt->second;
     std::string schemaName = channel.schema().value().name;
     std::string topic(channel.topic());
@@ -244,7 +244,7 @@ void FoxgloveBridge::updateAdvertisedTopics(
       RCLCPP_INFO(this->get_logger(), "Removing channel %lu for topic \"%s\" (%s)", channel.id(),
                   topic.c_str(), schemaName.c_str());
       channel.close();
-      channelIt = _sdkChannels.erase(channelIt);
+      channelIt = _channels.erase(channelIt);
     } else {
       channelIt++;
     }
@@ -255,11 +255,10 @@ void FoxgloveBridge::updateAdvertisedTopics(
     const auto& topic = topicAndDatatype.first;
     const auto& schemaName = topicAndDatatype.second;
 
-    if (std::find_if(
-          _sdkChannels.begin(), _sdkChannels.end(), [&topic, &schemaName](const auto& kvp) {
-            const auto& [channelId, channel] = kvp;
-            return channel.topic() == topic && channel.schema().value().name == schemaName;
-          }) != _sdkChannels.end()) {
+    if (std::find_if(_channels.begin(), _channels.end(), [&topic, &schemaName](const auto& kvp) {
+          const auto& [channelId, channel] = kvp;
+          return channel.topic() == topic && channel.schema().value().name == schemaName;
+        }) != _channels.end()) {
       continue;
     }
 
@@ -310,7 +309,7 @@ void FoxgloveBridge::updateAdvertisedTopics(
     const ChannelId channelId = channelResult.value().id();
     RCLCPP_INFO(this->get_logger(), "Advertising new channel %lu for topic \"%s\"", channelId,
                 topic.c_str());
-    _sdkChannels.insert({channelId, std::move(channelResult.value())});
+    _channels.insert({channelId, std::move(channelResult.value())});
   }
 }
 
@@ -337,7 +336,7 @@ void FoxgloveBridge::updateAdvertisedServices() {
     _advertisedServices.erase(serviceName);
     _serviceClients.erase(serviceName);
     _serviceHandlers.erase(serviceName);
-    auto error = _sdkServer->removeService(serviceName);
+    auto error = _server->removeService(serviceName);
     if (error != foxglove::FoxgloveError::Ok) {
       RCLCPP_ERROR(this->get_logger(), "Failed to remove service %s: %s", serviceName.c_str(),
                    foxglove::strerror(error));
@@ -453,7 +452,7 @@ void FoxgloveBridge::updateAdvertisedServices() {
       continue;
     }
 
-    auto addServiceError = _sdkServer->addService(std::move(serviceResult.value()));
+    auto addServiceError = _server->addService(std::move(serviceResult.value()));
     if (addServiceError != foxglove::FoxgloveError::Ok) {
       RCLCPP_ERROR(this->get_logger(), "Failed to add service %s to server: %s",
                    serviceName.c_str(), foxglove::strerror(addServiceError));
@@ -515,7 +514,7 @@ void FoxgloveBridge::updateConnectionGraph(
   }
 
   RCLCPP_INFO(this->get_logger(), "publishing connection graph");
-  _sdkServer->publishConnectionGraph(connectionGraph);
+  _server->publishConnectionGraph(connectionGraph);
 }
 
 void FoxgloveBridge::subscribeConnectionGraph(bool subscribe) {
@@ -542,8 +541,8 @@ void FoxgloveBridge::subscribe(ChannelId channelId, const foxglove::ClientMetada
 
   // REVIEW: Is this necessary if the SDK server is checking that the channel exists before
   // calling this callback?
-  auto it = _sdkChannels.find(channelId);
-  if (it == _sdkChannels.end()) {
+  auto it = _channels.find(channelId);
+  if (it == _channels.end()) {
     RCLCPP_ERROR(this->get_logger(), "received subscribe request for unknown channel: %lu",
                  channelId);
     return;
@@ -580,7 +579,7 @@ void FoxgloveBridge::subscribe(ChannelId channelId, const foxglove::ClientMetada
     return;
   }
 
-  _sdkSubscriptions.insert({{channelId, client.id}, subscription});
+  _subscriptions.insert({{channelId, client.id}, subscription});
   RCLCPP_INFO(this->get_logger(),
               "created ROS subscription on %s (%s) successfully for channel %lu (client "
               "%u, sink %lu)",
@@ -592,15 +591,15 @@ void FoxgloveBridge::unsubscribe(ChannelId channelId, const foxglove::ClientMeta
 
   RCLCPP_INFO(this->get_logger(), "received unsubscribe request for channel %lu", channelId);
 
-  auto it = _sdkChannels.find(channelId);
-  if (it == _sdkChannels.end()) {
+  auto it = _channels.find(channelId);
+  if (it == _channels.end()) {
     RCLCPP_ERROR(this->get_logger(), "received unsubscribe request for unknown channel %lu",
                  channelId);
     return;
   }
 
-  auto subscriptionIt = _sdkSubscriptions.find({channelId, client.id});
-  if (subscriptionIt == _sdkSubscriptions.end()) {
+  auto subscriptionIt = _subscriptions.find({channelId, client.id});
+  if (subscriptionIt == _subscriptions.end()) {
     RCLCPP_ERROR(this->get_logger(),
                  "Client %u tried unsubscribing from channel %lu but a corresponding ROS "
                  "subscription doesn't exist",
@@ -612,7 +611,7 @@ void FoxgloveBridge::unsubscribe(ChannelId channelId, const foxglove::ClientMeta
   RCLCPP_INFO(this->get_logger(),
               "Cleaned up subscription to topic %s for client %u on channel %lu", topic.c_str(),
               client.id, channelId);
-  _sdkSubscriptions.erase(subscriptionIt);
+  _subscriptions.erase(subscriptionIt);
 }
 
 void FoxgloveBridge::clientAdvertise(ClientId clientId, const foxglove::ClientChannel& channel) {
@@ -851,7 +850,7 @@ void FoxgloveBridge::unsubscribeParameters(const std::vector<std::string_view>& 
 }
 
 void FoxgloveBridge::parameterUpdates(const std::vector<foxglove::Parameter>& parameters) {
-  _sdkServer->publishParameterValues(ParameterInterface::cloneParameterList(parameters));
+  _server->publishParameterValues(ParameterInterface::cloneParameterList(parameters));
 }
 
 void FoxgloveBridge::rosMessageHandler(ChannelId channelId, SinkId sinkId,
@@ -863,11 +862,11 @@ void FoxgloveBridge::rosMessageHandler(ChannelId channelId, SinkId sinkId,
   const auto rclSerializedMsg = msg->get_rcl_serialized_message();
 
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
-  if (_sdkChannels.find(channelId) == _sdkChannels.end()) {
+  if (_channels.find(channelId) == _channels.end()) {
     return;
   }
 
-  auto& channel = _sdkChannels.at(channelId);
+  auto& channel = _channels.at(channelId);
   // TODO: Change to log() when the released SDK is updated to make this a public overload
   channel.log_(reinterpret_cast<const std::byte*>(rclSerializedMsg.buffer),
                rclSerializedMsg.buffer_length, timestamp, sinkId);
