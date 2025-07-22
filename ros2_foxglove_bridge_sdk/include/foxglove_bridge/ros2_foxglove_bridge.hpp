@@ -83,6 +83,7 @@ private:
   foxglove::WebSocketServerCapabilities _capabilities;
   ServicesByType _advertisedServices;
   std::unordered_map<std::string, GenericClient::SharedPtr> _serviceClients;
+  std::unordered_map<std::string, std::unique_ptr<foxglove::ServiceHandler>> _serviceHandlers;
   // END New SDK Components
 
   std::unique_ptr<foxglove_ws::ServerInterface<ConnectionHandle>> _server;

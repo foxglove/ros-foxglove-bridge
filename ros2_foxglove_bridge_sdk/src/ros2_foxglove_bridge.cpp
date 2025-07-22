@@ -392,6 +392,7 @@ void FoxgloveBridge::updateAdvertisedServices() {
   for (auto serviceName : servicesToRemove) {
     _advertisedServices.erase(serviceName);
     _serviceClients.erase(serviceName);
+    _serviceHandlers.erase(serviceName);
     auto error = _sdkServer->removeService(serviceName);
     if (error != foxglove::FoxgloveError::Ok) {
       RCLCPP_ERROR(this->get_logger(), "Failed to remove service %s: %s", serviceName.c_str(),
@@ -493,12 +494,15 @@ void FoxgloveBridge::updateAdvertisedServices() {
       continue;
     }
 
-    foxglove::ServiceHandler handler = [this](const foxglove::ServiceRequest& req,
-                                              foxglove::ServiceResponder&& res) {
-      this->handleServiceRequest(req, std::move(res));
-    };
+    auto handler = std::make_unique<foxglove::ServiceHandler>(
+      [this](const foxglove::ServiceRequest& req, foxglove::ServiceResponder&& res) {
+        this->handleServiceRequest(req, std::move(res));
+      });
 
-    auto serviceResult = foxglove::Service::create(serviceName, serviceSchema, handler);
+    _serviceHandlers.insert({serviceName, std::move(handler)});
+
+    auto serviceResult =
+      foxglove::Service::create(serviceName, serviceSchema, *_serviceHandlers.at(serviceName));
     if (!serviceResult.has_value()) {
       RCLCPP_ERROR(this->get_logger(), "Failed to create service %s: %s", serviceName.c_str(),
                    foxglove::strerror(serviceResult.error()));
