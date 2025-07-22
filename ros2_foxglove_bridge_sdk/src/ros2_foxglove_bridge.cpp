@@ -389,7 +389,7 @@ void FoxgloveBridge::updateAdvertisedServices() {
       servicesToRemove.push_back(serviceName);
     }
   }
-  for (auto serviceName : servicesToRemove) {
+  for (const auto& serviceName : servicesToRemove) {
     _advertisedServices.erase(serviceName);
     _serviceClients.erase(serviceName);
     _serviceHandlers.erase(serviceName);
