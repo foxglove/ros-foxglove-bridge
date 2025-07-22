@@ -13,6 +13,12 @@ inline bool isHiddenTopicOrService(const std::string& name) {
   return name.front() == '_' || name.find("/_") != std::string::npos;
 }
 
+inline bool isWhitelisted(const std::string& name, const std::vector<std::regex>& regexPatterns) {
+  return std::find_if(regexPatterns.begin(), regexPatterns.end(), [name](const auto& regex) {
+           return std::regex_match(name, regex);
+         }) != regexPatterns.end();
+}
+
 inline foxglove::WebSocketServerCapabilities processCapabilities(
   const std::vector<std::string>& capabilities) {
   const std::unordered_map<std::string, foxglove::WebSocketServerCapabilities>
@@ -41,7 +47,6 @@ inline bool hasCapability(const foxglove::WebSocketServerCapabilities& capabilit
 
 using namespace std::chrono_literals;
 using namespace std::placeholders;
-using foxglove_ws::isWhitelisted;
 
 FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
     : Node("foxglove_bridge", options) {
@@ -54,11 +59,6 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
 
   const auto port = static_cast<uint16_t>(this->get_parameter(PARAM_PORT).as_int());
   const auto address = this->get_parameter(PARAM_ADDRESS).as_string();
-  const auto send_buffer_limit =
-    static_cast<size_t>(this->get_parameter(PARAM_SEND_BUFFER_LIMIT).as_int());
-  const auto useTLS = this->get_parameter(PARAM_USETLS).as_bool();
-  const auto certfile = this->get_parameter(PARAM_CERTFILE).as_string();
-  const auto keyfile = this->get_parameter(PARAM_KEYFILE).as_string();
   _minQosDepth = static_cast<size_t>(this->get_parameter(PARAM_MIN_QOS_DEPTH).as_int());
   _maxQosDepth = static_cast<size_t>(this->get_parameter(PARAM_MAX_QOS_DEPTH).as_int());
   const auto bestEffortQosTopicWhiteList =
@@ -70,7 +70,6 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   _serviceWhitelistPatterns = parseRegexStrings(this, serviceWhiteList);
   const auto paramWhiteList = this->get_parameter(PARAM_PARAMETER_WHITELIST).as_string_array();
   const auto paramWhitelistPatterns = parseRegexStrings(this, paramWhiteList);
-  const auto useCompression = this->get_parameter(PARAM_USE_COMPRESSION).as_bool();
   _useSimTime = this->get_parameter("use_sim_time").as_bool();
   const auto capabilities = this->get_parameter(PARAM_CAPABILITIES).as_string_array();
   const auto clientTopicWhiteList =
@@ -83,28 +82,6 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   const auto ignoreUnresponsiveParamNodes =
     this->get_parameter(PARAM_IGN_UNRESPONSIVE_PARAM_NODES).as_bool();
 
-  const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
-  // Fetching of assets may be blocking, hence we fetch them in a separate thread.
-  _fetchAssetQueue = std::make_unique<foxglove_ws::CallbackQueue>(logHandler, 1 /* num_threads */);
-
-  foxglove_ws::ServerOptions serverOptions;
-  if (_useSimTime) {
-    serverOptions.capabilities.push_back(foxglove_ws::CAPABILITY_TIME);
-  }
-  serverOptions.supportedEncodings = {"cdr", "json"};
-  serverOptions.metadata = {{"ROS_DISTRO", rosDistro}};
-  serverOptions.sendBufferLimitBytes = send_buffer_limit;
-  serverOptions.sessionId = std::to_string(std::time(nullptr));
-  serverOptions.useCompression = useCompression;
-  serverOptions.useTls = useTLS;
-  serverOptions.certfile = certfile;
-  serverOptions.keyfile = keyfile;
-  serverOptions.clientTopicWhitelistPatterns = clientTopicWhiteListPatterns;
-
-  _server = foxglove_ws::ServerFactory::createServer<ConnectionHandle>("foxglove_bridge",
-                                                                       logHandler, serverOptions);
-
-  foxglove::setLogLevel(foxglove::LogLevel::Debug);
   foxglove::WebSocketServerOptions sdkServerOptions;
   _capabilities = processCapabilities(capabilities);
   sdkServerOptions.host = address;
@@ -117,7 +94,6 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   }
 
   // Setup callbacks
-  // TODO: Start going through the capabilities and binding callbacks as needed
   sdkServerOptions.callbacks.onConnectionGraphSubscribe =
     std::bind(&FoxgloveBridge::subscribeConnectionGraph, this, true);
   sdkServerOptions.callbacks.onSubscribe = std::bind(&FoxgloveBridge::subscribe, this, _1, _2);
@@ -155,47 +131,16 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   }
 
   auto maybeSdkServer = foxglove::WebSocketServer::create(std::move(sdkServerOptions));
-  assert(maybeSdkServer.has_value());
+
+  if (!maybeSdkServer.has_value()) {
+    throw std::runtime_error(std::string("Couldn't initialize websocket server: ") +
+                             foxglove::strerror(maybeSdkServer.error()));
+  }
 
   // Constructing an SDK server also starts it listening automatically
   _sdkServer = std::make_unique<foxglove::WebSocketServer>(std::move(maybeSdkServer.value()));
   this->set_parameter(rclcpp::Parameter{PARAM_PORT, _sdkServer->port()});
-  RCLCPP_INFO(this->get_logger(), "[SDK] server listening on port %d", _sdkServer->port());
-
-  foxglove_ws::ServerHandlers<ConnectionHandle> hdlrs;
-  /*
-  hdlrs.subscribeHandler = std::bind(&FoxgloveBridge::subscribe, this, _1, _2);
-  hdlrs.unsubscribeHandler = std::bind(&FoxgloveBridge::unsubscribe, this, _1, _2);
-  hdlrs.clientAdvertiseHandler = std::bind(&FoxgloveBridge::clientAdvertise, this, _1, _2);
-  hdlrs.clientUnadvertiseHandler = std::bind(&FoxgloveBridge::clientUnadvertise, this, _1, _2);
-  hdlrs.clientMessageHandler = std::bind(&FoxgloveBridge::clientMessage, this, _1, _2);
-  hdlrs.serviceRequestHandler = std::bind(&FoxgloveBridge::serviceRequest, this, _1, _2);
-  hdlrs.subscribeConnectionGraphHandler =
-    std::bind(&FoxgloveBridge::subscribeConnectionGraph, this, _1);
-
-  if (hasCapability(foxglove_ws::CAPABILITY_PARAMETERS) ||
-      hasCapability(foxglove_ws::CAPABILITY_PARAMETERS_SUBSCRIBE)) {
-    hdlrs.parameterRequestHandler = std::bind(&FoxgloveBridge::getParameters, this, _1, _2, _3);
-    hdlrs.parameterChangeHandler = std::bind(&FoxgloveBridge::setParameters, this, _1, _2, _3);
-    hdlrs.parameterSubscriptionHandler =
-      std::bind(&FoxgloveBridge::subscribeParameters, this, _1, _2, _3);
-
-    _paramInterface = std::make_shared<ParameterInterface>(this, paramWhitelistPatterns,
-                                                           ignoreUnresponsiveParamNodes
-                                                             ? UnresponsiveNodePolicy::Ignore
-                                                             : UnresponsiveNodePolicy::Retry);
-    _paramInterface->setParamUpdateCallback(std::bind(&FoxgloveBridge::parameterUpdates, this, _1));
-  }
-
-  if (hasCapability(foxglove_ws::CAPABILITY_ASSETS)) {
-    hdlrs.fetchAssetHandler = [this](const std::string& uri, uint32_t requestId,
-                                     ConnectionHandle hdl) {
-      _fetchAssetQueue->addCallback(
-        std::bind(&FoxgloveBridge::fetchAsset, this, uri, requestId, hdl));
-    };
-  }
-  _server->setHandlers(std::move(hdlrs));
-  */
+  RCLCPP_INFO(this->get_logger(), "Server listening on port %d", _sdkServer->port());
 
   // Start the thread polling for rosgraph changes
   _rosgraphPollThread =
@@ -223,7 +168,6 @@ FoxgloveBridge::~FoxgloveBridge() {
   if (_rosgraphPollThread) {
     _rosgraphPollThread->join();
   }
-  _server->stop();
   _sdkServer->stop();
   RCLCPP_INFO(this->get_logger(), "Shutdown complete");
 }
@@ -680,15 +624,15 @@ void FoxgloveBridge::clientAdvertise(ClientId clientId, const foxglove::ClientCh
   const std::string encoding(channel.encoding);
 
   if (_clientAdvertisedTopics.find(key) != _clientAdvertisedTopics.end()) {
-    throw foxglove_ws::ClientChannelError(
-      channel.id, "Received client advertisement from client ID " + std::to_string(clientId) +
-                    " for channel " + std::to_string(channel.id) + " it had already advertised");
+    throw ClientChannelError("Received client advertisement from client ID " +
+                             std::to_string(clientId) + " for channel " +
+                             std::to_string(channel.id) + " it had already advertised");
   }
 
   if (channel.schema_name.empty()) {
-    throw foxglove_ws::ClientChannelError(
-      channel.id, "Received client advertisement from client ID " + std::to_string(clientId) +
-                    " for channel " + std::to_string(channel.id) + " with empty schema name");
+    throw ClientChannelError("Received client advertisement from client ID " +
+                             std::to_string(clientId) + " for channel " +
+                             std::to_string(channel.id) + " with empty schema name");
   }
 
   if (encoding == "json") {
@@ -704,8 +648,8 @@ void FoxgloveBridge::clientAdvertise(ClientId clientId, const foxglove::ClientCh
         // Schema not given, look it up.
         auto [format, msgDefinition] = _messageDefinitionCache.get_full_text(schemaName);
         if (format != foxglove::MessageDefinitionFormat::MSG) {
-          throw foxglove_ws::ClientChannelError(
-            channel.id, "Message definition (.msg) for schema " + schemaName + " not found.");
+          throw ClientChannelError("Message definition (.msg) for schema " + schemaName +
+                                   " for channel " + std::to_string(channel.id) + " not found.");
         }
 
         schema = msgDefinition;
@@ -751,8 +695,8 @@ void FoxgloveBridge::clientAdvertise(ClientId clientId, const foxglove::ClientCh
     ClientAdvertisement clientAdvertisement{std::move(publisher), topicName, topicType, encoding};
     _clientAdvertisedTopics.emplace(key, std::move(clientAdvertisement));
   } catch (const std::exception& ex) {
-    throw foxglove_ws::ClientChannelError(channel.id,
-                                          std::string("Failed to create publisher: ") + ex.what());
+    throw ClientChannelError("Failed to create publisher for client channel " +
+                             std::to_string(channel.id) + ": " + ex.what());
   }
 }
 
@@ -763,10 +707,9 @@ void FoxgloveBridge::clientUnadvertise(ClientId clientId, ChannelId clientChanne
 
   auto it = _clientAdvertisedTopics.find(key);
   if (it == _clientAdvertisedTopics.end()) {
-    throw foxglove_ws::ClientChannelError(clientChannelId,
-                                          "Ignoring client unadvertisement from client ID " +
-                                            std::to_string(clientId) + " for unknown channel " +
-                                            std::to_string(clientChannelId));
+    throw ClientChannelError("Ignoring client unadvertisement from client ID " +
+                             std::to_string(clientId) + " for unknown channel " +
+                             std::to_string(clientChannelId));
   }
 
   const auto& publisher = it->second.publisher;
@@ -794,10 +737,10 @@ void FoxgloveBridge::clientMessage(ClientId clientId, ChannelId clientChannelId,
 
     auto it = _clientAdvertisedTopics.find(key);
     if (it == _clientAdvertisedTopics.end()) {
-      throw foxglove_ws::ClientChannelError(
-        clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
-                           " for unknown channel " + std::to_string(clientChannelId) +
-                           ", client has no advertised topics");
+      throw ClientChannelError("Dropping client message from client ID " +
+                               std::to_string(clientId) + " for unknown channel " +
+                               std::to_string(clientChannelId) +
+                               ", client has no advertised topics");
     }
 
     publisher = it->second.publisher;
@@ -832,9 +775,9 @@ void FoxgloveBridge::clientMessage(ClientId clientId, ChannelId clientChannelId,
       }
     }
     if (!parser) {
-      throw foxglove_ws::ClientChannelError(
-        clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
-                           " with encoding \"json\": no parser found");
+      throw ClientChannelError(
+        "Dropping client message on client channel " + std::to_string(clientChannelId) +
+        " from client ID " + std::to_string(clientId) + " with encoding \"json\": no parser found");
     } else {
       thread_local RosMsgParser::ROS2_Serializer serializer;
       serializer.reset();
@@ -843,15 +786,16 @@ void FoxgloveBridge::clientMessage(ClientId clientId, ChannelId clientChannelId,
         parser->serializeFromJson(jsonMessage, &serializer);
         publishMessage(serializer.getBufferData(), serializer.getBufferSize());
       } catch (const std::exception& ex) {
-        throw foxglove_ws::ClientChannelError(
-          clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
-                             " with encoding \"json\": " + ex.what());
+        throw ClientChannelError(
+          "Dropping client message on client channel " + std::to_string(clientChannelId) +
+          " from client ID " + std::to_string(clientId) + " with encoding \"json\": " + ex.what());
       }
     }
   } else {
-    throw foxglove_ws::ClientChannelError(
-      clientChannelId, "Dropping client message from client ID " + std::to_string(clientId) +
-                         " with unknown encoding \"" + encoding + "\"");
+    throw ClientChannelError("Dropping client message on client channel " +
+                             std::to_string(clientChannelId) + " from client ID " +
+                             std::to_string(clientId) + " with unknown encoding \"" + encoding +
+                             "\"");
   }
 }
 
@@ -908,26 +852,6 @@ void FoxgloveBridge::unsubscribeParameters(const std::vector<std::string_view>& 
 
 void FoxgloveBridge::parameterUpdates(const std::vector<foxglove::Parameter>& parameters) {
   _sdkServer->publishParameterValues(ParameterInterface::cloneParameterList(parameters));
-}
-
-void FoxgloveBridge::logHandler(LogLevel level, char const* msg) {
-  switch (level) {
-    case LogLevel::Debug:
-      RCLCPP_DEBUG(this->get_logger(), "[WS] %s", msg);
-      break;
-    case LogLevel::Info:
-      RCLCPP_INFO(this->get_logger(), "[WS] %s", msg);
-      break;
-    case LogLevel::Warn:
-      RCLCPP_WARN(this->get_logger(), "[WS] %s", msg);
-      break;
-    case LogLevel::Error:
-      RCLCPP_ERROR(this->get_logger(), "[WS] %s", msg);
-      break;
-    case LogLevel::Critical:
-      RCLCPP_FATAL(this->get_logger(), "[WS] %s", msg);
-      break;
-  }
 }
 
 void FoxgloveBridge::rosMessageHandler(ChannelId channelId, SinkId sinkId,

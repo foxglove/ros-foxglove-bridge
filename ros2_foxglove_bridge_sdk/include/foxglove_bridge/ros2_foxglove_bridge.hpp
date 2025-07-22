@@ -27,14 +27,9 @@
 namespace foxglove_bridge {
 
 using ConnectionHandle = websocketpp::connection_hdl;
-using LogLevel = foxglove_ws::WebSocketLogLevel;
 using Subscription = rclcpp::GenericSubscription::SharedPtr;
-using SubscriptionsByClient = std::map<ConnectionHandle, Subscription, std::owner_less<>>;
 using Publication = rclcpp::GenericPublisher::SharedPtr;
-using ClientPublications = std::unordered_map<foxglove_ws::ClientChannelId, Publication>;
-using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std::owner_less<>>;
 
-using SubscriptionCount = std::pair<Subscription, size_t>;
 using MapOfSets = std::unordered_map<std::string, std::unordered_set<std::string>>;
 using ServicesByType = std::unordered_map<std::string, std::string>;
 
@@ -47,6 +42,12 @@ struct ClientAdvertisement {
   std::string topicName;
   std::string topicType;
   std::string encoding;
+};
+
+class ClientChannelError : public std::runtime_error {
+public:
+  ClientChannelError(const std::string& msg)
+      : std::runtime_error(msg){};
 };
 
 class FoxgloveBridge : public rclcpp::Node {
@@ -86,15 +87,12 @@ private:
   std::unordered_map<std::string, std::unique_ptr<foxglove::ServiceHandler>> _serviceHandlers;
   // END New SDK Components
 
-  std::unique_ptr<foxglove_ws::ServerInterface<ConnectionHandle>> _server;
   foxglove::MessageDefinitionCache _messageDefinitionCache;
   std::vector<std::regex> _topicWhitelistPatterns;
   std::vector<std::regex> _serviceWhitelistPatterns;
   std::vector<std::regex> _assetUriAllowlistPatterns;
   std::vector<std::regex> _bestEffortQosTopicWhiteListPatterns;
   std::shared_ptr<ParameterInterface> _paramInterface;
-  std::unordered_map<foxglove_ws::ChannelId, foxglove_ws::ChannelWithoutId> _advertisedTopics;
-  std::unordered_map<foxglove_ws::ChannelId, SubscriptionsByClient> _subscriptions;
   rclcpp::CallbackGroup::SharedPtr _subscriptionCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _clientPublishCallbackGroup;
   rclcpp::CallbackGroup::SharedPtr _servicesCallbackGroup;
@@ -109,7 +107,6 @@ private:
   std::atomic<bool> _subscribeGraphUpdates = false;
   bool _includeHidden = false;
   bool _disableLoanMessage = true;
-  std::unique_ptr<foxglove_ws::CallbackQueue> _fetchAssetQueue;
   std::unordered_map<std::string, std::shared_ptr<RosMsgParser::Parser>> _jsonParsers;
   std::atomic<bool> _shuttingDown = false;
 
@@ -139,8 +136,6 @@ private:
   void unsubscribeParameters(const std::vector<std::string_view>& parameterNames);
 
   void parameterUpdates(const std::vector<foxglove::Parameter>& parameters);
-
-  void logHandler(LogLevel level, char const* msg);
 
   void rosMessageHandler(ChannelId channelId, SinkId sinkId,
                          std::shared_ptr<const rclcpp::SerializedMessage> msg);
