@@ -514,12 +514,12 @@ void FoxgloveBridge::updateConnectionGraph(
                                          std::vector(providerIds.begin(), providerIds.end()));
   }
 
-  RCLCPP_INFO(this->get_logger(), "[SDK] publishing connection graph");
+  RCLCPP_INFO(this->get_logger(), "publishing connection graph");
   _sdkServer->publishConnectionGraph(connectionGraph);
 }
 
 void FoxgloveBridge::subscribeConnectionGraph(bool subscribe) {
-  RCLCPP_INFO(this->get_logger(), "[SDK] received connection graph subscribe request");
+  RCLCPP_INFO(this->get_logger(), "received connection graph subscribe request");
   if ((_subscribeGraphUpdates = subscribe)) {
     // TODO: This causes a deadlock in the SDK implementation
     // updateConnectionGraph(get_topic_names_and_types());
@@ -529,22 +529,22 @@ void FoxgloveBridge::subscribeConnectionGraph(bool subscribe) {
 void FoxgloveBridge::subscribe(ChannelId channelId, const foxglove::ClientMetadata& client) {
   if (!client.sink_id.has_value()) {
     RCLCPP_ERROR(this->get_logger(),
-                 "[SDK] received subscribe request from client %u for channel %lu but client "
+                 "received subscribe request from client %u for channel %lu but client "
                  "has no sink ID",
                  client.id, channelId);
     return;
   }
 
   RCLCPP_INFO(this->get_logger(),
-              "[SDK] received subscribe request for channel %lu from client %u (sink %lu)",
-              channelId, client.id, client.sink_id.value());
+              "received subscribe request for channel %lu from client %u (sink %lu)", channelId,
+              client.id, client.sink_id.value());
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
   // REVIEW: Is this necessary if the SDK server is checking that the channel exists before
   // calling this callback?
   auto it = _sdkChannels.find(channelId);
   if (it == _sdkChannels.end()) {
-    RCLCPP_ERROR(this->get_logger(), "[SDK] received subscribe request for unknown channel: %lu",
+    RCLCPP_ERROR(this->get_logger(), "received subscribe request for unknown channel: %lu",
                  channelId);
     return;
   }
@@ -574,7 +574,7 @@ void FoxgloveBridge::subscribe(ChannelId channelId, const foxglove::ClientMetada
 
   if (!client.sink_id.has_value()) {
     RCLCPP_ERROR(this->get_logger(),
-                 "[SDK] received subscribe request for channel %lu but client "
+                 "received subscribe request for channel %lu but client "
                  "has no sink ID",
                  channelId);
     return;
@@ -582,7 +582,7 @@ void FoxgloveBridge::subscribe(ChannelId channelId, const foxglove::ClientMetada
 
   _sdkSubscriptions.insert({{channelId, client.id}, subscription});
   RCLCPP_INFO(this->get_logger(),
-              "[SDK] created ROS subscription on %s (%s) successfully for channel %lu (client "
+              "created ROS subscription on %s (%s) successfully for channel %lu (client "
               "%u, sink %lu)",
               topic.c_str(), datatype.c_str(), channelId, client.id, client.sink_id.value());
 }
@@ -590,11 +590,11 @@ void FoxgloveBridge::subscribe(ChannelId channelId, const foxglove::ClientMetada
 void FoxgloveBridge::unsubscribe(ChannelId channelId, const foxglove::ClientMetadata& client) {
   std::lock_guard<std::mutex> lock(_subscriptionsMutex);
 
-  RCLCPP_INFO(this->get_logger(), "[SDK] received unsubscribe request for channel %lu", channelId);
+  RCLCPP_INFO(this->get_logger(), "received unsubscribe request for channel %lu", channelId);
 
   auto it = _sdkChannels.find(channelId);
   if (it == _sdkChannels.end()) {
-    RCLCPP_ERROR(this->get_logger(), "[SDK] received unsubscribe request for unknown channel %lu",
+    RCLCPP_ERROR(this->get_logger(), "received unsubscribe request for unknown channel %lu",
                  channelId);
     return;
   }
@@ -602,7 +602,7 @@ void FoxgloveBridge::unsubscribe(ChannelId channelId, const foxglove::ClientMeta
   auto subscriptionIt = _sdkSubscriptions.find({channelId, client.id});
   if (subscriptionIt == _sdkSubscriptions.end()) {
     RCLCPP_ERROR(this->get_logger(),
-                 "[SDK] Client %u tried unsubscribing from channel %lu but a corresponding ROS "
+                 "Client %u tried unsubscribing from channel %lu but a corresponding ROS "
                  "subscription doesn't exist",
                  client.id, channelId);
     return;
@@ -610,8 +610,8 @@ void FoxgloveBridge::unsubscribe(ChannelId channelId, const foxglove::ClientMeta
 
   const std::string& topic = subscriptionIt->second->get_topic_name();
   RCLCPP_INFO(this->get_logger(),
-              "[SDK] Cleaned up subscription to topic %s for client %u on channel %lu",
-              topic.c_str(), client.id, channelId);
+              "Cleaned up subscription to topic %s for client %u on channel %lu", topic.c_str(),
+              client.id, channelId);
   _sdkSubscriptions.erase(subscriptionIt);
 }
 
