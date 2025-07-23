@@ -14,17 +14,16 @@
 #include <foxglove/foxglove.hpp>
 #include <foxglove/server.hpp>
 #include <foxglove/server/fetch_asset.hpp>
-#include <foxglove_bridge/callback_queue.hpp>
-#include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/generic_client.hpp>
 #include <foxglove_bridge/message_definition_cache.hpp>
 #include <foxglove_bridge/param_utils.hpp>
 #include <foxglove_bridge/parameter_interface.hpp>
-#include <foxglove_bridge/regex_utils.hpp>
-#include <foxglove_bridge/server_factory.hpp>
 #include <foxglove_bridge/utils.hpp>
 
 namespace foxglove_bridge {
+
+extern const char FOXGLOVE_BRIDGE_VERSION[];
+extern const char FOXGLOVE_BRIDGE_GIT_HASH[];
 
 using Subscription = rclcpp::GenericSubscription::SharedPtr;
 using Publication = rclcpp::GenericPublisher::SharedPtr;

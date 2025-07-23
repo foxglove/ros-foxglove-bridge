@@ -100,6 +100,8 @@ endif()
 set(FOXGLOVE_BRIDGE_VERSION "${CMAKE_PROJECT_VERSION}")
 configure_file(foxglove_bridge_base/src/version.cpp.in
                foxglove_bridge_base/src/version.cpp @ONLY)
+configure_file(ros2_foxglove_bridge_sdk/include/foxglove_bridge/version.hpp.in
+               ros2_foxglove_bridge_sdk/include/foxglove_bridge/version.hpp @ONLY)
 
 # Build the foxglove_bridge_base library
 add_library(foxglove_bridge_base SHARED
@@ -108,7 +110,6 @@ add_library(foxglove_bridge_base SHARED
   foxglove_bridge_base/src/parameter.cpp
   foxglove_bridge_base/src/serialization.cpp
   foxglove_bridge_base/src/server_factory.cpp
-  foxglove_bridge_base/src/test/test_client.cpp
   # Generated:
   ${CMAKE_CURRENT_BINARY_DIR}/foxglove_bridge_base/src/version.cpp
 )
@@ -123,6 +124,7 @@ target_link_libraries(foxglove_bridge_base
   ZLIB::ZLIB
   ${CMAKE_THREAD_LIBS_INIT}
 )
+
 if(nlohmann_json_FOUND)
   target_link_libraries(foxglove_bridge_base nlohmann_json::nlohmann_json)
 else()
@@ -187,17 +189,48 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
 
     if(USE_FOXGLOVE_SDK)
       set(ros2_foxglove_bridge_src_dir ros2_foxglove_bridge_sdk)
+      add_library(foxglove_bridge_component SHARED
+        ros2_foxglove_bridge_sdk/src/message_definition_cache.cpp
+        ros2_foxglove_bridge_sdk/src/param_utils.cpp
+        ros2_foxglove_bridge_sdk/src/ros2_foxglove_bridge.cpp
+        ros2_foxglove_bridge_sdk/src/parameter_interface.cpp
+        ros2_foxglove_bridge_sdk/src/generic_client.cpp
+      )
+      target_include_directories(foxglove_bridge_component
+        PUBLIC
+          $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge_sdk/include>
+          $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/ros2_foxglove_bridge_sdk/include>
+          $<INSTALL_INTERFACE:include>
+      )
+
+      target_link_libraries(foxglove_bridge_component
+        foxglove_sdk
+        OpenSSL::SSL
+      )
+
+      if (nlohmann_json_FOUND)
+        target_link_libraries(foxglove_bridge_component nlohmann_json::nlohmann_json)
+      endif()
+
     else()
       set(ros2_foxglove_bridge_src_dir ros2_foxglove_bridge)
+      add_library(foxglove_bridge_component SHARED
+        ros2_foxglove_bridge/src/message_definition_cache.cpp
+        ros2_foxglove_bridge/src/param_utils.cpp
+        ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp
+        ros2_foxglove_bridge/src/parameter_interface.cpp
+        ros2_foxglove_bridge/src/generic_client.cpp
+      )
+      target_include_directories(foxglove_bridge_component
+        PUBLIC
+          $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
+          $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge/include>
+          $<INSTALL_INTERFACE:include>
+      )
+
+      target_link_libraries(foxglove_bridge_component foxglove_bridge_base)
     endif()
 
-    add_library(foxglove_bridge_component SHARED
-      ${ros2_foxglove_bridge_src_dir}/src/message_definition_cache.cpp
-      ${ros2_foxglove_bridge_src_dir}/src/param_utils.cpp
-      ${ros2_foxglove_bridge_src_dir}/src/ros2_foxglove_bridge.cpp
-      ${ros2_foxglove_bridge_src_dir}/src/parameter_interface.cpp
-      ${ros2_foxglove_bridge_src_dir}/src/generic_client.cpp
-    )
 
     target_compile_definitions(foxglove_bridge_component
       PRIVATE
@@ -206,15 +239,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
         RESOURCE_RETRIEVER_VERSION_PATCH=${resource_retriever_VERSION_PATCH}
     )
 
-    target_include_directories(foxglove_bridge_component
-      PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/foxglove_bridge_base/include>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/${ros2_foxglove_bridge_src_dir}/include>
-        $<INSTALL_INTERFACE:include>
-    )
-
     target_link_libraries(foxglove_bridge_component
-      foxglove_bridge_base
       ${rosgraph_msgs_TARGETS}
       ament_index_cpp::ament_index_cpp
       rclcpp::rclcpp
@@ -223,10 +248,6 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
       resource_retriever::resource_retriever
       rosx_introspection::rosx_introspection
     )
-
-    if (USE_FOXGLOVE_SDK)
-      target_link_libraries(foxglove_bridge_component foxglove_sdk)
-    endif()
 
     rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")
     enable_strict_compiler_warnings(foxglove_bridge_component)

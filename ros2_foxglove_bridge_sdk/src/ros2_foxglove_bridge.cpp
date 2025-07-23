@@ -3,6 +3,7 @@
 #include <resource_retriever/retriever.hpp>
 
 #include <foxglove_bridge/ros2_foxglove_bridge.hpp>
+#include <foxglove_bridge/version.hpp>
 
 namespace foxglove_bridge {
 namespace {
@@ -11,12 +12,6 @@ inline bool isHiddenTopicOrService(const std::string& name) {
     throw std::invalid_argument("Topic or service name can't be empty");
   }
   return name.front() == '_' || name.find("/_") != std::string::npos;
-}
-
-inline bool isWhitelisted(const std::string& name, const std::vector<std::regex>& regexPatterns) {
-  return std::find_if(regexPatterns.begin(), regexPatterns.end(), [name](const auto& regex) {
-           return std::regex_match(name, regex);
-         }) != regexPatterns.end();
 }
 
 inline foxglove::WebSocketServerCapabilities processCapabilities(
@@ -51,9 +46,8 @@ using namespace std::placeholders;
 FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
     : Node("foxglove_bridge", options) {
   const char* rosDistro = std::getenv("ROS_DISTRO");
-  RCLCPP_INFO(this->get_logger(), "Starting foxglove_bridge (%s, %s@%s) with %s", rosDistro,
-              foxglove::FOXGLOVE_BRIDGE_VERSION, foxglove::FOXGLOVE_BRIDGE_GIT_HASH,
-              foxglove::WebSocketUserAgent());
+  RCLCPP_INFO(this->get_logger(), "Starting foxglove_bridge (%s, %s@%s)", rosDistro,
+              foxglove_bridge::FOXGLOVE_BRIDGE_VERSION, foxglove_bridge::FOXGLOVE_BRIDGE_GIT_HASH);
 
   declareParameters(this);
 
