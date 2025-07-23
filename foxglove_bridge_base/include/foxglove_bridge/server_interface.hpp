@@ -83,6 +83,7 @@ public:
   virtual void start(const std::string& host, uint16_t port) = 0;
   virtual void stop() = 0;
 
+  virtual std::unordered_map<ChannelId, Channel> getChannels() = 0;
   virtual std::vector<ChannelId> addChannels(const std::vector<ChannelWithoutId>& channels) = 0;
   virtual void removeChannels(const std::vector<ChannelId>& channelIds) = 0;
   virtual void publishParameterValues(ConnectionHandle clientHandle,

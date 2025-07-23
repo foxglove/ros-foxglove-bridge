@@ -1,8 +1,11 @@
 #include <unordered_set>
 
 #include <resource_retriever/retriever.hpp>
+#include <rosx_introspection/builtin_types.hpp>
 
 #include <foxglove_bridge/ros2_foxglove_bridge.hpp>
+
+#define NANOSECONDS_IN_SECOND 1'000'000'000
 
 namespace foxglove_bridge {
 namespace {
@@ -57,6 +60,11 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   _disableLoanMessage = this->get_parameter(PARAM_DISABLE_LOAN_MESSAGE).as_bool();
   const auto ignoreUnresponsiveParamNodes =
     this->get_parameter(PARAM_IGN_UNRESPONSIVE_PARAM_NODES).as_bool();
+  const auto topicThrottlePatterns = this->get_parameter(TOPIC_THROTTLE_PATTERNS).as_string_array();
+  _topicThrottlePatterns = parseRegexStrings(this, topicThrottlePatterns);
+  _topicThrottleRates = this->get_parameter(TOPIC_THROTTLE_RATES).as_double_array();
+  assert(_topicThrottlePatterns.size() == _topicThrottleRates.size() &&
+         "Topic throttle patterns must each have exactly one corresponding throttle rate.");
 
   const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
   // Fetching of assets may be blocking, hence we fetch them in a separate thread.
@@ -548,8 +556,8 @@ void FoxgloveBridge::subscribe(foxglove_ws::ChannelId channelId, ConnectionHandl
   try {
     auto subscriber = this->create_generic_subscription(
       topic, datatype, qos,
-      [this, channelId, clientHandle](std::shared_ptr<const rclcpp::SerializedMessage> msg) {
-        this->rosMessageHandler(channelId, clientHandle, msg);
+      [this, channelId, clientHandle, topic](std::shared_ptr<const rclcpp::SerializedMessage> msg) {
+        this->rosMessageHandler(channelId, clientHandle, msg, topic);
       },
       subscriptionOptions);
     subscriptionsByClient.emplace(clientHandle, std::move(subscriber));
@@ -864,14 +872,156 @@ void FoxgloveBridge::logHandler(LogLevel level, char const* msg) {
   }
 }
 
-void FoxgloveBridge::rosMessageHandler(const foxglove_ws::ChannelId& channelId,
+template <typename T>
+std::optional<T> FoxgloveBridge::getDecodedMessageField(RosMsgParser::FlatMessage& decodedMsg,
+                                                        const std::string& fieldName) {
+  for (auto& field : decodedMsg.value) {
+    std::string fieldPath = field.first.toStdString();
+    if (fieldPath.find(fieldName) != std::string::npos) {
+      return std::make_optional<T>(field.second.extract<T>());
+    }
+  }
+
+  return std::nullopt;
+}
+
+template <>
+std::optional<std::string> FoxgloveBridge::getDecodedMessageField(
+  RosMsgParser::FlatMessage& decodedMsg, const std::string& fieldName) {
+  for (auto& field : decodedMsg.name) {
+    std::string fieldPath = field.first.toStdString();
+    if (fieldPath.find(fieldName) != std::string::npos) {
+      return std::make_optional<std::string>(field.second);
+    }
+  }
+
+  return std::nullopt;
+}
+
+std::optional<TypeSchema> FoxgloveBridge::getTypeSchema(const MessageType& type) {
+  auto channels = _server->getChannels();
+  for (auto [_, channel] : channels) {
+    if (channel.schemaName == type) {
+      return channel.schema;
+    }
+  }
+
+  return std::nullopt;
+}
+
+MessageType FoxgloveBridge::getTypeFromTopic(const TopicName& topic) {
+  for (auto& [_, channel] : _server->getChannels()) {
+    if (topic == channel.topic) {
+      return channel.schemaName;
+    }
+  }
+
+  std::stringstream s;
+  s << "Tried to get type for topic '" << topic << "' which has not been registered";
+  throw std::runtime_error(s.str());
+}
+
+std::shared_ptr<RosMsgParser::Parser> FoxgloveBridge::createParser(const TopicName& topic) {
+  _createMessageParserLock.lock();
+  MessageType type = getTypeFromTopic(topic);
+  auto opt = getTypeSchema(type);
+  if (!opt) {
+    // TODO: return optional
+    throw std::runtime_error("unimplemented");
+  }
+
+  TypeSchema schema = opt.value();
+  std::unique_ptr<RosMsgParser::Parser> parser =
+    std::make_unique<RosMsgParser::Parser>(topic, type, schema);
+  _createMessageParserLock.unlock();
+  return parser;
+}
+
+void FoxgloveBridge::decodeMessage(RosMsgParser::FlatMessage* msgBuf,
+                                   RosMsgParser::ROS2_Deserializer& deserializer,
+                                   const rcl_serialized_message_t& serializedMsg,
+                                   const std::shared_ptr<RosMsgParser::Parser> parser) {
+  auto serializedMsgSpan = nonstd::span(serializedMsg.buffer, serializedMsg.buffer_length);
+  if (!parser.get()->deserialize(serializedMsgSpan, msgBuf, &deserializer)) {
+    throw std::runtime_error(
+      "Failed to parse message, likely an array with too many elements, adjust parser max "
+      "array policy");
+  }
+}
+
+bool FoxgloveBridge::shouldThrottle(const TopicName& topic, const rcl_serialized_message_t& msg,
+                                    const Nanoseconds timestamp) {
+  // TODO: make more parsers?
+  thread_local RosMsgParser::ROS2_Deserializer deserializer;
+  thread_local RosMsgParser::FlatMessage decodedMsg;
+
+  auto it = _throttledTopics.find(topic);
+  if (it != _throttledTopics.end()) {
+    // have seen before so we can skip regex checks
+    ThrottledTopicInfo* info = it->second.get();
+    std::lock_guard<std::mutex> lock(info->parserLock);
+    decodeMessage(&decodedMsg, deserializer, msg, info->parser);
+    std::string frameId = getDecodedMessageField<std::string>(decodedMsg, "frame_id").value_or("");
+    Nanoseconds lastRecieved = info->frameIdLastRecieved[frameId];
+    if (timestamp - lastRecieved < info->throttleInterval) {
+      return true;
+    }
+
+    info->frameIdLastRecieved[frameId] = timestamp;
+    return false;
+  }
+
+  // TODO: find a way to avoid regex checks on topics that we already know we don't need to throttle
+  // topic has not been seen before
+  std::optional<Nanoseconds> opt = getTopicThrottleInterval(topic);
+  if (!opt) {
+    // doesn't match any regex patterns
+    return false;
+  }
+
+  Nanoseconds throttleInterval = opt.value();
+
+  std::shared_ptr<RosMsgParser::Parser> parser = createParser(topic);
+  decodeMessage(&decodedMsg, deserializer, msg, parser);
+  FrameId frameid = getDecodedMessageField<std::string>(decodedMsg, "frame_id").value_or("");
+  std::unordered_map<FrameId, Nanoseconds> frameIdLastRecieved = {{frameid, timestamp}};
+
+  std::unique_ptr<ThrottledTopicInfo> info =
+    std::make_unique<ThrottledTopicInfo>(throttleInterval, parser, frameIdLastRecieved);
+  _throttledTopics.insert({topic, std::move(info)});
+  return false;
+}
+
+std::mutex& waitForParserLock(const TopicName& topic) {
+  (void)topic;
+  throw std::runtime_error("unimplemented");
+}
+
+std::optional<Nanoseconds> FoxgloveBridge::getTopicThrottleInterval(const TopicName& topic) {
+  // NOTE: assumes throttle patterns and rates arrays are of same length
+  for (size_t i = 0; i < _topicThrottlePatterns.size(); i++) {
+    if (std::regex_match(topic, _topicThrottlePatterns[i])) {
+      return (1 / _topicThrottleRates[i]) * NANOSECONDS_IN_SECOND;
+    }
+  }
+
+  return std::nullopt;
+}
+
+void FoxgloveBridge::rosMessageHandler(const foxglove::ChannelId& channelId,
                                        ConnectionHandle clientHandle,
-                                       std::shared_ptr<const rclcpp::SerializedMessage> msg) {
+                                       std::shared_ptr<const rclcpp::SerializedMessage> msg,
+                                       std::string topicName) {
   // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
   // to `/rosout` will cause a feedback loop
   const auto timestamp = this->now().nanoseconds();
   assert(timestamp >= 0 && "Timestamp is negative");
   const auto rclSerializedMsg = msg->get_rcl_serialized_message();
+
+  if (shouldThrottle(topicName, rclSerializedMsg, timestamp)) {
+    return;
+  }
+
   _server->sendMessage(clientHandle, channelId, static_cast<uint64_t>(timestamp),
                        rclSerializedMsg.buffer, rclSerializedMsg.buffer_length);
 }

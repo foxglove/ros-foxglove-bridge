@@ -187,6 +187,24 @@ void declareParameters(rclcpp::Node* node) {
     "Avoid requesting parameters from previously unresponsive nodes";
   ignUnresponsiveParamNodes.read_only = true;
   node->declare_parameter(PARAM_IGN_UNRESPONSIVE_PARAM_NODES, true, ignUnresponsiveParamNodes);
+
+  auto topicThrottleRatesDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  topicThrottleRatesDescription.name = TOPIC_THROTTLE_RATES;
+  assetUriAllowlistDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE_ARRAY;
+  topicThrottleRatesDescription.description =
+    "List of rates to throttle corresponding (matching index) patterns by. Represents messages per second";
+  topicThrottleRatesDescription.read_only = true;
+  node->declare_parameter("topic_throttle_rates", std::vector<double>(),
+                          topicThrottleRatesDescription);
+
+  auto topicThrottlePatternsDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  topicThrottlePatternsDescription.name = TOPIC_THROTTLE_PATTERNS;
+  assetUriAllowlistDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  topicThrottlePatternsDescription.description =
+    "List of regex patterns to throttle by corresponding rate (matching index)";
+  topicThrottlePatternsDescription.read_only = true;
+  node->declare_parameter("topic_throttle_patterns", std::vector<std::string>(),
+                          topicThrottlePatternsDescription);
 }
 
 std::vector<std::regex> parseRegexStrings(rclcpp::Node* node,
