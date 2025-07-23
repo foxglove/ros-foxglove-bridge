@@ -26,7 +26,6 @@
 
 namespace foxglove_bridge {
 
-using ConnectionHandle = websocketpp::connection_hdl;
 using Subscription = rclcpp::GenericSubscription::SharedPtr;
 using Publication = rclcpp::GenericPublisher::SharedPtr;
 
