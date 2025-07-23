@@ -131,6 +131,7 @@ public:
   void start(const std::string& host, uint16_t port) override;
   void stop() override;
 
+  std::unordered_map<ChannelId, Channel> getChannels() override;
   std::vector<ChannelId> addChannels(const std::vector<ChannelWithoutId>& channels) override;
   void removeChannels(const std::vector<ChannelId>& channelIds) override;
   void publishParameterValues(ConnHandle clientHandle, const std::vector<Parameter>& parameters,
@@ -806,6 +807,12 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, Mes
                           "Unrecognized client opcode " + std::to_string(uint8_t(op)));
     } break;
   }
+}
+
+template <typename ServerConfiguration>
+std::unordered_map<ChannelId, Channel> Server<ServerConfiguration>::getChannels() {
+  std::unique_lock<std::shared_mutex> lock(_channelsMutex);
+  return this->_channels;
 }
 
 template <typename ServerConfiguration>
