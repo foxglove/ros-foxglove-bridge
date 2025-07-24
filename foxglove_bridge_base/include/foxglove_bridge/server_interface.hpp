@@ -1,8 +1,10 @@
 #pragma once
 
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <regex>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -77,6 +79,16 @@ struct ServerHandlers {
   std::function<void(const std::string&, uint32_t, ConnectionHandle)> fetchAssetHandler;
 };
 
+struct ChannelsWithLock {
+  const std::unordered_map<ChannelId, Channel>& channels;
+  std::shared_lock<std::shared_mutex> lock;
+
+  ChannelsWithLock(const std::unordered_map<ChannelId, Channel>& ch,
+                   std::shared_lock<std::shared_mutex>&& l)
+      : channels(ch)
+      , lock(std::move(l)) {}
+};
+
 template <typename ConnectionHandle>
 class ServerInterface {
 public:
@@ -84,7 +96,7 @@ public:
   virtual void start(const std::string& host, uint16_t port) = 0;
   virtual void stop() = 0;
 
-  virtual std::unordered_map<ChannelId, Channel> getChannels() = 0;
+  virtual ChannelsWithLock getChannels() = 0;
   virtual std::vector<ChannelId> addChannels(const std::vector<ChannelWithoutId>& channels) = 0;
   virtual void removeChannels(const std::vector<ChannelId>& channelIds) = 0;
   virtual void publishParameterValues(ConnectionHandle clientHandle,

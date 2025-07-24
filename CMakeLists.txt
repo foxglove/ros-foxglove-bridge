@@ -152,6 +152,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
       ros2_foxglove_bridge/src/message_definition_cache.cpp
       ros2_foxglove_bridge/src/param_utils.cpp
       ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp
+      ros2_foxglove_bridge/src/message_throttler.cpp
       ros2_foxglove_bridge/src/parameter_interface.cpp
       ros2_foxglove_bridge/src/generic_client.cpp
     )

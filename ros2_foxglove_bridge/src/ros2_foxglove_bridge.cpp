@@ -5,8 +5,6 @@
 
 #include <foxglove_bridge/ros2_foxglove_bridge.hpp>
 
-#define NANOSECONDS_IN_SECOND 1'000'000'000
-
 namespace foxglove_bridge {
 namespace {
 inline bool isHiddenTopicOrService(const std::string& name) {
@@ -147,6 +145,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
         _server->broadcastTime(static_cast<uint64_t>(timestamp));
       });
   }
+
+  initializeThrottler();
 }
 
 FoxgloveBridge::~FoxgloveBridge() {
@@ -870,142 +870,6 @@ void FoxgloveBridge::logHandler(LogLevel level, char const* msg) {
   }
 }
 
-template <typename T>
-std::optional<T> FoxgloveBridge::getDecodedMessageField(RosMsgParser::FlatMessage& decodedMsg,
-                                                        const std::string& fieldName) {
-  for (auto& field : decodedMsg.value) {
-    std::string fieldPath = field.first.toStdString();
-    if (fieldPath.find(fieldName) != std::string::npos) {
-      return std::make_optional<T>(field.second.extract<T>());
-    }
-  }
-
-  return std::nullopt;
-}
-
-template <>
-std::optional<std::string> FoxgloveBridge::getDecodedMessageField(
-  RosMsgParser::FlatMessage& decodedMsg, const std::string& fieldName) {
-  for (auto& field : decodedMsg.name) {
-    std::string fieldPath = field.first.toStdString();
-    if (fieldPath.find(fieldName) != std::string::npos) {
-      return std::make_optional<std::string>(field.second);
-    }
-  }
-
-  return std::nullopt;
-}
-
-std::optional<TypeSchema> FoxgloveBridge::getTypeSchema(const MessageType& type) {
-  auto channels = _server->getChannels();
-  for (auto [_, channel] : channels) {
-    if (channel.schemaName == type) {
-      return channel.schema;
-    }
-  }
-
-  return std::nullopt;
-}
-
-MessageType FoxgloveBridge::getTypeFromTopic(const TopicName& topic) {
-  for (auto& [_, channel] : _server->getChannels()) {
-    if (topic == channel.topic) {
-      return channel.schemaName;
-    }
-  }
-
-  std::stringstream s;
-  s << "Tried to get type for topic '" << topic << "' which has not been registered";
-  throw std::runtime_error(s.str());
-}
-
-std::shared_ptr<RosMsgParser::Parser> FoxgloveBridge::createParser(const TopicName& topic) {
-  _createMessageParserLock.lock();
-  MessageType type = getTypeFromTopic(topic);
-  auto opt = getTypeSchema(type);
-  if (!opt) {
-    // TODO: return optional
-    throw std::runtime_error("unimplemented");
-  }
-
-  TypeSchema schema = opt.value();
-  std::unique_ptr<RosMsgParser::Parser> parser =
-    std::make_unique<RosMsgParser::Parser>(topic, type, schema);
-  _createMessageParserLock.unlock();
-  return parser;
-}
-
-void FoxgloveBridge::decodeMessage(RosMsgParser::FlatMessage* msgBuf,
-                                   RosMsgParser::ROS2_Deserializer& deserializer,
-                                   const rcl_serialized_message_t& serializedMsg,
-                                   const std::shared_ptr<RosMsgParser::Parser> parser) {
-  auto serializedMsgSpan = nonstd::span(serializedMsg.buffer, serializedMsg.buffer_length);
-  if (!parser.get()->deserialize(serializedMsgSpan, msgBuf, &deserializer)) {
-    throw std::runtime_error(
-      "Failed to parse message, likely an array with too many elements, adjust parser max "
-      "array policy");
-  }
-}
-
-bool FoxgloveBridge::shouldThrottle(const TopicName& topic, const rcl_serialized_message_t& msg,
-                                    const Nanoseconds timestamp) {
-  // TODO: make more parsers?
-  thread_local RosMsgParser::ROS2_Deserializer deserializer;
-  thread_local RosMsgParser::FlatMessage decodedMsg;
-
-  auto it = _throttledTopics.find(topic);
-  if (it != _throttledTopics.end()) {
-    // have seen before so we can skip regex checks
-    ThrottledTopicInfo* info = it->second.get();
-    std::lock_guard<std::mutex> lock(info->parserLock);
-    decodeMessage(&decodedMsg, deserializer, msg, info->parser);
-    std::string frameId = getDecodedMessageField<std::string>(decodedMsg, "frame_id").value_or("");
-    Nanoseconds lastRecieved = info->frameIdLastRecieved[frameId];
-    if (timestamp - lastRecieved < info->throttleInterval) {
-      return true;
-    }
-
-    info->frameIdLastRecieved[frameId] = timestamp;
-    return false;
-  }
-
-  // TODO: find a way to avoid regex checks on topics that we already know we don't need to throttle
-  // topic has not been seen before
-  std::optional<Nanoseconds> opt = getTopicThrottleInterval(topic);
-  if (!opt) {
-    // doesn't match any regex patterns
-    return false;
-  }
-
-  Nanoseconds throttleInterval = opt.value();
-
-  std::shared_ptr<RosMsgParser::Parser> parser = createParser(topic);
-  decodeMessage(&decodedMsg, deserializer, msg, parser);
-  FrameId frameid = getDecodedMessageField<std::string>(decodedMsg, "frame_id").value_or("");
-  std::unordered_map<FrameId, Nanoseconds> frameIdLastRecieved = {{frameid, timestamp}};
-
-  std::unique_ptr<ThrottledTopicInfo> info =
-    std::make_unique<ThrottledTopicInfo>(throttleInterval, parser, frameIdLastRecieved);
-  _throttledTopics.insert({topic, std::move(info)});
-  return false;
-}
-
-std::mutex& waitForParserLock(const TopicName& topic) {
-  (void)topic;
-  throw std::runtime_error("unimplemented");
-}
-
-std::optional<Nanoseconds> FoxgloveBridge::getTopicThrottleInterval(const TopicName& topic) {
-  // NOTE: assumes throttle patterns and rates arrays are of same length
-  for (size_t i = 0; i < _topicThrottlePatterns.size(); i++) {
-    if (std::regex_match(topic, _topicThrottlePatterns[i])) {
-      return (1 / _topicThrottleRates[i]) * NANOSECONDS_IN_SECOND;
-    }
-  }
-
-  return std::nullopt;
-}
-
 void FoxgloveBridge::rosMessageHandler(const foxglove::ChannelId& channelId,
                                        ConnectionHandle clientHandle,
                                        std::shared_ptr<const rclcpp::SerializedMessage> msg,
@@ -1110,6 +974,24 @@ void FoxgloveBridge::fetchAsset(const std::string& uri, uint32_t requestId,
 
 bool FoxgloveBridge::hasCapability(const std::string& capability) {
   return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
+}
+
+void FoxgloveBridge::initializeThrottler() {
+  if (!_topicThrottlePatterns.size()) {
+    return;
+  }
+
+  _messageThrottler.emplace(_server.get(), _topicThrottleRates, _topicThrottlePatterns);
+}
+
+bool FoxgloveBridge::shouldThrottle(const TopicName& topic,
+                                    const rcl_serialized_message_t& serializedMsg,
+                                    const Nanoseconds now) {
+  if (!_messageThrottler) {
+    return false;
+  }
+
+  return _messageThrottler.value().shouldThrottle(topic, serializedMsg, now);
 }
 
 }  // namespace foxglove_bridge
