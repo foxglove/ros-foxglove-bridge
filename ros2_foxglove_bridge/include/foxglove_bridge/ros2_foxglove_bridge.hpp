@@ -16,6 +16,7 @@
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/generic_client.hpp>
 #include <foxglove_bridge/message_definition_cache.hpp>
+#include <foxglove_bridge/message_throttler.hpp>
 #include <foxglove_bridge/param_utils.hpp>
 #include <foxglove_bridge/parameter_interface.hpp>
 #include <foxglove_bridge/regex_utils.hpp>
@@ -31,11 +32,6 @@ using SubscriptionsByClient = std::map<ConnectionHandle, Subscription, std::owne
 using Publication = rclcpp::GenericPublisher::SharedPtr;
 using ClientPublications = std::unordered_map<foxglove_ws::ClientChannelId, Publication>;
 using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std::owner_less<>>;
-using MessageType = std::string;
-using FrameId = std::string;
-using TopicName = std::string;
-using TypeSchema = std::string;
-using Nanoseconds = uint32_t;
 
 class FoxgloveBridge : public rclcpp::Node {
 public:
@@ -56,21 +52,6 @@ public:
     const std::map<std::string, std::vector<std::string>>& topicNamesAndTypes);
 
 private:
-  struct ThrottledTopicInfo {
-    Nanoseconds throttleInterval;
-    std::mutex parserLock;
-    std::shared_ptr<RosMsgParser::Parser> parser;
-    // NOTE: for topics with no frame id, we use "" as frame id, map should only have one element
-    std::unordered_map<FrameId, Nanoseconds> frameIdLastRecieved;
-
-    ThrottledTopicInfo(Nanoseconds interval, 
-                      std::shared_ptr<RosMsgParser::Parser> p,
-                      std::unordered_map<FrameId, Nanoseconds> frameMap = {})
-        : throttleInterval(interval),
-          parser(p),
-          frameIdLastRecieved(std::move(frameMap)) {}
-  };
-
   struct PairHash {
     template <class T1, class T2>
     std::size_t operator()(const std::pair<T1, T2>& pair) const {
@@ -84,13 +65,8 @@ private:
   std::vector<std::regex> _serviceWhitelistPatterns;
   std::vector<std::regex> _assetUriAllowlistPatterns;
   std::vector<std::regex> _bestEffortQosTopicWhiteListPatterns;
-
   std::vector<double> _topicThrottleRates;
   std::vector<std::regex> _topicThrottlePatterns;
-  std::unordered_map<MessageType, std::shared_ptr<RosMsgParser::Parser>> _messageParsers;
-  std::mutex _createMessageParserLock;
-  std::unordered_map<TopicName, std::unique_ptr<ThrottledTopicInfo>> _throttledTopics;
-
   std::shared_ptr<ParameterInterface> _paramInterface;
   std::unordered_map<foxglove_ws::ChannelId, foxglove_ws::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove_ws::ServiceId, foxglove_ws::ServiceWithoutId> _advertisedServices;
@@ -115,6 +91,7 @@ private:
   std::unique_ptr<foxglove_ws::CallbackQueue> _fetchAssetQueue;
   std::unordered_map<std::string, std::shared_ptr<RosMsgParser::Parser>> _jsonParsers;
   std::atomic<bool> _shuttingDown = false;
+  std::optional<MessageThrottleManager> _messageThrottler;
 
   void subscribeConnectionGraph(bool subscribe);
 
@@ -170,6 +147,11 @@ private:
   void fetchAsset(const std::string& assetId, uint32_t requestId, ConnectionHandle clientHandle);
 
   bool hasCapability(const std::string& capability);
+
+  void initializeThrottler();
+
+  bool shouldThrottle(const TopicName& topic, const rcl_serialized_message_t& serializedMsg,
+                      const Nanoseconds now);
 };
 
 }  // namespace foxglove_bridge

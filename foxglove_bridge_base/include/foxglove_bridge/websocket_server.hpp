@@ -130,8 +130,8 @@ public:
 
   void start(const std::string& host, uint16_t port) override;
   void stop() override;
-
-  std::unordered_map<ChannelId, Channel> getChannels() override;
+  
+  ChannelsWithLock getChannels() override;
   std::vector<ChannelId> addChannels(const std::vector<ChannelWithoutId>& channels) override;
   void removeChannels(const std::vector<ChannelId>& channelIds) override;
   void publishParameterValues(ConnHandle clientHandle, const std::vector<Parameter>& parameters,
@@ -173,6 +173,7 @@ private:
     ClientInfo(ClientInfo&&) = default;
     ClientInfo& operator=(ClientInfo&&) = default;
   };
+
 
   std::string _name;
   LogCallback _logger;
@@ -810,9 +811,9 @@ inline void Server<ServerConfiguration>::handleBinaryMessage(ConnHandle hdl, Mes
 }
 
 template <typename ServerConfiguration>
-std::unordered_map<ChannelId, Channel> Server<ServerConfiguration>::getChannels() {
-  std::unique_lock<std::shared_mutex> lock(_channelsMutex);
-  return this->_channels;
+ChannelsWithLock Server<ServerConfiguration>::getChannels() {
+  std::shared_lock<std::shared_mutex> lock(_channelsMutex);
+  return ChannelsWithLock(this->_channels, std::move(lock));
 }
 
 template <typename ServerConfiguration>

@@ -198,6 +198,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
         ros2_foxglove_bridge_sdk/src/ros2_foxglove_bridge.cpp
         ros2_foxglove_bridge_sdk/src/parameter_interface.cpp
         ros2_foxglove_bridge_sdk/src/generic_client.cpp
+        ros2_foxglove_bridge/src/message_throttler.cpp
       )
       target_include_directories(foxglove_bridge_component
         PUBLIC
@@ -222,6 +223,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
         ros2_foxglove_bridge/src/ros2_foxglove_bridge.cpp
         ros2_foxglove_bridge/src/parameter_interface.cpp
         ros2_foxglove_bridge/src/generic_client.cpp
+        ros2_foxglove_bridge/src/message_throttler.cpp
       )
       target_include_directories(foxglove_bridge_component
         PUBLIC
@@ -232,7 +234,6 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
 
       target_link_libraries(foxglove_bridge_component foxglove_bridge_base)
     endif()
-
 
     target_compile_definitions(foxglove_bridge_component
       PRIVATE
