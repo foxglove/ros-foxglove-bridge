@@ -110,6 +110,7 @@ add_library(foxglove_bridge_base SHARED
   foxglove_bridge_base/src/parameter.cpp
   foxglove_bridge_base/src/serialization.cpp
   foxglove_bridge_base/src/server_factory.cpp
+  foxglove_bridge_base/src/test/test_client.cpp
   # Generated:
   ${CMAKE_CURRENT_BINARY_DIR}/foxglove_bridge_base/src/version.cpp
 )
