@@ -32,6 +32,7 @@ using SubscriptionsByClient = std::map<ConnectionHandle, Subscription, std::owne
 using Publication = rclcpp::GenericPublisher::SharedPtr;
 using ClientPublications = std::unordered_map<foxglove_ws::ClientChannelId, Publication>;
 using PublicationsByClient = std::map<ConnectionHandle, ClientPublications, std::owner_less<>>;
+using qosDepth = size_t;
 
 class FoxgloveBridge : public rclcpp::Node {
 public:
@@ -65,8 +66,10 @@ private:
   std::vector<std::regex> _serviceWhitelistPatterns;
   std::vector<std::regex> _assetUriAllowlistPatterns;
   std::vector<std::regex> _bestEffortQosTopicWhiteListPatterns;
-  std::vector<double> _topicThrottleRates;
   std::vector<std::regex> _topicThrottlePatterns;
+  std::vector<double> _topicThrottleRates;
+  std::vector<std::regex> _minQosTopicPatterns;
+  std::vector<int64_t> _minQosTopicDepths;
   std::shared_ptr<ParameterInterface> _paramInterface;
   std::unordered_map<foxglove_ws::ChannelId, foxglove_ws::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove_ws::ServiceId, foxglove_ws::ServiceWithoutId> _advertisedServices;
@@ -152,6 +155,8 @@ private:
 
   bool shouldThrottle(const TopicName& topic, const rcl_serialized_message_t& serializedMsg,
                       const Nanoseconds now);
+
+  size_t getTopicMinQosDepth(const TopicName& topic);
 };
 
 }  // namespace foxglove_bridge

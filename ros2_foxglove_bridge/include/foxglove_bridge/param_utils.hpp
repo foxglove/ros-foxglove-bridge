@@ -27,8 +27,10 @@ constexpr char PARAM_INCLUDE_HIDDEN[] = "include_hidden";
 constexpr char PARAM_DISABLE_LOAN_MESSAGE[] = "disable_load_message";
 constexpr char PARAM_ASSET_URI_ALLOWLIST[] = "asset_uri_allowlist";
 constexpr char PARAM_IGN_UNRESPONSIVE_PARAM_NODES[] = "ignore_unresponsive_param_nodes";
-constexpr char TOPIC_THROTTLE_RATES[] = "topic_throttle_rates";
-constexpr char TOPIC_THROTTLE_PATTERNS[] = "topic_throttle_patterns";
+constexpr char PARAM_TOPIC_THROTTLE_RATES[] = "topic_throttle_rates";
+constexpr char PARAM_TOPIC_THROTTLE_PATTERNS[] = "topic_throttle_patterns";
+constexpr char PARAM_MIN_QOS_TOPIC_PATTERNS[] = "min_qos_topic_patterns";
+constexpr char PARAM_MIN_QOS_TOPIC_DEPTHS[] = "min_qos_topic_depths";
 
 constexpr int64_t DEFAULT_PORT = 8765;
 constexpr char DEFAULT_ADDRESS[] = "0.0.0.0";
