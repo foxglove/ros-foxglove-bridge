@@ -197,6 +197,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
       ${ros2_foxglove_bridge_src_dir}/src/ros2_foxglove_bridge.cpp
       ${ros2_foxglove_bridge_src_dir}/src/parameter_interface.cpp
       ${ros2_foxglove_bridge_src_dir}/src/generic_client.cpp
+      ${ros2_foxglove_bridge_src_dir}/src/message_throttler.cpp
     )
 
     target_compile_definitions(foxglove_bridge_component
