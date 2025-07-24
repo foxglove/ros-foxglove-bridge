@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace foxglove {
+namespace foxglove_bridge {
 constexpr char SUPPORTED_SUBPROTOCOL[] = "foxglove.sdk.v1";
 
 constexpr char CAPABILITY_CLIENT_PUBLISH[] = "clientPublish";
@@ -22,11 +22,4 @@ constexpr std::array<const char*, 6> DEFAULT_CAPABILITIES = {
   CAPABILITY_CLIENT_PUBLISH, CAPABILITY_CONNECTION_GRAPH, CAPABILITY_PARAMETERS_SUBSCRIBE,
   CAPABILITY_PARAMETERS,     CAPABILITY_SERVICES,         CAPABILITY_ASSETS,
 };
-
-inline bool isWhitelisted(const std::string& name, const std::vector<std::regex>& regexPatterns) {
-  return std::find_if(regexPatterns.begin(), regexPatterns.end(), [name](const auto& regex) {
-           return std::regex_match(name, regex);
-         }) != regexPatterns.end();
-}
-
-}  // namespace foxglove
+}  // namespace foxglove_bridge

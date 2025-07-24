@@ -12,8 +12,6 @@
 #include <websocketpp/common/memory.hpp>
 #include <websocketpp/common/thread.hpp>
 
-#include <foxglove_bridge/common.hpp>
-
 #include "protocol_types.hpp"
 
 namespace foxglove::test {
@@ -217,7 +215,7 @@ public:
       _con->set_close_handler(onCloseHandler);
     }
 
-    _con->add_subprotocol(foxglove::SUPPORTED_SUBPROTOCOL);
+    _con->add_subprotocol(SUPPORTED_SUBPROTOCOL);
     _endpoint.connect(_con);
   }
 
@@ -522,6 +520,7 @@ public:
   }
 
 protected:
+  static constexpr char SUPPORTED_SUBPROTOCOL[] = "foxglove.sdk.v1";
   ClientType _endpoint;
   websocketpp::lib::shared_ptr<websocketpp::lib::thread> _thread;
   ConnectionPtr _con;
