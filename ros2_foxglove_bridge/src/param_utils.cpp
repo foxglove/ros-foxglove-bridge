@@ -209,8 +209,7 @@ void declareParameters(rclcpp::Node* node) {
 
   auto minQosTopicPatternsDescription = rcl_interfaces::msg::ParameterDescriptor{};
   minQosTopicPatternsDescription.name = PARAM_MIN_QOS_TOPIC_PATTERNS;
-  minQosTopicPatternsDescription.type =
-    rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  minQosTopicPatternsDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
   minQosTopicPatternsDescription.description =
     "List of regex patterns to use corresponding min qos depth for (matching index)";
   minQosTopicPatternsDescription.read_only = true;
@@ -219,8 +218,7 @@ void declareParameters(rclcpp::Node* node) {
 
   auto minQosTopicDepthsDescription = rcl_interfaces::msg::ParameterDescriptor{};
   minQosTopicDepthsDescription.name = PARAM_MIN_QOS_TOPIC_DEPTHS;
-  minQosTopicDepthsDescription.type =
-    rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER_ARRAY;
+  minQosTopicDepthsDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER_ARRAY;
   minQosTopicDepthsDescription.description =
     "List of depths to use on corresponding min qos pattern (matching index)";
   minQosTopicDepthsDescription.read_only = true;
