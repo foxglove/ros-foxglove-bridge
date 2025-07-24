@@ -194,22 +194,43 @@ void declareParameters(rclcpp::Node* node) {
     paramWhiteListDescription);
 
   auto topicThrottleRatesDescription = rcl_interfaces::msg::ParameterDescriptor{};
-  topicThrottleRatesDescription.name = TOPIC_THROTTLE_RATES;
+  topicThrottleRatesDescription.name = PARAM_TOPIC_THROTTLE_RATES;
   assetUriAllowlistDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE_ARRAY;
   topicThrottleRatesDescription.description =
-    "List of rates to throttle corresponding (matching index) patterns by. Represents messages per second";
+    "List of rates to throttle corresponding (matching index) patterns by. Represents messages per "
+    "second";
   topicThrottleRatesDescription.read_only = true;
-  node->declare_parameter("topic_throttle_rates", std::vector<double>(),
+  node->declare_parameter(PARAM_TOPIC_THROTTLE_RATES, std::vector<double>(),
                           topicThrottleRatesDescription);
 
   auto topicThrottlePatternsDescription = rcl_interfaces::msg::ParameterDescriptor{};
-  topicThrottlePatternsDescription.name = TOPIC_THROTTLE_PATTERNS;
+  topicThrottlePatternsDescription.name = PARAM_TOPIC_THROTTLE_PATTERNS;
   assetUriAllowlistDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
   topicThrottlePatternsDescription.description =
     "List of regex patterns to throttle by corresponding rate (matching index)";
   topicThrottlePatternsDescription.read_only = true;
-  node->declare_parameter("topic_throttle_patterns", std::vector<std::string>(),
+  node->declare_parameter(PARAM_TOPIC_THROTTLE_PATTERNS, std::vector<std::string>(),
                           topicThrottlePatternsDescription);
+
+  auto minQosTopicPatternsDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  minQosTopicPatternsDescription.name = PARAM_MIN_QOS_TOPIC_PATTERNS;
+  minQosTopicPatternsDescription.type =
+    rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
+  minQosTopicPatternsDescription.description =
+    "List of regex patterns to use corresponding min qos depth for (matching index)";
+  minQosTopicPatternsDescription.read_only = true;
+  node->declare_parameter(PARAM_MIN_QOS_TOPIC_PATTERNS, std::vector<std::string>(),
+                          minQosTopicPatternsDescription);
+
+  auto minQosTopicDepthsDescription = rcl_interfaces::msg::ParameterDescriptor{};
+  minQosTopicDepthsDescription.name = PARAM_MIN_QOS_TOPIC_DEPTHS;
+  minQosTopicDepthsDescription.type =
+    rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER_ARRAY;
+  minQosTopicDepthsDescription.description =
+    "List of depths to use on corresponding min qos pattern (matching index)";
+  minQosTopicDepthsDescription.read_only = true;
+  node->declare_parameter(PARAM_MIN_QOS_TOPIC_DEPTHS, std::vector<int64_t>(),
+                          minQosTopicDepthsDescription);
 }
 
 std::vector<std::regex> parseRegexStrings(rclcpp::Node* node,

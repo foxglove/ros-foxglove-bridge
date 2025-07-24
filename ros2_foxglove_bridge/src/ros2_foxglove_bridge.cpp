@@ -58,11 +58,18 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   const auto assetUriAllowlist = this->get_parameter(PARAM_ASSET_URI_ALLOWLIST).as_string_array();
   _assetUriAllowlistPatterns = parseRegexStrings(this, assetUriAllowlist);
   _disableLoanMessage = this->get_parameter(PARAM_DISABLE_LOAN_MESSAGE).as_bool();
-  const auto topicThrottlePatterns = this->get_parameter(TOPIC_THROTTLE_PATTERNS).as_string_array();
+  const auto topicThrottlePatterns =
+    this->get_parameter(PARAM_TOPIC_THROTTLE_PATTERNS).as_string_array();
   _topicThrottlePatterns = parseRegexStrings(this, topicThrottlePatterns);
-  _topicThrottleRates = this->get_parameter(TOPIC_THROTTLE_RATES).as_double_array();
+  _topicThrottleRates = this->get_parameter(PARAM_TOPIC_THROTTLE_RATES).as_double_array();
   assert(_topicThrottlePatterns.size() == _topicThrottleRates.size() &&
          "Topic throttle patterns must each have exactly one corresponding throttle rate.");
+  const auto minQosTopicPatterns =
+    this->get_parameter(PARAM_MIN_QOS_TOPIC_PATTERNS).as_string_array();
+  _minQosTopicPatterns = parseRegexStrings(this, minQosTopicPatterns);
+  _minQosTopicDepths = this->get_parameter(PARAM_MIN_QOS_TOPIC_DEPTHS).as_integer_array();
+  assert(_minQosTopicPatterns.size() == _minQosTopicDepths.size() &&
+         "Min qos topic patterns must each have exactly one corresponding min qos depth value.");
 
   const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
   // Fetching of assets may be blocking, hence we fetch them in a separate thread.
@@ -498,7 +505,7 @@ void FoxgloveBridge::subscribe(foxglove::ChannelId channelId, ConnectionHandle c
     depth = depth + publisherHistoryDepth;
   }
 
-  depth = std::max(depth, _minQosDepth);
+  depth = std::max(depth, getTopicMinQosDepth(topic));
   if (depth > _maxQosDepth) {
     RCLCPP_WARN(this->get_logger(),
                 "Limiting history depth for topic '%s' to %zu (was %zu). You may want to increase "
@@ -992,6 +999,17 @@ bool FoxgloveBridge::shouldThrottle(const TopicName& topic,
   }
 
   return _messageThrottler.value().shouldThrottle(topic, serializedMsg, now);
+}
+
+size_t FoxgloveBridge::getTopicMinQosDepth(const TopicName& topic) {
+  for (size_t i = 0; i < _minQosTopicPatterns.size(); i++) {
+    auto pattern = _minQosTopicPatterns[i];
+    if (std::regex_match(topic, pattern)) {
+      return _minQosTopicDepths[i];
+    }
+  }
+
+  return _minQosDepth;
 }
 
 }  // namespace foxglove_bridge
