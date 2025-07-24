@@ -314,7 +314,10 @@ public:
     offset += 4;
     std::memcpy(payload.data() + offset, request.encoding.data(), encodingLength);
     offset += encodingLength;
-    std::memcpy(payload.data() + offset, request.data.data(), request.data.size());
+
+    if (request.data.size() > 0) {
+      std::memcpy(payload.data() + offset, request.data.data(), request.data.size());
+    }
 
     sendBinary(payload.data(), payload.size());
   }
@@ -512,8 +515,12 @@ public:
           std::string(reinterpret_cast<const char*>(data + offset), errorMsgLength);
         offset += errorMsgLength;
         const auto payloadLength = dataLength - offset;
+
         response.data.resize(payloadLength);
-        std::memcpy(response.data.data(), data + offset, payloadLength);
+        if (payloadLength > 0) {
+          std::memcpy(response.data.data(), data + offset, payloadLength);
+        }
+
         promise->set_value(response);
       });
     return future;
