@@ -1,7 +1,6 @@
 #pragma once
 
 #include <functional>
-#include <mutex>
 #include <optional>
 #include <regex>
 #include <shared_mutex>

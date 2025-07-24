@@ -2,6 +2,13 @@
 
 namespace foxglove_bridge {
 
+ThrottledMessage::ThrottledMessage(ThrottledTopicInfo* topicInfo,
+                                   const rcl_serialized_message_t& serializedMsg)
+    : _topicInfo(topicInfo)
+    , _serializedMsg(serializedMsg) {
+  tryDecode();
+}
+
 template <>
 std::optional<std::string> ThrottledMessage::getDecodedMessageField(const std::string& fieldName) {
   if (!_topicInfo->parser) {
@@ -38,7 +45,7 @@ void ThrottledMessage::tryDecode() {
   _frameid = getDecodedMessageField<std::string>("frame_id").value_or("");
 }
 
-bool ThrottledMessage::allowedThrough(Nanoseconds currentTime) {
+bool ThrottledMessage::isAllowedThrough(Nanoseconds currentTime) {
   // either message has not been seen before or interval has passed
   std::shared_lock<std::shared_mutex> lock(_topicInfo->frameIdLastRecievedLock);
   return !_topicInfo->frameIdLastRecieved.count(_frameid) ||
@@ -94,7 +101,7 @@ std::optional<std::shared_ptr<RosMsgParser::Parser>> MessageThrottleManager::cre
 
 bool MessageThrottleManager::shouldThrottleAndUpdate(ThrottledMessage& msg,
                                                      const Nanoseconds time) {
-  if (!msg.allowedThrough(time)) {
+  if (!msg.isAllowedThrough(time)) {
     return true;
   }
 

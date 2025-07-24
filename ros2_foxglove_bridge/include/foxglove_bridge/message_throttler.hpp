@@ -38,13 +38,9 @@ struct ThrottledTopicInfo {
 
 class ThrottledMessage {
 public:
-  ThrottledMessage(ThrottledTopicInfo* topicInfo, const rcl_serialized_message_t& serializedMsg)
-      : _topicInfo(topicInfo)
-      , _serializedMsg(serializedMsg) {
-    this->tryDecode();
-  }
+  ThrottledMessage(ThrottledTopicInfo* topicInfo, const rcl_serialized_message_t& serializedMsg);
 
-  bool allowedThrough(Nanoseconds currentTime);
+  bool isAllowedThrough(Nanoseconds currentTime);
 
   void updateLastSeen(Nanoseconds currentTime);
 

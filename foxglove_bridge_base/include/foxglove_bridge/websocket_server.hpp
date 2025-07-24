@@ -174,7 +174,6 @@ private:
     ClientInfo& operator=(ClientInfo&&) = default;
   };
 
-
   std::string _name;
   LogCallback _logger;
   ServerOptions _options;
