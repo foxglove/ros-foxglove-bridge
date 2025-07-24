@@ -6,7 +6,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace foxglove {
+namespace foxglove_bridge {
 
 // Taken from
 // https://github.com/ros2/rosidl/blob/a57baea5/rosidl_parser/rosidl_parser/definition.py
@@ -85,4 +85,4 @@ private:
 std::set<std::string> parse_dependencies(MessageDefinitionFormat format, const std::string& text,
                                          const std::string& package_context);
 
-}  // namespace foxglove
+}  // namespace foxglove_bridge
