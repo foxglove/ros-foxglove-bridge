@@ -36,9 +36,8 @@ void ThrottledMessage::tryDecode() {
   {
     std::lock_guard<std::mutex> lock(_topicInfo->parserLock);
     if (!_topicInfo->parser->get()->deserialize(serializedMsgSpan, &_decodedMsg, &deserializer)) {
-      throw std::runtime_error(
-        "Failed to parse message, likely an array with too many elements, adjust parser max "
-        "array policy");
+      _frameid = "";
+      return;
     }
   }  // drop lock
 
