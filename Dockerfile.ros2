@@ -46,7 +46,6 @@ COPY CMakeLists.txt src/ros-foxglove-bridge/CMakeLists.txt
 COPY foxglove_bridge_base src/ros-foxglove-bridge/foxglove_bridge_base
 COPY ros2_foxglove_bridge src/ros-foxglove-bridge/ros2_foxglove_bridge
 COPY ros2_foxglove_bridge_sdk src/ros-foxglove-bridge/ros2_foxglove_bridge_sdk
-COPY foxglove_test_client src/ros-foxglove-bridge/foxglove_test_client
 
 ARG USE_ASIO_STANDALONE=ON
 ARG USE_FOXGLOVE_SDK=OFF

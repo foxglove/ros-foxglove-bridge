@@ -100,9 +100,6 @@ endif()
 set(FOXGLOVE_BRIDGE_VERSION "${CMAKE_PROJECT_VERSION}")
 configure_file(foxglove_bridge_base/src/version.cpp.in
                foxglove_bridge_base/src/version.cpp @ONLY)
-configure_file(ros2_foxglove_bridge_sdk/include/foxglove_bridge/version.hpp.in
-               ros2_foxglove_bridge_sdk/include/foxglove_bridge/version.hpp @ONLY)
-
 # Build the foxglove_bridge_base library
 add_library(foxglove_bridge_base SHARED
   foxglove_bridge_base/src/base64.cpp
@@ -190,6 +187,11 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
 
     if(USE_FOXGLOVE_SDK)
       set(ros2_foxglove_bridge_src_dir ros2_foxglove_bridge_sdk)
+
+      # Generate version.hpp
+      configure_file(ros2_foxglove_bridge_sdk/include/foxglove_bridge/version.hpp.in
+                    ros2_foxglove_bridge_sdk/include/foxglove_bridge/version.hpp @ONLY)
+
       add_library(foxglove_bridge_component SHARED
         ros2_foxglove_bridge_sdk/src/message_definition_cache.cpp
         ros2_foxglove_bridge_sdk/src/param_utils.cpp
@@ -200,6 +202,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
       target_include_directories(foxglove_bridge_component
         PUBLIC
           $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ros2_foxglove_bridge_sdk/include>
+          # For generated version.hpp
           $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/ros2_foxglove_bridge_sdk/include>
           $<INSTALL_INTERFACE:include>
       )
@@ -208,11 +211,9 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
         foxglove_sdk
         OpenSSL::SSL
       )
-
       if (nlohmann_json_FOUND)
         target_link_libraries(foxglove_bridge_component nlohmann_json::nlohmann_json)
       endif()
-
     else()
       set(ros2_foxglove_bridge_src_dir ros2_foxglove_bridge)
       add_library(foxglove_bridge_component SHARED

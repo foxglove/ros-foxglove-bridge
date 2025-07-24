@@ -11,14 +11,14 @@
 
 namespace foxglove::test {
 
+// Protocol type aliases
 using ChannelId = uint64_t;
 using SubscriptionId = uint32_t;
 using ClientChannelId = uint32_t;
 using ServiceId = uint32_t;
 using CallId = uint32_t;
 
-constexpr char SUPPORTED_SUBPROTOCOL[] = "foxglove.sdk.v1";
-
+// Protocol opcode and status enums
 enum class ClientBinaryOpcode : uint8_t {
   MESSAGE_DATA = 1,
   SERVICE_CALL_REQUEST = 2,
@@ -36,8 +36,8 @@ enum class FetchAssetStatus : uint8_t {
   Error = 1,
 };
 
-// Essential data structures used by tests
-
+// Stub data structures corresponding to protocol messages. Used to wrap the values returned by the
+// server and use them in test assertions.
 struct Channel {
   ChannelId id;
   std::string topic;
