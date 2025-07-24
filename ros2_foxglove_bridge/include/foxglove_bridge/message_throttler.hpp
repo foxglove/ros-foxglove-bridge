@@ -74,8 +74,7 @@ public:
   MessageThrottleManager(foxglove::ServerInterface<ConnectionHandle>* server,
                          std::vector<double>& topicThrottleRates,
                          std::vector<std::regex>& topicThrottlePatterns)
-      : _logger(rclcpp::get_logger("message_throttle_manager"))
-      , _server(server)
+      : _server(server)
       , _topicThrottleRates(topicThrottleRates)
       , _topicThrottlePatterns(topicThrottlePatterns) {}
 
@@ -83,7 +82,6 @@ public:
                       const Nanoseconds now);
 
 private:
-  rclcpp::Logger _logger;
   std::unordered_map<TypeName, std::shared_ptr<RosMsgParser::Parser>> _messageParsers;
   std::unordered_map<TopicName, std::unique_ptr<ThrottledTopicInfo>> _throttledTopics;
   std::shared_mutex _topicInfoLock;
@@ -95,7 +93,8 @@ private:
 
   /// @param lock Must be a unique_lock on _topicInfoLock
   template <typename Lock>
-  std::optional<std::shared_ptr<RosMsgParser::Parser>> createParser(const TopicName& topic, Lock& lock);
+  std::optional<std::shared_ptr<RosMsgParser::Parser>> createParser(const TopicName& topic,
+                                                                    Lock& lock);
 
   std::optional<TypeSchema> getTypeSchema(const TypeName& type);
 
@@ -109,9 +108,12 @@ private:
 
   /// Checks if a topic should be throttled based on existing throttle configuration.
   /// Two overloads are provided:
-  /// 1. Convenience version that acquires its own shared lock (use when you don't need to hold the lock afterward)
-  /// 2. Template version that accepts caller-provided lock (use when you already have a lock or need to hold it longer)
-  /// @return std::nullopt if topic is unknown, otherwise bool indicating if message should be throttled
+  /// 1. Convenience version that acquires its own shared lock (use when you don't need to hold the
+  /// lock afterward)
+  /// 2. Template version that accepts caller-provided lock (use when you already have a lock or
+  /// need to hold it longer)
+  /// @return std::nullopt if topic is unknown, otherwise bool indicating if message should be
+  /// throttled
   std::optional<bool> tryThrottleIfKnown(const TopicName& topic,
                                          const rcl_serialized_message_t& serializedMsg,
                                          const Nanoseconds now);
