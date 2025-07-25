@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <mutex>
 #include <regex>
 #include <thread>
 
@@ -15,6 +16,7 @@
 #include <foxglove_bridge/foxglove_bridge.hpp>
 #include <foxglove_bridge/generic_client.hpp>
 #include <foxglove_bridge/message_definition_cache.hpp>
+#include <foxglove_bridge/message_throttler.hpp>
 #include <foxglove_bridge/param_utils.hpp>
 #include <foxglove_bridge/parameter_interface.hpp>
 #include <foxglove_bridge/regex_utils.hpp>
@@ -63,6 +65,8 @@ private:
   std::vector<std::regex> _serviceWhitelistPatterns;
   std::vector<std::regex> _assetUriAllowlistPatterns;
   std::vector<std::regex> _bestEffortQosTopicWhiteListPatterns;
+  std::vector<double> _topicThrottleRates;
+  std::vector<std::regex> _topicThrottlePatterns;
   std::shared_ptr<ParameterInterface> _paramInterface;
   std::unordered_map<foxglove_ws::ChannelId, foxglove_ws::ChannelWithoutId> _advertisedTopics;
   std::unordered_map<foxglove_ws::ServiceId, foxglove_ws::ServiceWithoutId> _advertisedServices;
@@ -87,6 +91,7 @@ private:
   std::unique_ptr<foxglove_ws::CallbackQueue> _fetchAssetQueue;
   std::unordered_map<std::string, std::shared_ptr<RosMsgParser::Parser>> _jsonParsers;
   std::atomic<bool> _shuttingDown = false;
+  std::optional<MessageThrottleManager> _messageThrottler;
 
   void subscribeConnectionGraph(bool subscribe);
 
@@ -114,13 +119,19 @@ private:
   void logHandler(LogLevel level, char const* msg);
 
   void rosMessageHandler(const foxglove_ws::ChannelId& channelId, ConnectionHandle clientHandle,
-                         std::shared_ptr<const rclcpp::SerializedMessage> msg);
+                         std::shared_ptr<const rclcpp::SerializedMessage> msg,
+                         std::string topic_name);
 
   void serviceRequest(const foxglove_ws::ServiceRequest& request, ConnectionHandle clientHandle);
 
   void fetchAsset(const std::string& assetId, uint32_t requestId, ConnectionHandle clientHandle);
 
   bool hasCapability(const std::string& capability);
+
+  void initializeThrottler();
+
+  bool shouldThrottle(const TopicName& topic, const rcl_serialized_message_t& serializedMsg,
+                      const Nanoseconds now);
 };
 
 }  // namespace foxglove_bridge

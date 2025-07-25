@@ -1,6 +1,7 @@
 #include <unordered_set>
 
 #include <resource_retriever/retriever.hpp>
+#include <rosx_introspection/builtin_types.hpp>
 
 #include <foxglove_bridge/ros2_foxglove_bridge.hpp>
 
@@ -57,6 +58,11 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   _disableLoanMessage = this->get_parameter(PARAM_DISABLE_LOAN_MESSAGE).as_bool();
   const auto ignoreUnresponsiveParamNodes =
     this->get_parameter(PARAM_IGN_UNRESPONSIVE_PARAM_NODES).as_bool();
+  const auto topicThrottlePatterns = this->get_parameter(TOPIC_THROTTLE_PATTERNS).as_string_array();
+  _topicThrottlePatterns = parseRegexStrings(this, topicThrottlePatterns);
+  _topicThrottleRates = this->get_parameter(TOPIC_THROTTLE_RATES).as_double_array();
+  assert(_topicThrottlePatterns.size() == _topicThrottleRates.size() &&
+         "Topic throttle patterns must each have exactly one corresponding throttle rate.");
 
   const auto logHandler = std::bind(&FoxgloveBridge::logHandler, this, _1, _2);
   // Fetching of assets may be blocking, hence we fetch them in a separate thread.
@@ -141,6 +147,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
         _server->broadcastTime(static_cast<uint64_t>(timestamp));
       });
   }
+
+  initializeThrottler();
 }
 
 FoxgloveBridge::~FoxgloveBridge() {
@@ -548,8 +556,8 @@ void FoxgloveBridge::subscribe(foxglove_ws::ChannelId channelId, ConnectionHandl
   try {
     auto subscriber = this->create_generic_subscription(
       topic, datatype, qos,
-      [this, channelId, clientHandle](std::shared_ptr<const rclcpp::SerializedMessage> msg) {
-        this->rosMessageHandler(channelId, clientHandle, msg);
+      [this, channelId, clientHandle, topic](std::shared_ptr<const rclcpp::SerializedMessage> msg) {
+        this->rosMessageHandler(channelId, clientHandle, msg, topic);
       },
       subscriptionOptions);
     subscriptionsByClient.emplace(clientHandle, std::move(subscriber));
@@ -589,6 +597,9 @@ void FoxgloveBridge::unsubscribe(foxglove_ws::ChannelId channelId, ConnectionHan
     RCLCPP_INFO(this->get_logger(), "Unsubscribing from topic \"%s\" (%s) on channel %d",
                 channel.topic.c_str(), channel.schemaName.c_str(), channelId);
     _subscriptions.erase(subscriptionsIt);
+    if (_messageThrottler) {
+      _messageThrottler.value().eraseTopic(channel.topic, channelId);
+    }
   } else {
     RCLCPP_INFO(this->get_logger(),
                 "Removed one subscription from channel %d (%zu subscription(s) left)", channelId,
@@ -866,12 +877,18 @@ void FoxgloveBridge::logHandler(LogLevel level, char const* msg) {
 
 void FoxgloveBridge::rosMessageHandler(const foxglove_ws::ChannelId& channelId,
                                        ConnectionHandle clientHandle,
-                                       std::shared_ptr<const rclcpp::SerializedMessage> msg) {
+                                       std::shared_ptr<const rclcpp::SerializedMessage> msg,
+                                       std::string topic) {
   // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
   // to `/rosout` will cause a feedback loop
   const auto timestamp = this->now().nanoseconds();
   assert(timestamp >= 0 && "Timestamp is negative");
   const auto rclSerializedMsg = msg->get_rcl_serialized_message();
+
+  if (shouldThrottle(topic, rclSerializedMsg, timestamp)) {
+    return;
+  }
+
   _server->sendMessage(clientHandle, channelId, static_cast<uint64_t>(timestamp),
                        rclSerializedMsg.buffer, rclSerializedMsg.buffer_length);
 }
@@ -972,6 +989,24 @@ void FoxgloveBridge::fetchAsset(const std::string& uri, uint32_t requestId,
 
 bool FoxgloveBridge::hasCapability(const std::string& capability) {
   return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
+}
+
+void FoxgloveBridge::initializeThrottler() {
+  if (!_topicThrottlePatterns.size()) {
+    return;
+  }
+
+  _messageThrottler.emplace(_server.get(), _topicThrottleRates, _topicThrottlePatterns);
+}
+
+bool FoxgloveBridge::shouldThrottle(const TopicName& topic,
+                                    const rcl_serialized_message_t& serializedMsg,
+                                    const Nanoseconds now) {
+  if (!_messageThrottler) {
+    return false;
+  }
+
+  return _messageThrottler.value().shouldThrottle(topic, serializedMsg, now);
 }
 
 }  // namespace foxglove_bridge
