@@ -88,6 +88,8 @@ Parameters are provided to configure the behavior of the bridge. These parameter
  * (ROS 2) __include_hidden__: Include hidden topics and services. Defaults to `false`.
  * (ROS 2) __disable_load_message__: Do not publish as loaned message when publishing a client message. Defaults to `true`.
  * (ROS 2) __ignore_unresponsive_param_nodes__: Avoid requesting parameters from previously unresponsive nodes. Defaults to `true`.
+ * (ROS 2) __topic_throttle_rates__: List of rates to throttle corresponding (matching index) patterns by. Represents messages per second. If not provided nothing will be throttled. Must have same length as __topic_throttle_patterns__.
+ * (ROS 2) __topic_throttle_patterns__: List of regex patterns to throttle by corresponding rate (matching index) If not provided nothing will be throttled. Must have the same length as __topic_throttle_rates__.
 
 ## Building from source
 
