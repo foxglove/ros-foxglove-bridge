@@ -877,7 +877,8 @@ void FoxgloveBridge::logHandler(LogLevel level, char const* msg) {
 
 void FoxgloveBridge::rosMessageHandler(const foxglove_ws::ChannelId& channelId,
                                        ConnectionHandle clientHandle,
-                                       std::shared_ptr<const rclcpp::SerializedMessage> msg, std::string topic) {
+                                       std::shared_ptr<const rclcpp::SerializedMessage> msg,
+                                       std::string topic) {
   // NOTE: Do not call any RCLCPP_* logging functions from this function. Otherwise, subscribing
   // to `/rosout` will cause a feedback loop
   const auto timestamp = this->now().nanoseconds();

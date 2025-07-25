@@ -192,7 +192,8 @@ void declareParameters(rclcpp::Node* node) {
   topicThrottleRatesDescription.name = TOPIC_THROTTLE_RATES;
   assetUriAllowlistDescription.type = rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE_ARRAY;
   topicThrottleRatesDescription.description =
-    "List of rates to throttle corresponding (matching index) patterns by. Represents messages per second";
+    "List of rates to throttle corresponding (matching index) patterns by. Represents messages per "
+    "second";
   topicThrottleRatesDescription.read_only = true;
   node->declare_parameter(TOPIC_THROTTLE_RATES, std::vector<double>(),
                           topicThrottleRatesDescription);

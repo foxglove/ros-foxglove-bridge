@@ -130,7 +130,7 @@ public:
 
   void start(const std::string& host, uint16_t port) override;
   void stop() override;
-  
+
   ChannelsWithLock getChannels() override;
   std::vector<ChannelId> addChannels(const std::vector<ChannelWithoutId>& channels) override;
   void removeChannels(const std::vector<ChannelId>& channelIds) override;
