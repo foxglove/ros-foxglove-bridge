@@ -90,6 +90,8 @@ Parameters are provided to configure the behavior of the bridge. These parameter
  * (ROS 2) __ignore_unresponsive_param_nodes__: Avoid requesting parameters from previously unresponsive nodes. Defaults to `true`.
  * (ROS 2) __topic_throttle_rates__: List of rates to throttle corresponding (matching index) patterns by. Represents messages per second. If not provided nothing will be throttled. Must have same length as __topic_throttle_patterns__.
  * (ROS 2) __topic_throttle_patterns__: List of regex patterns to throttle by corresponding rate (matching index) If not provided nothing will be throttled. Must have the same length as __topic_throttle_rates__.
+ * (ROS 2) __min_qos_topic_patterns__: List of regex patterns to use corresponding min qos depth for (matching index). If not provided all topics will use __min_qos_depth__. Must have the same length as __min_qos_topic_depths__.
+ * (ROS 2) __min_qos_topic_depths__: List of depths to use on corresponding min qos pattern (matching index). If not provided all topics will use __min_qos_depth__. Must have the same length as __min_qos_topic_patterns__.
 
 ## Building from source
 
