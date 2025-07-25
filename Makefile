@@ -1,5 +1,5 @@
 ROS1_DISTRIBUTIONS := melodic noetic
-ROS2_DISTRIBUTIONS := humble iron jazzy kilted rolling
+ROS2_DISTRIBUTIONS := humble jazzy kilted rolling
 USE_FOXGLOVE_SDK := OFF
 
 define generate_ros1_targets
