@@ -68,7 +68,7 @@ struct ServiceResponse {
   ServiceId serviceId;
   CallId callId;
   std::string encoding;
-  std::vector<uint8_t> data;
+  std::vector<std::byte> data;
 };
 
 struct FetchAssetResponse {
