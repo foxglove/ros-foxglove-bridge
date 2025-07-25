@@ -17,7 +17,7 @@
 
 #include "foxglove_bridge/utils.hpp"
 
-namespace foxglove {
+namespace foxglove_bridge {
 
 // Match datatype names (foo_msgs/Bar or foo_msgs/msg/Bar or foo_msgs/srv/Bar)
 static const std::regex PACKAGE_TYPENAME_REGEX{
@@ -337,7 +337,7 @@ const MessageSpec& MessageDefinitionCache::load_message_spec(
     // element, even when the corresponding iterator is invalidated."
     return spec;
   }
-}  // namespace foxglove
+}
 
 std::pair<MessageDefinitionFormat, const std::string&> MessageDefinitionCache::get_full_text(
   const std::string& root_package_resource_name) {
@@ -380,4 +380,4 @@ std::pair<MessageDefinitionFormat, const std::string&> MessageDefinitionCache::g
   return {format, it->second};
 }
 
-}  // namespace foxglove
+}  // namespace foxglove_bridge

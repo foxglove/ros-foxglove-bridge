@@ -4,7 +4,6 @@
 #include <rclcpp/qos.hpp>
 #include <rclcpp/version.h>
 
-#include <foxglove_bridge/regex_utils.hpp>
 #include <foxglove_bridge/utils.hpp>
 
 namespace {
@@ -157,7 +156,7 @@ static foxglove::Parameter fromRosParam(const rclcpp::Parameter& p) {
 
 namespace foxglove_bridge {
 
-using foxglove_ws::isWhitelisted;
+using foxglove_bridge::isWhitelisted;
 
 ParameterList ParameterInterface::cloneParameterList(const ParameterList& other) {
   ParameterList result;

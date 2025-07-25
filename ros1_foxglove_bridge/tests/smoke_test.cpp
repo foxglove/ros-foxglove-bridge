@@ -10,8 +10,6 @@
 #include <websocketpp/config/asio_client.hpp>
 
 #include <foxglove_bridge/test/test_client.hpp>
-#include <foxglove_bridge/websocket_client.hpp>
-
 constexpr char URI[] = "ws://localhost:9876";
 
 // Binary representation of std_msgs/String for "hello world"

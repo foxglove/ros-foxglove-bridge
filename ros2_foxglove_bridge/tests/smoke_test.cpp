@@ -10,7 +10,6 @@
 
 #include <foxglove_bridge/ros2_foxglove_bridge.hpp>
 #include <foxglove_bridge/test/test_client.hpp>
-#include <foxglove_bridge/websocket_client.hpp>
 
 constexpr char URI[] = "ws://localhost:8765";
 

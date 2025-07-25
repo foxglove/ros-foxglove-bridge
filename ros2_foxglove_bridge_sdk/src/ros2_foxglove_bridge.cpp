@@ -3,6 +3,7 @@
 #include <resource_retriever/retriever.hpp>
 
 #include <foxglove_bridge/ros2_foxglove_bridge.hpp>
+#include <foxglove_bridge/version.hpp>
 
 namespace foxglove_bridge {
 namespace {
@@ -11,12 +12,6 @@ inline bool isHiddenTopicOrService(const std::string& name) {
     throw std::invalid_argument("Topic or service name can't be empty");
   }
   return name.front() == '_' || name.find("/_") != std::string::npos;
-}
-
-inline bool isWhitelisted(const std::string& name, const std::vector<std::regex>& regexPatterns) {
-  return std::find_if(regexPatterns.begin(), regexPatterns.end(), [name](const auto& regex) {
-           return std::regex_match(name, regex);
-         }) != regexPatterns.end();
 }
 
 inline foxglove::WebSocketServerCapabilities processCapabilities(
@@ -51,9 +46,8 @@ using namespace std::placeholders;
 FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
     : Node("foxglove_bridge", options) {
   const char* rosDistro = std::getenv("ROS_DISTRO");
-  RCLCPP_INFO(this->get_logger(), "Starting foxglove_bridge (%s, %s@%s) with %s", rosDistro,
-              foxglove::FOXGLOVE_BRIDGE_VERSION, foxglove::FOXGLOVE_BRIDGE_GIT_HASH,
-              foxglove::WebSocketUserAgent());
+  RCLCPP_INFO(this->get_logger(), "Starting foxglove_bridge (%s, %s@%s)", rosDistro,
+              foxglove_bridge::FOXGLOVE_BRIDGE_VERSION, foxglove_bridge::FOXGLOVE_BRIDGE_GIT_HASH);
 
   declareParameters(this);
 
@@ -274,11 +268,11 @@ void FoxgloveBridge::updateAdvertisedTopics(
       schema->data = reinterpret_cast<const std::byte*>(msgDefinition.data());
 
       switch (format) {
-        case foxglove::MessageDefinitionFormat::MSG:
+        case foxglove_bridge::MessageDefinitionFormat::MSG:
           messageEncoding = "cdr";
           schema->encoding = "ros2msg";
           break;
-        case foxglove::MessageDefinitionFormat::IDL:
+        case foxglove_bridge::MessageDefinitionFormat::IDL:
           messageEncoding = "cdr";
           schema->encoding = "ros2idl";
           break;
@@ -287,7 +281,7 @@ void FoxgloveBridge::updateAdvertisedTopics(
                       schemaName.c_str());
           continue;
       }
-    } catch (const foxglove::DefinitionNotFoundError& err) {
+    } catch (const foxglove_bridge::DefinitionNotFoundError& err) {
       // If the definition isn't found, advertise the channel with an empty schema as a fallback
       RCLCPP_WARN(this->get_logger(), "Could not find definition for type %s: %s",
                   schemaName.c_str(), err.what());
@@ -369,18 +363,18 @@ void FoxgloveBridge::updateAdvertisedServices() {
 
     // Read and initialize the service schema
     try {
-      const auto requestTypeName = serviceType + foxglove::SERVICE_REQUEST_MESSAGE_SUFFIX;
-      const auto responseTypeName = serviceType + foxglove::SERVICE_RESPONSE_MESSAGE_SUFFIX;
+      const auto requestTypeName = serviceType + foxglove_bridge::SERVICE_REQUEST_MESSAGE_SUFFIX;
+      const auto responseTypeName = serviceType + foxglove_bridge::SERVICE_RESPONSE_MESSAGE_SUFFIX;
       const auto& [format, reqSchema] = _messageDefinitionCache.get_full_text(requestTypeName);
       const auto& resSchema = _messageDefinitionCache.get_full_text(responseTypeName).second;
       std::string schemaEncoding = "";
       std::string messageEncoding = "";
       switch (format) {
-        case foxglove::MessageDefinitionFormat::MSG:
+        case foxglove_bridge::MessageDefinitionFormat::MSG:
           schemaEncoding = "ros2msg";
           messageEncoding = "cdr";
           break;
-        case foxglove::MessageDefinitionFormat::IDL:
+        case foxglove_bridge::MessageDefinitionFormat::IDL:
           // REVIEW: Is this still true in the SDK?
           RCLCPP_WARN(this->get_logger(),
                       "IDL message definition format cannot be communicated over ws-protocol. "
@@ -411,7 +405,7 @@ void FoxgloveBridge::updateAdvertisedServices() {
         reinterpret_cast<const std::byte*>(resSchema.data()),
         resSchema.size(),
       };
-    } catch (const foxglove::DefinitionNotFoundError& err) {
+    } catch (const foxglove_bridge::DefinitionNotFoundError& err) {
       RCLCPP_WARN(this->get_logger(), "Could not find definition for type %s: %s",
                   serviceType.c_str(), err.what());
       // We still advertise the service, but with an empty schema
@@ -646,7 +640,7 @@ void FoxgloveBridge::clientAdvertise(ClientId clientId, const foxglove::ClientCh
       } else {
         // Schema not given, look it up.
         auto [format, msgDefinition] = _messageDefinitionCache.get_full_text(schemaName);
-        if (format != foxglove::MessageDefinitionFormat::MSG) {
+        if (format != foxglove_bridge::MessageDefinitionFormat::MSG) {
           throw ClientChannelError("Message definition (.msg) for schema " + schemaName +
                                    " for channel " + std::to_string(channel.id) + " not found.");
         }

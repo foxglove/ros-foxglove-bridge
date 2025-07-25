@@ -137,11 +137,10 @@ void declareParameters(rclcpp::Node* node) {
   paramCapabilities.type = rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY;
   paramCapabilities.description = "Server capabilities";
   paramCapabilities.read_only = true;
-  node->declare_parameter(
-    PARAM_CAPABILITIES,
-    std::vector<std::string>(std::vector<std::string>(foxglove_ws::DEFAULT_CAPABILITIES.begin(),
-                                                      foxglove_ws::DEFAULT_CAPABILITIES.end())),
-    paramCapabilities);
+  node->declare_parameter(PARAM_CAPABILITIES,
+                          std::vector<std::string>(std::vector<std::string>(
+                            DEFAULT_CAPABILITIES.begin(), DEFAULT_CAPABILITIES.end())),
+                          paramCapabilities);
 
   auto clientTopicWhiteListDescription = rcl_interfaces::msg::ParameterDescriptor{};
   clientTopicWhiteListDescription.name = PARAM_CLIENT_TOPIC_WHITELIST;
