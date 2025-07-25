@@ -82,7 +82,6 @@ public:
                       const Nanoseconds now);
 
 private:
-  std::unordered_map<TypeName, std::shared_ptr<RosMsgParser::Parser>> _messageParsers;
   std::unordered_map<TopicName, std::unique_ptr<ThrottledTopicInfo>> _throttledTopics;
   std::shared_mutex _topicInfoLock;
   std::unordered_set<TopicName> _unthrottledTopics;
@@ -101,8 +100,6 @@ private:
   std::optional<TypeName> getTypeFromTopic(const TopicName& topic);
 
   std::optional<Nanoseconds> getTopicThrottleInterval(const TopicName& topic);
-
-  std::mutex& waitForParserLock(const TopicName& topic);
 
   bool shouldThrottleAndUpdate(ThrottledMessage& msg, const Nanoseconds time);
 
