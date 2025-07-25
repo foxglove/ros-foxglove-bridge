@@ -26,14 +26,16 @@ struct ThrottledTopicInfo {
   // NOTE: should be assigned value only on object creation
   std::optional<std::shared_ptr<RosMsgParser::Parser>> parser;
   // NOTE: for topics with no frame id, we use "" as frame id, map should only have one element
-  std::unordered_map<Frameid, Nanoseconds> frameIdLastRecieved;
+  std::unordered_map<Frameid, Nanoseconds> frameIdLastReceived;
   std::shared_mutex frameIdLastRecievedLock;
 
-  ThrottledTopicInfo(Nanoseconds interval, std::optional<std::shared_ptr<RosMsgParser::Parser>> p,
+  ThrottledTopicInfo(const TopicName& topic, Nanoseconds interval,
+                     std::optional<std::shared_ptr<RosMsgParser::Parser>> p,
                      std::unordered_map<Frameid, Nanoseconds> frameMap = {})
-      : throttleInterval(interval)
+      : topic(topic)
+      , throttleInterval(interval)
       , parser(p)
-      , frameIdLastRecieved(std::move(frameMap)) {}
+      , frameIdLastReceived(std::move(frameMap)) {}
 };
 
 class ThrottledMessage {
@@ -44,21 +46,7 @@ public:
 
   void updateLastSeen(Nanoseconds currentTime);
 
-  template <typename T>
-  std::optional<T> getDecodedMessageField(const std::string& fieldName) {
-    if (!_topicInfo->parser) {
-      return std::nullopt;
-    }
-
-    for (auto& field : _decodedMsg.value) {
-      std::string fieldPath = field.first.toStdString();
-      if (fieldPath.find(fieldName) != std::string::npos) {
-        return std::make_optional<T>(field.second.extract<T>());
-      }
-    }
-
-    return std::nullopt;
-  }
+  std::optional<std::string> getDecodedMessageField(const std::string& fieldName);
 
 private:
   ThrottledTopicInfo* _topicInfo;
@@ -80,6 +68,8 @@ public:
 
   bool shouldThrottle(const TopicName& topic, const rcl_serialized_message_t& serializedMsg,
                       const Nanoseconds now);
+
+  void eraseTopic(const TopicName& topic, const foxglove::ChannelId& channelId);
 
 private:
   std::unordered_map<TopicName, std::unique_ptr<ThrottledTopicInfo>> _throttledTopics;

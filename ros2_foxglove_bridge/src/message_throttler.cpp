@@ -9,15 +9,14 @@ ThrottledMessage::ThrottledMessage(ThrottledTopicInfo* topicInfo,
   tryDecode();
 }
 
-template <>
 std::optional<std::string> ThrottledMessage::getDecodedMessageField(const std::string& fieldName) {
   if (!_topicInfo->parser) {
     return std::nullopt;
   }
 
+  std::string fieldPath = _topicInfo->topic + "/" + fieldName;
   for (auto& field : _decodedMsg.name) {
-    std::string fieldPath = field.first.toStdString();
-    if (fieldPath.find(fieldName) != std::string::npos) {
+    if (fieldPath == field.first.toStdString()) {
       return std::make_optional<std::string>(field.second);
     }
   }
@@ -41,19 +40,19 @@ void ThrottledMessage::tryDecode() {
     }
   }  // drop lock
 
-  _frameid = getDecodedMessageField<std::string>("frame_id").value_or("");
+  _frameid = getDecodedMessageField("header/frame_id").value_or("");
 }
 
 bool ThrottledMessage::isAllowedThrough(Nanoseconds currentTime) {
   // either message has not been seen before or interval has passed
   std::shared_lock<std::shared_mutex> lock(_topicInfo->frameIdLastRecievedLock);
-  return !_topicInfo->frameIdLastRecieved.count(_frameid) ||
-         currentTime - _topicInfo->frameIdLastRecieved[_frameid] > _topicInfo->throttleInterval;
+  return !_topicInfo->frameIdLastReceived.count(_frameid) ||
+         currentTime - _topicInfo->frameIdLastReceived[_frameid] > _topicInfo->throttleInterval;
 }
 
 void ThrottledMessage::updateLastSeen(Nanoseconds currentTime) {
   std::unique_lock<std::shared_mutex> lock(_topicInfo->frameIdLastRecievedLock);
-  _topicInfo->frameIdLastRecieved[_frameid] = currentTime;
+  _topicInfo->frameIdLastReceived[_frameid] = currentTime;
 }
 
 std::optional<TypeSchema> MessageThrottleManager::getTypeSchema(const TypeName& type) {
@@ -170,7 +169,7 @@ bool MessageThrottleManager::shouldThrottle(const TopicName& topic,
   }
 
   auto topicInfo =
-    std::make_unique<ThrottledTopicInfo>(throttleInterval, createParser(topic, lock));
+    std::make_unique<ThrottledTopicInfo>(topic, throttleInterval, createParser(topic, lock));
   auto [newTopicInfoIt, wasInserted] = _throttledTopics.emplace(topic, std::move(topicInfo));
   assert(wasInserted &&
          "Tried to replace a topic already in _throttledTopics, should've been caught by initial "
@@ -190,6 +189,17 @@ std::optional<Nanoseconds> MessageThrottleManager::getTopicThrottleInterval(
   }
 
   return std::nullopt;
+}
+
+void MessageThrottleManager::eraseTopic(const TopicName& topic,
+                                        const foxglove::ChannelId& channelId) {
+  std::unique_lock<std::shared_mutex> lock(_topicInfoLock);
+  const auto topicInfoIt = _throttledTopics.find(topic);
+  if (topicInfoIt == _throttledTopics.end()) {
+    throw foxglove::ChannelError(
+      channelId, "Received unsubscribe request (to message throttler) for unknown topic " + topic);
+  }
+  _throttledTopics.erase(topicInfoIt);
 }
 
 }  // namespace foxglove_bridge
