@@ -59,7 +59,7 @@ private:
 
 class MessageThrottleManager {
 public:
-  MessageThrottleManager(foxglove::ServerInterface<ConnectionHandle>* server,
+  MessageThrottleManager(foxglove_ws::ServerInterface<ConnectionHandle>* server,
                          std::vector<double>& topicThrottleRates,
                          std::vector<std::regex>& topicThrottlePatterns)
       : _server(server)
@@ -69,14 +69,14 @@ public:
   bool shouldThrottle(const TopicName& topic, const rcl_serialized_message_t& serializedMsg,
                       const Nanoseconds now);
 
-  void eraseTopic(const TopicName& topic, const foxglove::ChannelId& channelId);
+  void eraseTopic(const TopicName& topic, const foxglove_ws::ChannelId& channelId);
 
 private:
   std::unordered_map<TopicName, std::unique_ptr<ThrottledTopicInfo>> _throttledTopics;
   std::shared_mutex _topicInfoLock;
   std::unordered_set<TopicName> _unthrottledTopics;
   std::shared_mutex _unthrottledTopicLock;
-  foxglove::ServerInterface<ConnectionHandle>* _server;
+  foxglove_ws::ServerInterface<ConnectionHandle>* _server;
   const std::vector<double>& _topicThrottleRates;
   const std::vector<std::regex>& _topicThrottlePatterns;
 

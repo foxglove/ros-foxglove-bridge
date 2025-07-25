@@ -192,11 +192,11 @@ std::optional<Nanoseconds> MessageThrottleManager::getTopicThrottleInterval(
 }
 
 void MessageThrottleManager::eraseTopic(const TopicName& topic,
-                                        const foxglove::ChannelId& channelId) {
+                                        const foxglove_ws::ChannelId& channelId) {
   std::unique_lock<std::shared_mutex> lock(_topicInfoLock);
   const auto topicInfoIt = _throttledTopics.find(topic);
   if (topicInfoIt == _throttledTopics.end()) {
-    throw foxglove::ChannelError(
+    throw foxglove_ws::ChannelError(
       channelId, "Received unsubscribe request (to message throttler) for unknown topic " + topic);
   }
   _throttledTopics.erase(topicInfoIt);
