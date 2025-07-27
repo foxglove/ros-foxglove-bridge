@@ -64,6 +64,11 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   _topicThrottleRates = this->get_parameter(PARAM_TOPIC_THROTTLE_RATES).as_double_array();
   assert(_topicThrottlePatterns.size() == _topicThrottleRates.size() &&
          "Topic throttle patterns must each have exactly one corresponding throttle rate.");
+  if (!std::all_of(_topicThrottleRates.begin(), _topicThrottleRates.end(), [](auto& x) {
+        return x > 0;
+      })) {
+    throw std::invalid_argument("Topic throttle rates must all be > 0");
+  }
   const auto minQosTopicPatterns =
     this->get_parameter(PARAM_MIN_QOS_TOPIC_PATTERNS).as_string_array();
   _minQosTopicPatterns = parseRegexStrings(this, minQosTopicPatterns);
