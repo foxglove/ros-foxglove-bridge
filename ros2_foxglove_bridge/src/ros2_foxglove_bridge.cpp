@@ -89,6 +89,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   hdlrs.serviceRequestHandler = std::bind(&FoxgloveBridge::serviceRequest, this, _1, _2);
   hdlrs.subscribeConnectionGraphHandler =
     std::bind(&FoxgloveBridge::subscribeConnectionGraph, this, _1);
+  hdlrs.connectionCountChangeHandler =
+    std::bind(&FoxgloveBridge::onConnectionCountChanged, this, _1);
 
   if (hasCapability(foxglove_ws::CAPABILITY_PARAMETERS) ||
       hasCapability(foxglove_ws::CAPABILITY_PARAMETERS_SUBSCRIBE)) {
@@ -141,6 +143,11 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
         _server->broadcastTime(static_cast<uint64_t>(timestamp));
       });
   }
+
+  // Create publisher for connection count
+  _connectionCountPublisher = this->create_publisher<std_msgs::msg::UInt32>(
+    "foxglove_connection_count", rclcpp::QoS{rclcpp::KeepLast(1)}.transient_local());
+  _connectionCountPublisher->publish(std_msgs::msg::UInt32()); //publish intial message to latch topic to 0
 }
 
 FoxgloveBridge::~FoxgloveBridge() {
@@ -972,6 +979,12 @@ void FoxgloveBridge::fetchAsset(const std::string& uri, uint32_t requestId,
 
 bool FoxgloveBridge::hasCapability(const std::string& capability) {
   return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
+}
+
+void FoxgloveBridge::onConnectionCountChanged(uint32_t connectionCount) {
+  auto msg = std_msgs::msg::UInt32();
+  msg.data = connectionCount;
+  _connectionCountPublisher->publish(msg);
 }
 
 }  // namespace foxglove_bridge

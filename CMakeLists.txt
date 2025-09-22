@@ -184,6 +184,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
     find_package(rclcpp_components REQUIRED)
     find_package(resource_retriever REQUIRED)
     find_package(rosx_introspection REQUIRED)
+    find_package(std_msgs REQUIRED)
 
     if(USE_FOXGLOVE_SDK)
       set(ros2_foxglove_bridge_src_dir ros2_foxglove_bridge_sdk)
@@ -249,6 +250,7 @@ elseif("$ENV{ROS_VERSION}" STREQUAL "2")
       rclcpp_components::component_manager
       resource_retriever::resource_retriever
       rosx_introspection::rosx_introspection
+      ${std_msgs_TARGETS}
     )
 
     rclcpp_components_register_nodes(foxglove_bridge_component "foxglove_bridge::FoxgloveBridge")

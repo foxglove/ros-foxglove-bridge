@@ -153,6 +153,7 @@ public:
 
   uint16_t getPort() override;
   std::string remoteEndpointString(ConnHandle clientHandle) override;
+  uint32_t getConnectionCount();
 
 private:
   struct ClientInfo {
@@ -309,9 +310,16 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
   const auto endpoint = remoteEndpointString(hdl);
   _server.get_alog().write(APP, "Client " + endpoint + " connected via " + con->get_resource());
 
+  uint32_t connectionCount;
   {
     std::unique_lock<std::shared_mutex> lock(_clientsMutex);
     _clients.emplace(hdl, ClientInfo(endpoint, hdl));
+    connectionCount = static_cast<uint32_t>(_clients.size());
+  }
+
+  // Notify about connection count change
+  if (_handlers.connectionCountChangeHandler) {
+    _handlers.connectionCountChangeHandler(connectionCount);
   }
 
   con->send(json({
@@ -356,6 +364,7 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
   std::unordered_set<ClientChannelId> oldAdvertisedChannels;
   std::string clientName;
   bool wasSubscribedToConnectionGraph;
+  uint32_t connectionCount;
   {
     std::unique_lock<std::shared_mutex> lock(_clientsMutex);
     const auto clientIt = _clients.find(hdl);
@@ -373,6 +382,12 @@ inline void Server<ServerConfiguration>::handleConnectionClosed(ConnHandle hdl) 
     oldAdvertisedChannels = std::move(client.advertisedChannels);
     wasSubscribedToConnectionGraph = client.subscribedToConnectionGraph;
     _clients.erase(clientIt);
+    connectionCount = static_cast<uint32_t>(_clients.size());
+  }
+
+  // Notify about connection count change
+  if (_handlers.connectionCountChangeHandler) {
+    _handlers.connectionCountChangeHandler(connectionCount);
   }
 
   // Unadvertise all channels this client advertised
@@ -1034,6 +1049,12 @@ inline uint16_t Server<ServerConfiguration>::getPort() {
     throw std::runtime_error("Server not listening on any port. Has it been started before?");
   }
   return endpoint.port();
+}
+
+template <typename ServerConfiguration>
+inline uint32_t Server<ServerConfiguration>::getConnectionCount() {
+  std::shared_lock<std::shared_mutex> lock(_clientsMutex);
+  return static_cast<uint32_t>(_clients.size());
 }
 
 template <typename ServerConfiguration>

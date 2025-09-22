@@ -74,6 +74,7 @@ struct ServerHandlers {
   std::function<void(const ServiceRequest&, ConnectionHandle)> serviceRequestHandler;
   std::function<void(bool)> subscribeConnectionGraphHandler;
   std::function<void(const std::string&, uint32_t, ConnectionHandle)> fetchAssetHandler;
+  std::function<void(uint32_t)> connectionCountChangeHandler;
 };
 
 template <typename ConnectionHandle>

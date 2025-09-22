@@ -9,6 +9,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
 #include <rosx_introspection/ros_parser.hpp>
+#include <std_msgs/msg/u_int32.hpp>
 #include <websocketpp/common/connection_hdl.hpp>
 
 #include <foxglove_bridge/callback_queue.hpp>
@@ -79,6 +80,7 @@ private:
   size_t _minQosDepth = DEFAULT_MIN_QOS_DEPTH;
   size_t _maxQosDepth = DEFAULT_MAX_QOS_DEPTH;
   std::shared_ptr<rclcpp::Subscription<rosgraph_msgs::msg::Clock>> _clockSubscription;
+  rclcpp::Publisher<std_msgs::msg::UInt32>::SharedPtr _connectionCountPublisher;
   bool _useSimTime = false;
   std::vector<std::string> _capabilities;
   std::atomic<bool> _subscribeGraphUpdates = false;
@@ -121,6 +123,8 @@ private:
   void fetchAsset(const std::string& assetId, uint32_t requestId, ConnectionHandle clientHandle);
 
   bool hasCapability(const std::string& capability);
+
+  void onConnectionCountChanged(uint32_t connectionCount);
 };
 
 }  // namespace foxglove_bridge
