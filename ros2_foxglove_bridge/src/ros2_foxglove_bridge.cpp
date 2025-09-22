@@ -147,7 +147,8 @@ FoxgloveBridge::FoxgloveBridge(const rclcpp::NodeOptions& options)
   // Create publisher for connection count
   _connectionCountPublisher = this->create_publisher<std_msgs::msg::UInt32>(
     "foxglove_connection_count", rclcpp::QoS{rclcpp::KeepLast(1)}.transient_local());
-  _connectionCountPublisher->publish(std_msgs::msg::UInt32()); //publish intial message to latch topic to 0
+  // publish intial message to latch topic to 0
+  _connectionCountPublisher->publish(std_msgs::msg::UInt32());
 }
 
 FoxgloveBridge::~FoxgloveBridge() {
