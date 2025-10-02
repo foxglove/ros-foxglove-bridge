@@ -59,6 +59,7 @@ Parameters are provided to configure the behavior of the bridge. These parameter
 ### Fetch source, install dependencies, and build for ROS 1
 
 ```bash
+source /opt/ros/noetic/setup.bash
 mkdir -p foxglove_bridge_ws/src
 cd foxglove_bridge_ws
 git clone https://github.com/foxglove/ros-foxglove-bridge.git src/ros-foxglove-bridge
@@ -66,7 +67,6 @@ rosdep update
 rosdep install --ignore-src --default-yes --from-path src
 catkin_make install
 source install/setup.bash
-roslaunch --screen foxglove_bridge foxglove_bridge.launch
 ```
 
 ## Clients
