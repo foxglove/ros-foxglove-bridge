@@ -12,7 +12,7 @@ The `foxglove_bridge` uses the [Foxglove WebSocket protocol](https://github.com/
 
 ## Installation
 
-**Note**: While binary packages are available for ROS 1, all ROS 1 releases are End-of-Life. That means that new binary packages of `foxglove_bridge` cannot be released into those releases, and the versions are quite outdated. It is highly recommended to [build foxglove_bridge from source](#building-from-source) for the latest bug fixes. For similar reasons, `foxglove_bridge` is in maintenance mode and only bug fixes will be applied.
+**Note**: While binary packages are available for ROS 1, all ROS 1 distributions are End-of-Life. That means that new binary packages of `foxglove_bridge` cannot be released into those distributions, and the versions are quite outdated. It is highly recommended to [build foxglove_bridge from source](#building-from-source) for the latest bug fixes. For similar reasons, this `foxglove_bridge` package for ROS 1 is in maintenance mode and only bug fixes will be applied.
 
 ## Running the bridge
 
@@ -56,17 +56,14 @@ Parameters are provided to configure the behavior of the bridge. These parameter
 
 ## Building from source
 
-### Fetch source and install dependencies
+### Fetch source, install dependencies, and build for ROS 1
 
 ```bash
-cd <path/to/your/ros_ws>
+mkdir -p foxglove_bridge_ws/src
+cd foxglove_bridge_ws
 git clone https://github.com/foxglove/ros-foxglove-bridge.git src/ros-foxglove-bridge
 rosdep update
 rosdep install --ignore-src --default-yes --from-path src
-```
-
-### ROS 1
-```
 catkin_make install
 source install/setup.bash
 roslaunch --screen foxglove_bridge foxglove_bridge.launch
