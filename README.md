@@ -54,6 +54,10 @@ Parameters are provided to configure the behavior of the bridge. These parameter
  * __max_update_ms__: The maximum number of milliseconds to wait in between polling `roscore` for new topics, services, or parameters. Defaults to `5000`.
  * __service_type_retrieval_timeout_ms__: Max number of milliseconds for retrieving a services type information. Defaults to `250`.
 
+## Services
+
+ * __~/reset_connection__ (`std_srvs/Trigger`): Sends a new `serverInfo` message to connected clients so Foxglove can reset the connection state.
+
 ## Building from source
 
 ### Fetch source, install dependencies, and build for ROS 1

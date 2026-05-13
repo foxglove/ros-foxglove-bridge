@@ -130,6 +130,7 @@ public:
 
   void start(const std::string& host, uint16_t port) override;
   void stop() override;
+  void sendServerInfo() override;
 
   std::vector<ChannelId> addChannels(const std::vector<ChannelWithoutId>& channels) override;
   void removeChannels(const std::vector<ChannelId>& channelIds) override;
@@ -213,6 +214,7 @@ private:
   void handleTextMessage(ConnHandle hdl, MessagePtr msg);
   void handleBinaryMessage(ConnHandle hdl, MessagePtr msg);
 
+  json serverInfoMessage() const;
   void sendJson(ConnHandle hdl, json&& payload);
   void sendJsonRaw(ConnHandle hdl, const std::string& payload);
   void sendBinary(ConnHandle hdl, const uint8_t* payload, size_t payloadSize);
@@ -314,15 +316,7 @@ inline void Server<ServerConfiguration>::handleConnectionOpened(ConnHandle hdl) 
     _clients.emplace(hdl, ClientInfo(endpoint, hdl));
   }
 
-  con->send(json({
-                   {"op", "serverInfo"},
-                   {"name", _name},
-                   {"capabilities", _options.capabilities},
-                   {"supportedEncodings", _options.supportedEncodings},
-                   {"metadata", _options.metadata},
-                   {"sessionId", _options.sessionId},
-                 })
-              .dump());
+  con->send(serverInfoMessage().dump());
 
   std::vector<Channel> channels;
   {
@@ -561,6 +555,28 @@ inline void Server<ServerConfiguration>::start(const std::string& host, uint16_t
   _server.get_alog().write(APP, "WebSocket server listening at " + protocol + "://" +
                                   IPAddressToString(address) + ":" +
                                   std::to_string(endpoint.port()));
+}
+
+template <typename ServerConfiguration>
+inline void Server<ServerConfiguration>::sendServerInfo() {
+  const auto msg = serverInfoMessage().dump();
+  std::shared_lock<std::shared_mutex> lock(_clientsMutex);
+  for (const auto& [hdl, clientInfo] : _clients) {
+    (void)clientInfo;
+    sendJsonRaw(hdl, msg);
+  }
+}
+
+template <typename ServerConfiguration>
+inline json Server<ServerConfiguration>::serverInfoMessage() const {
+  return json({
+    {"op", "serverInfo"},
+    {"name", _name},
+    {"capabilities", _options.capabilities},
+    {"supportedEncodings", _options.supportedEncodings},
+    {"metadata", _options.metadata},
+    {"sessionId", _options.sessionId},
+  });
 }
 
 template <typename ServerConfiguration>

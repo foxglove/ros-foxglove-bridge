@@ -16,6 +16,7 @@
 #include <ros_babel_fish/babel_fish_message.h>
 #include <ros_babel_fish/generation/providers/integrated_description_provider.h>
 #include <rosgraph_msgs/Clock.h>
+#include <std_srvs/Trigger.h>
 #include <websocketpp/common/connection_hdl.hpp>
 
 #include <foxglove_bridge/foxglove_bridge.hpp>
@@ -180,6 +181,8 @@ public:
       _server->setHandlers(std::move(hdlrs));
 
       _server->start(address, static_cast<uint16_t>(port));
+      _resetConnectionService =
+        nhp.advertiseService("reset_connection", &FoxgloveBridge::resetConnection, this);
 
       xmlrpcServer.bind("paramUpdate", std::bind(&FoxgloveBridge::parameterUpdates, this,
                                                  std::placeholders::_1, std::placeholders::_2));
@@ -926,6 +929,20 @@ private:
     }
   }
 
+  bool resetConnection(std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res) {
+    (void)req;
+    if (!_server) {
+      res.success = false;
+      res.message = "WebSocket server is not running";
+      return true;
+    }
+
+    _server->sendServerInfo();
+    res.success = true;
+    res.message = "Sent serverInfo to connected clients";
+    return true;
+  }
+
   bool hasCapability(const std::string& capability) {
     return std::find(_capabilities.begin(), _capabilities.end(), capability) != _capabilities.end();
   }
@@ -945,6 +962,7 @@ private:
   std::shared_mutex _publicationsMutex;
   std::shared_mutex _servicesMutex;
   ros::Timer _updateTimer;
+  ros::ServiceServer _resetConnectionService;
   size_t _maxUpdateMs = size_t(DEFAULT_MAX_UPDATE_MS);
   size_t _updateCount = 0;
   ros::Subscriber _clockSubscription;

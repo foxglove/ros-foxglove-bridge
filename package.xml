@@ -15,13 +15,13 @@
     <depend condition="$ROS_VERSION == 1">ros_babel_fish</depend>
     <depend condition="$ROS_VERSION == 1">roscpp</depend>
     <depend condition="$ROS_VERSION == 1">roslib</depend>
+    <depend condition="$ROS_VERSION == 1">std_srvs</depend>
 
     <!-- Test dependencies -->
     <test_depend condition="$ROS_VERSION == 1">gtest</test_depend>
     <test_depend condition="$ROS_VERSION == 1">rostest</test_depend>
     <test_depend condition="$ROS_VERSION == 1">rosunit</test_depend>
     <test_depend>std_msgs</test_depend>
-    <test_depend>std_srvs</test_depend>
 
     <!-- Common dependencies -->
     <build_depend>asio</build_depend>

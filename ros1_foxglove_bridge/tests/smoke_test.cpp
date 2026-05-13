@@ -4,9 +4,11 @@
 
 #include <boost/filesystem.hpp>
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 #include <ros/ros.h>
 #include <std_msgs/builtin_string.h>
 #include <std_srvs/SetBool.h>
+#include <std_srvs/Trigger.h>
 #include <websocketpp/config/asio_client.hpp>
 
 #include <foxglove_bridge/test/test_client.hpp>
@@ -18,6 +20,26 @@ constexpr uint8_t HELLO_WORLD_BINARY[] = {11,  0,  0,   0,   104, 101, 108, 108,
 
 constexpr auto ONE_SECOND = std::chrono::seconds(1);
 constexpr auto DEFAULT_TIMEOUT = std::chrono::seconds(8);
+
+std::future<nlohmann::json> waitForServerInfo(
+  std::shared_ptr<foxglove_ws::ClientInterface> client) {
+  auto promise = std::make_shared<std::promise<nlohmann::json>>();
+  auto future = promise->get_future();
+  auto resolved = std::make_shared<bool>(false);
+
+  client->setTextMessageHandler(
+    [promise = std::move(promise), resolved](const std::string& payload) mutable {
+      const auto msg = nlohmann::json::parse(payload);
+      const auto& op = msg["op"].get<std::string>();
+
+      if (op == "serverInfo" && !*resolved) {
+        *resolved = true;
+        promise->set_value(msg);
+      }
+    });
+
+  return future;
+}
 
 class ParameterTest : public ::testing::Test {
 public:
@@ -66,6 +88,24 @@ private:
 TEST(SmokeTest, testConnection) {
   foxglove_ws::Client<websocketpp::config::asio_client> wsClient;
   EXPECT_EQ(std::future_status::ready, wsClient.connect(URI).wait_for(DEFAULT_TIMEOUT));
+}
+
+TEST(SmokeTest, testResetConnectionServiceSendsServerInfo) {
+  auto wsClient = std::make_shared<foxglove_ws::Client<websocketpp::config::asio_client>>();
+  auto serverInfoFuture = waitForServerInfo(wsClient);
+  ASSERT_EQ(std::future_status::ready, wsClient->connect(URI).wait_for(DEFAULT_TIMEOUT));
+  ASSERT_EQ(std::future_status::ready, serverInfoFuture.wait_for(DEFAULT_TIMEOUT));
+
+  serverInfoFuture = waitForServerInfo(wsClient);
+
+  ros::NodeHandle nh;
+  auto resetClient = nh.serviceClient<std_srvs::Trigger>("/foxglove_bridge/reset_connection");
+  ASSERT_TRUE(resetClient.waitForExistence(ros::Duration(1.0)));
+
+  std_srvs::Trigger srv;
+  ASSERT_TRUE(resetClient.call(srv));
+  ASSERT_TRUE(srv.response.success);
+  EXPECT_EQ(std::future_status::ready, serverInfoFuture.wait_for(DEFAULT_TIMEOUT));
 }
 
 TEST(SmokeTest, testSubscription) {
